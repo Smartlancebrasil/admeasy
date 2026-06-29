@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import AppLayout from '@/components/layout/AppLayout'
 import Topbar from '@/components/layout/Topbar'
 import { supabase } from '@/lib/supabase'
-import { FileText, Plus, X, AlertTriangle, Edit2, Save } from 'lucide-react'
+import { FileText, Plus, X, AlertTriangle, Edit2 } from 'lucide-react'
 import { registrarLog } from '@/lib/logs'
 
 type Contrato = {
@@ -79,6 +79,7 @@ const formVazio = {
   imovel_id:'', locatario_id:'', locador_id:'',
   data_inicio:'', data_fim:'',
   valor_mensal:'', valor_caucao:'',
+  parcelas_caucao: '1',
   indice_reajuste:'igpm', mes_reajuste:'1',
   multa_rescisao_locatario:'3', multa_rescisao_locador:'3',
   aviso_previo_dias:'30', tipo_garantia:'caucao',
@@ -97,6 +98,10 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar }: {
   const [erro, setErro] = useState('')
   const set = (c: string) => (e: React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) => setForm(f=>({...f,[c]:e.target.value}))
 
+  const caucaoVal = parseFloat(form.valor_caucao) || 0
+  const parcelasNum = parseInt(form.parcelas_caucao) || 1
+  const valorParcela = caucaoVal > 0 && parcelasNum > 1 ? caucaoVal / parcelasNum : caucaoVal
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault(); setSalvando(true); setErro('')
     try { await onSalvar(form) } catch(err: any) { setErro(err.message) }
@@ -109,6 +114,7 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar }: {
         <h2 className="text-sm font-semibold">{inicial.id ? `Editando contrato #${inicial.numero}` : 'Novo contrato'}</h2>
         <button onClick={onCancelar} className="btn btn-sm"><X size={13} /></button>
       </div>
+      {erro && <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg mb-3 text-sm">{erro}</div>}
       <form onSubmit={handleSubmit}>
         <div className="grid grid-cols-2 gap-3">
           <div><label className="label">Número *</label>
@@ -140,8 +146,38 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar }: {
             <input className="input" type="date" required value={form.data_fim} onChange={set('data_fim')} /></div>
           <div><label className="label">Valor mensal (R$) *</label>
             <input className="input" type="number" required value={form.valor_mensal} onChange={set('valor_mensal')} /></div>
-          <div><label className="label">Caução (R$)</label>
-            <input className="input" type="number" value={form.valor_caucao} onChange={set('valor_caucao')} /></div>
+
+          {/* Caução + Parcelamento */}
+          <div>
+            <label className="label">Caução (R$)</label>
+            <input className="input" type="number" step="0.01" value={form.valor_caucao} onChange={set('valor_caucao')} placeholder="0,00" />
+          </div>
+
+          {caucaoVal > 0 && (
+            <div className="col-span-2">
+              <label className="label">Parcelamento do caução</label>
+              <div className="flex gap-2 flex-wrap">
+                {[1,2,3,4,5].map(p => (
+                  <button key={p} type="button"
+                    onClick={() => setForm(f => ({...f, parcelas_caucao: String(p)}))}
+                    className={`px-3 py-1.5 rounded-lg border text-sm font-medium transition-all ${parcelasNum === p ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+                    {p === 1 ? 'À vista' : `${p}x`}
+                  </button>
+                ))}
+              </div>
+              {parcelasNum > 1 && caucaoVal > 0 && (
+                <div className="mt-2 bg-blue-50 border border-blue-100 rounded-lg p-3">
+                  <p className="text-xs text-blue-700 font-medium">
+                    {parcelasNum}x de {formatVal(valorParcela)} — Total: {formatVal(caucaoVal)}
+                  </p>
+                  <p className="text-[10px] text-blue-500 mt-1">
+                    As parcelas serão lançadas automaticamente no financeiro a partir da data de início do contrato.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
           <div><label className="label">Índice de reajuste</label>
             <select className="input" value={form.indice_reajuste} onChange={set('indice_reajuste')}>
               <option value="igpm">IGP-M</option><option value="ipca">IPCA</option>
@@ -159,21 +195,24 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar }: {
             <input className="input" type="number" value={form.aviso_previo_dias} onChange={set('aviso_previo_dias')} /></div>
           <div><label className="label">Garantia</label>
             <select className="input" value={form.tipo_garantia} onChange={set('tipo_garantia')}>
-              <option value="caucao">Caução</option><option value="fiador">Fiador</option>
-              <option value="seguro_fianca">Seguro fiança</option><option value="titulo_capitalizacao">Título de capitalização</option>
+              <option value="caucao">Caução</option>
+              <option value="fiador">Fiador</option>
+              <option value="seguro_fianca">Seguro fiança</option>
+              <option value="titulo_capitalizacao">Título de capitalização</option>
             </select></div>
           <div><label className="label">Status</label>
             <select className="input" value={form.status} onChange={set('status')}>
-              <option value="ativo">Ativo</option><option value="pendente">Pendente</option>
-              <option value="encerrado">Encerrado</option><option value="rescindido">Rescindido</option>
+              <option value="ativo">Ativo</option>
+              <option value="pendente">Pendente</option>
+              <option value="encerrado">Encerrado</option>
+              <option value="rescindido">Rescindido</option>
             </select></div>
           <div className="col-span-2"><label className="label">Observações</label>
-            <textarea className="input" rows={3} value={form.observacoes} onChange={set('observacoes')} /></div>
+            <textarea className="input" rows={2} value={form.observacoes} onChange={set('observacoes')} /></div>
         </div>
-        {erro && <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-3 py-2 rounded-lg mt-3">{erro}</div>}
         <div className="flex gap-2 mt-4">
           <button type="submit" disabled={salvando} className="btn btn-primary">
-            <Save size={13} />{salvando ? 'Salvando...' : inicial.id ? 'Salvar alterações' : 'Criar contrato'}
+            {salvando ? 'Salvando...' : inicial.id ? 'Salvar alterações' : 'Criar contrato'}
           </button>
           <button type="button" className="btn" onClick={onCancelar}>Cancelar</button>
         </div>
@@ -190,12 +229,14 @@ export default function ContratosPage() {
   const [formInicial, setFormInicial] = useState<Record<string,string>|null>(null)
   const [sucesso, setSucesso] = useState('')
 
+  const ORG_ID = '00000000-0000-0000-0000-000000000001'
+
   useEffect(() => { buscarTudo() }, [])
 
   async function buscarTudo() {
     setLoading(true)
     const [cont, imov, cli] = await Promise.all([
-      supabase.from('contratos').select(`*, imovel:imoveis(titulo), locatario:clientes!contratos_locatario_id_fkey(nome), locador:clientes!contratos_locador_id_fkey(nome)`).order('created_at', {ascending:false}),
+      supabase.from('contratos').select(`*, imovel:imoveis(titulo), locatario:clientes!contratos_locatario_id_fkey(nome), locador:clientes!contratos_locador_id_fkey(nome)`).order('numero'),
       supabase.from('imoveis').select('id, titulo').order('titulo'),
       supabase.from('clientes').select('id, nome').order('nome'),
     ])
@@ -213,6 +254,7 @@ export default function ContratosPage() {
       imovel_id: c.imovel_id||'', locatario_id: c.locatario_id||'', locador_id: c.locador_id||'',
       data_inicio: c.data_inicio||'', data_fim: c.data_fim||'',
       valor_mensal: c.valor_mensal?.toString()||'', valor_caucao: c.valor_caucao?.toString()||'',
+      parcelas_caucao: '1',
       indice_reajuste: c.indice_reajuste||'igpm', mes_reajuste: c.mes_reajuste?.toString()||'1',
       multa_rescisao_locatario: c.multa_rescisao_locatario?.toString()||'3',
       multa_rescisao_locador: c.multa_rescisao_locador?.toString()||'3',
@@ -241,28 +283,60 @@ export default function ContratosPage() {
       aviso_previo_dias: parseInt(dados.aviso_previo_dias),
       tipo_garantia: dados.tipo_garantia, status: dados.status,
       observacoes: dados.observacoes||null,
+      organization_id: ORG_ID,
     }
 
+    let contratoId = dados.id
     let error
+
     if (dados.id) {
       const res = await supabase.from('contratos').update(payload).eq('id', dados.id)
       error = res.error
     } else {
-      const res = await supabase.from('contratos').insert([{...payload, data_assinatura: dados.data_inicio}])
+      const res = await supabase.from('contratos').insert([{...payload, data_assinatura: dados.data_inicio}]).select().single()
       error = res.error
+      if (res.data) contratoId = res.data.id
     }
+
     if (error) throw new Error(error.message)
+
+    // Gerar parcelas do caução no financeiro (apenas em novo contrato)
+    const caucaoVal = parseFloat(dados.valor_caucao) || 0
+    const parcelasNum = parseInt(dados.parcelas_caucao) || 1
+
+    if (!dados.id && caucaoVal > 0 && contratoId) {
+      const valorParcela = caucaoVal / parcelasNum
+      const lancamentos = []
+      for (let i = 0; i < parcelasNum; i++) {
+        const vencimento = new Date(dados.data_inicio + 'T00:00:00')
+        vencimento.setMonth(vencimento.getMonth() + i)
+        lancamentos.push({
+          organization_id: ORG_ID,
+          contrato_id: contratoId,
+          cliente_id: dados.locatario_id,
+          tipo: 'receita',
+          categoria: 'caucao',
+          descricao: parcelasNum > 1
+            ? `Caução ${i + 1}/${parcelasNum} — Contrato #${dados.numero}`
+            : `Caução — Contrato #${dados.numero}`,
+          valor: valorParcela,
+          data_lancamento: vencimento.toISOString().split('T')[0],
+          status: 'pendente',
+        })
+      }
+      await supabase.from('lancamentos').insert(lancamentos)
+    }
 
     await registrarLog({
       acao: dados.id ? 'editou' : 'criou',
       modulo: 'contrato', registro_nome: `Contrato #${dados.numero}`,
-      descricao: `${dados.id ? 'Editou' : 'Criou'} o contrato #${dados.numero}`,
+      descricao: `${dados.id ? 'Editou' : 'Criou'} o contrato #${dados.numero}${!dados.id && caucaoVal > 0 && parcelasNum > 1 ? ` — caução parcelado em ${parcelasNum}x` : ''}`,
     })
 
     setFormInicial(null)
-    setSucesso(dados.id ? 'Contrato atualizado!' : 'Contrato criado!')
+    setSucesso(dados.id ? 'Contrato atualizado!' : `Contrato criado!${caucaoVal > 0 && parcelasNum > 1 ? ` Caução parcelado em ${parcelasNum}x lançado no financeiro.` : ''}`)
     buscarTudo()
-    setTimeout(() => setSucesso(''), 3000)
+    setTimeout(() => setSucesso(''), 4000)
   }
 
   async function excluir(id: string, numero: string) {
