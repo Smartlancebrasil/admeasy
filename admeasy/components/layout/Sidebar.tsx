@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase'
 import {
   LayoutDashboard, Building2, Users, FileText, TrendingUp,
   Calculator, Wrench, Truck, Calendar, DollarSign,
-  UserCircle, BuildingIcon, Settings, ChevronRight
+  UserCircle, BuildingIcon, Settings, ChevronRight, LogOut
 } from 'lucide-react'
 
 const navItems = [
@@ -117,7 +117,7 @@ export default function Sidebar() {
 
       {/* User */}
       <div className="p-3 border-t border-gray-100">
-        <div className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-gray-50 cursor-pointer">
+        <div className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-gray-50">
           <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-medium">
             {iniciaisUsuario}
           </div>
@@ -125,7 +125,16 @@ export default function Sidebar() {
             <div className="text-xs font-medium text-gray-900 truncate">{nomeUsuario}</div>
             <div className="text-[10px] text-gray-400 capitalize">{perfilUsuario}</div>
           </div>
-          <ChevronRight size={12} className="text-gray-300" />
+          <button
+            onClick={async () => {
+              await supabase.auth.signOut()
+              window.location.href = '/login'
+            }}
+            title="Sair"
+            className="text-gray-300 hover:text-red-500 transition-colors"
+          >
+            <LogOut size={13} />
+          </button>
         </div>
       </div>
     </aside>
