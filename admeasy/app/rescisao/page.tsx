@@ -22,7 +22,7 @@ type Contrato = {
   locador?: any
 }
 
-type Org = { nome: string; logo_url?: string; cnpj?: string; creci?: string; cidade?: string; endereco?: string; telefone?: string }
+type Org = { nome: string; logo_url?: string; cnpj?: string; creci?: string; cidade?: string }
 
 function formatVal(val: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val)
@@ -69,6 +69,12 @@ export default function RescisaoPage() {
     ? parseFloat(caucaoEditado.replace(',', '.')) || 0
     : (contratoSel?.valor_caucao || 0)
 
+  // Encargos extras
+  const [danosFisicos, setDanosFisicos] = useState('')
+  const [danosFisicosDesc, setDanosFisicosDesc] = useState('')
+  const [outros, setOutros] = useState('')
+  const [outrosDesc, setOutrosDesc] = useState('')
+
   // Assinaturas
   const [testemunha1Nome, setTestemunha1Nome] = useState('')
   const [testemunha1Cpf, setTestemunha1Cpf] = useState('')
@@ -97,6 +103,8 @@ export default function RescisaoPage() {
     const diaNoMes = rescisaoDate.getDate()
     const diasNoMes = new Date(rescisaoDate.getFullYear(), rescisaoDate.getMonth() + 1, 0).getDate()
     const proporcional = (valorMensal / diasNoMes) * (diasNoMes - diaNoMes + 1)
+    const danosFisicosVal = parseFloat(danosFisicos.replace(',', '.')) || 0
+    const outrosVal = parseFloat(outros.replace(',', '.')) || 0
     let multaValor = 0
     let avisoPrevioValor = 0
 
@@ -105,14 +113,14 @@ export default function RescisaoPage() {
       const multaPct = mesesRest > 0 ? (mesesRest / mesesTotais) : 1
       multaValor = contratoSel.multa_rescisao_locatario * valorMensal * multaPct
       if (!avisoPrevio) avisoPrevioValor = valorMensal
-      const totalDevido = proporcional + multaValor + avisoPrevioValor
+      const totalDevido = proporcional + multaValor + avisoPrevioValor + danosFisicosVal + outrosVal
       const saldo = totalDevido - caucaoValor
-      return { proporcional, multaValor, avisoPrevioValor, caucaoValor, total: saldo, quemPaga: 'locatário' }
+      return { proporcional, multaValor, avisoPrevioValor, caucaoValor, danosFisicosVal, outrosVal, total: saldo, quemPaga: 'locatário' }
     } else if (parte === 'locador') {
       multaValor = contratoSel.multa_rescisao_locador * valorMensal
-      return { proporcional: 0, multaValor, avisoPrevioValor: 0, caucaoValor, total: multaValor + caucaoValor, quemPaga: 'locador' }
+      return { proporcional: 0, multaValor, avisoPrevioValor: 0, caucaoValor, danosFisicosVal, outrosVal, total: multaValor + caucaoValor + danosFisicosVal + outrosVal, quemPaga: 'locador' }
     } else {
-      return { proporcional, multaValor: 0, avisoPrevioValor: 0, caucaoValor, total: caucaoValor - proporcional, quemPaga: 'imobiliária' }
+      return { proporcional, multaValor: 0, avisoPrevioValor: 0, caucaoValor, danosFisicosVal, outrosVal, total: caucaoValor - proporcional - danosFisicosVal - outrosVal, quemPaga: 'imobiliária' }
     }
   }
 
@@ -133,7 +141,7 @@ export default function RescisaoPage() {
     const MR = W - 15
     let y = 15
 
-    // ── CABEÇALHO ──
+    // CABEÇALHO
     if (org.logo_url) {
       try { doc.addImage(org.logo_url, 'JPEG', ML, y, 28, 14) } catch {}
     }
@@ -148,7 +156,7 @@ export default function RescisaoPage() {
     doc.setDrawColor(200).line(ML, y, MR, y)
     y += 6
 
-    // ── DADOS DO CONTRATO ──
+    // DADOS DO CONTRATO
     doc.setFillColor(230, 230, 230)
     doc.rect(ML, y, MR - ML, 6, 'F')
     doc.setFontSize(9).setFont('helvetica', 'bold')
@@ -157,26 +165,23 @@ export default function RescisaoPage() {
 
     const im = contratoSel.imovel
     const enderecoImovel = im ? `${im.endereco || ''}, ${im.numero || ''} — ${im.bairro || ''}, ${im.cidade || ''}/${im.estado || ''}` : '—'
-
-    const linhas = [
-      ['Imóvel:', enderecoImovel],
-      ['Locador:', getNome(contratoSel.locador)],
-      ['Locatário:', getNome(contratoSel.locatario)],
-      ['Data de entrada:', new Date(contratoSel.data_inicio + 'T12:00:00').toLocaleDateString('pt-BR')],
-      ['Data de rescisão:', new Date(dataRescisao + 'T12:00:00').toLocaleDateString('pt-BR')],
-      ['Término original do contrato:', new Date(contratoSel.data_fim + 'T12:00:00').toLocaleDateString('pt-BR')],
-      ['Rescisão por:', parte === 'locatario' ? 'Locatário' : parte === 'locador' ? 'Locador' : 'Mútuo acordo'],
-    ]
-
-    // Calcular dias cumpridos e a cumprir
     const inicioDate = new Date(contratoSel.data_inicio + 'T00:00:00')
     const rescisaoDate = new Date(dataRescisao + 'T00:00:00')
     const fimDate = new Date(contratoSel.data_fim + 'T00:00:00')
     const diasCumpridos = Math.ceil((rescisaoDate.getTime() - inicioDate.getTime()) / (1000 * 60 * 60 * 24))
     const diasACumprir = Math.max(0, Math.ceil((fimDate.getTime() - rescisaoDate.getTime()) / (1000 * 60 * 60 * 24)))
 
-    linhas.push(['Dias cumpridos:', `${diasCumpridos} dias`])
-    linhas.push(['Dias a cumprir:', `${diasACumprir} dias`])
+    const linhas: [string, string][] = [
+      ['Imóvel:', enderecoImovel],
+      ['Locador:', getNome(contratoSel.locador)],
+      ['Locatário:', getNome(contratoSel.locatario)],
+      ['Data de entrada:', new Date(contratoSel.data_inicio + 'T12:00:00').toLocaleDateString('pt-BR')],
+      ['Data de rescisão:', new Date(dataRescisao + 'T12:00:00').toLocaleDateString('pt-BR')],
+      ['Término original:', new Date(contratoSel.data_fim + 'T12:00:00').toLocaleDateString('pt-BR')],
+      ['Rescisão por:', parte === 'locatario' ? 'Locatário' : parte === 'locador' ? 'Locador' : 'Mútuo acordo'],
+      ['Dias cumpridos:', `${diasCumpridos} dias`],
+      ['Dias a cumprir:', `${diasACumprir} dias`],
+    ]
 
     doc.setFontSize(9)
     for (const [label, valor] of linhas) {
@@ -189,60 +194,60 @@ export default function RescisaoPage() {
     }
     y += 3
 
-    // ── RESULTADO ──
+    // RESULTADO
     doc.setFillColor(230, 230, 230)
     doc.rect(ML, y, MR - ML, 6, 'F')
     doc.setFontSize(9).setFont('helvetica', 'bold')
     doc.text('Resultado da Rescisão', W / 2, y + 4, { align: 'center' })
     y += 9
 
-    const linhasResultado: [string, string, string][] = []
-    const valorMensal = contratoSel.valor_atual || contratoSel.valor_mensal
-    linhasResultado.push(['Valor mensal atual', formatVal(valorMensal), 'normal'])
-    linhasResultado.push(['Caução depositada', formatVal(caucaoValor), 'normal'])
-    if (resultado.proporcional > 0) linhasResultado.push(['Aluguel proporcional', `+ ${formatVal(resultado.proporcional)}`, 'red'])
-    if (resultado.multaValor > 0) linhasResultado.push(['Multa rescisória', `+ ${formatVal(resultado.multaValor)}`, 'red'])
-    if (resultado.avisoPrevioValor > 0) linhasResultado.push(['Aviso prévio não cumprido', `+ ${formatVal(resultado.avisoPrevioValor)}`, 'red'])
-    if (resultado.caucaoValor > 0) linhasResultado.push(['Caução a devolver', `− ${formatVal(resultado.caucaoValor)}`, 'green'])
-
     doc.setFontSize(9)
-    for (const [label, valor, cor] of linhasResultado) {
+    const linhasRes: [string, string, string][] = [
+      ['Valor mensal atual', formatVal(contratoSel.valor_atual || contratoSel.valor_mensal), 'normal'],
+      ['Caução depositada', formatVal(caucaoValor), 'normal'],
+    ]
+    if (resultado.proporcional > 0) linhasRes.push(['Aluguel proporcional', `+ ${formatVal(resultado.proporcional)}`, 'red'])
+    if (resultado.multaValor > 0) linhasRes.push(['Multa rescisória', `+ ${formatVal(resultado.multaValor)}`, 'red'])
+    if (resultado.avisoPrevioValor > 0) linhasRes.push(['Aviso prévio não cumprido', `+ ${formatVal(resultado.avisoPrevioValor)}`, 'red'])
+    if (resultado.danosFisicosVal > 0) linhasRes.push([`Danos físicos${danosFisicosDesc ? ': ' + danosFisicosDesc : ''}`, `+ ${formatVal(resultado.danosFisicosVal)}`, 'red'])
+    if (resultado.outrosVal > 0) linhasRes.push([`Outros${outrosDesc ? ': ' + outrosDesc : ''}`, `+ ${formatVal(resultado.outrosVal)}`, 'red'])
+    if (resultado.caucaoValor > 0) linhasRes.push(['Caução a devolver', `− ${formatVal(resultado.caucaoValor)}`, 'green'])
+
+    for (const [label, valor, cor] of linhasRes) {
       doc.setFont('helvetica', 'normal').setTextColor(80)
-      doc.text(label, ML, y)
+      const lWrapped = doc.splitTextToSize(label, MR - ML - 50)
+      doc.text(lWrapped, ML, y)
       if (cor === 'red') doc.setTextColor(180, 0, 0)
       else if (cor === 'green') doc.setTextColor(0, 130, 0)
       else doc.setTextColor(0)
       doc.setFont('helvetica', 'bold')
       doc.text(valor, MR, y, { align: 'right' })
       doc.setTextColor(0)
-      y += 6
+      y += lWrapped.length * 6
     }
 
-    // Total
     y += 2
     doc.setDrawColor(0).line(ML, y, MR, y)
     y += 5
     doc.setFontSize(11).setFont('helvetica', 'bold')
-    const totalLabel = resultado.total > 0 ? `Total a pagar pelo ${resultado.quemPaga}` : `Total a receber pelo ${resultado.quemPaga === 'locatário' ? 'locatário' : 'locatário'}`
+    const totalLabel = resultado.total > 0 ? `Total a pagar pelo ${resultado.quemPaga}` : `Total a receber pelo locatário`
     doc.text(totalLabel, ML, y)
     doc.setTextColor(resultado.total > 0 ? 180 : 0, resultado.total > 0 ? 0 : 130, 0)
     doc.text(`${resultado.total < 0 ? '− ' : ''}${formatVal(Math.abs(resultado.total))}`, MR, y, { align: 'right' })
     doc.setTextColor(0)
     y += 8
 
-    // Base legal
     doc.setFontSize(7).setFont('helvetica', 'italic').setTextColor(100)
     doc.text('Base legal: Lei 8.245/91 — Art. 4º (rescisão antecipada) e Art. 6º (aviso prévio de 30 dias). Este cálculo é uma estimativa.', ML, y)
     doc.setTextColor(0)
-    y += 8
+    y += 10
 
-    // ── ASSINATURAS ──
+    // ASSINATURAS
     if (y > 220) { doc.addPage(); y = 15 }
-
     doc.setDrawColor(200).line(ML, y, MR, y)
     y += 8
 
-    const cidade = org.cidade || im?.cidade || 'São Paulo'
+    const cidade = (orgData as any)?.cidade || im?.cidade || 'São Paulo'
     doc.setFontSize(9).setFont('helvetica', 'normal')
     doc.text(`${cidade}, ${dataExtenso(dataRescisao)}`, MR, y, { align: 'right' })
     y += 12
@@ -269,7 +274,6 @@ export default function RescisaoPage() {
       y += 18
     }
 
-    // Rodapé
     doc.setFontSize(7).setTextColor(150)
     doc.text(`${org.nome} — CNPJ: ${(orgData as any)?.cnpj || ''} — CRECI: ${(orgData as any)?.creci || ''}`, W / 2, 287, { align: 'center' })
 
@@ -375,6 +379,32 @@ export default function RescisaoPage() {
                       {editandoCaucao && <p className="text-[10px] text-orange-500 mt-1">⚠ Valor editado manualmente para este cálculo</p>}
                     </div>
 
+                    {/* Danos físicos */}
+                    <div>
+                      <label className="label">Danos físicos (R$)</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input className="input" type="number" step="0.01" min="0"
+                          value={danosFisicos} onChange={e => setDanosFisicos(e.target.value)}
+                          placeholder="0,00" />
+                        <input className="input" value={danosFisicosDesc}
+                          onChange={e => setDanosFisicosDesc(e.target.value)}
+                          placeholder="Descrição (ex: pintura, vidro...)" />
+                      </div>
+                    </div>
+
+                    {/* Outros */}
+                    <div>
+                      <label className="label">Outros (R$)</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input className="input" type="number" step="0.01" min="0"
+                          value={outros} onChange={e => setOutros(e.target.value)}
+                          placeholder="0,00" />
+                        <input className="input" value={outrosDesc}
+                          onChange={e => setOutrosDesc(e.target.value)}
+                          placeholder="Descrição..." />
+                      </div>
+                    </div>
+
                     {parte === 'locatario' && (
                       <label className="flex items-center gap-2 text-sm cursor-pointer">
                         <input type="checkbox" checked={!avisoPrevio} onChange={e => setAvisoPrevio(!e.target.checked)} />
@@ -412,6 +442,18 @@ export default function RescisaoPage() {
                         <div className="flex justify-between py-2 border-b border-gray-100 text-sm">
                           <span className="text-gray-500">Aviso prévio não cumprido</span>
                           <span className="text-red-500 font-medium">+ {formatVal(resultado.avisoPrevioValor)}</span>
+                        </div>
+                      )}
+                      {resultado.danosFisicosVal > 0 && (
+                        <div className="flex justify-between py-2 border-b border-gray-100 text-sm">
+                          <span className="text-gray-500">Danos físicos{danosFisicosDesc ? `: ${danosFisicosDesc}` : ''}</span>
+                          <span className="text-red-500 font-medium">+ {formatVal(resultado.danosFisicosVal)}</span>
+                        </div>
+                      )}
+                      {resultado.outrosVal > 0 && (
+                        <div className="flex justify-between py-2 border-b border-gray-100 text-sm">
+                          <span className="text-gray-500">Outros{outrosDesc ? `: ${outrosDesc}` : ''}</span>
+                          <span className="text-red-500 font-medium">+ {formatVal(resultado.outrosVal)}</span>
                         </div>
                       )}
                       {resultado.caucaoValor > 0 && (
