@@ -2,7 +2,9 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
+import { supabase } from '@/lib/supabase'
 import {
   LayoutDashboard, Building2, Users, FileText, TrendingUp,
   Calculator, Wrench, Truck, Calendar, DollarSign,
@@ -31,6 +33,35 @@ const navItems = [
 
 export default function Sidebar() {
   const pathname = usePathname()
+  const [nomeUsuario, setNomeUsuario] = useState('')
+  const [perfilUsuario, setPerfilUsuario] = useState('Admin')
+  const [iniciaisUsuario, setIniciaisUsuario] = useState('??')
+
+  useEffect(() => {
+    async function carregarUsuario() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data } = await supabase
+        .from('users')
+        .select('nome, perfil')
+        .eq('id', user.id)
+        .single()
+
+      if (data) {
+        setNomeUsuario(data.nome || user.email || '')
+        setPerfilUsuario(data.perfil || 'Admin')
+        const iniciais = (data.nome || user.email || '??')
+          .split(' ').map((p: string) => p[0]).slice(0, 2).join('').toUpperCase()
+        setIniciaisUsuario(iniciais)
+      } else {
+        const nome = user.email || '??'
+        setNomeUsuario(nome)
+        setIniciaisUsuario(nome.slice(0, 2).toUpperCase())
+      }
+    }
+    carregarUsuario()
+  }, [])
 
   return (
     <aside className="w-56 min-w-[224px] bg-white border-r border-gray-200 flex flex-col h-screen sticky top-0">
@@ -88,11 +119,11 @@ export default function Sidebar() {
       <div className="p-3 border-t border-gray-100">
         <div className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-gray-50 cursor-pointer">
           <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-medium">
-            JS
+            {iniciaisUsuario}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-xs font-medium text-gray-900 truncate">João Silva</div>
-            <div className="text-[10px] text-gray-400">Admin</div>
+            <div className="text-xs font-medium text-gray-900 truncate">{nomeUsuario}</div>
+            <div className="text-[10px] text-gray-400 capitalize">{perfilUsuario}</div>
           </div>
           <ChevronRight size={12} className="text-gray-300" />
         </div>
