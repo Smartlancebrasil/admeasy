@@ -97,6 +97,7 @@ export default function ConfiguracoesPage() {
 
   async function salvarOrg(e: React.FormEvent) {
     e.preventDefault(); setSalvandoOrg(true)
+    console.log('Dados sendo salvos:', org)
     const { error } = await supabase.from('organizations').update(org).eq('id', ORG_ID)
     if (error) {
       console.error('Erro ao salvar:', error)
@@ -106,7 +107,7 @@ export default function ConfiguracoesPage() {
     }
     setSucessoOrg('Dados salvos!'); setSalvandoOrg(false)
     setTimeout(() => setSucessoOrg(''), 3000)
-  }
+  }   
 
   async function salvarVistoriador(dados: Record<string,string>) {
     const payload = { nome: dados.nome, cpf: dados.cpf||null, crea: dados.crea||null, telefone: dados.telefone||null, email: dados.email||null, organization_id: ORG_ID, ativo: true }
