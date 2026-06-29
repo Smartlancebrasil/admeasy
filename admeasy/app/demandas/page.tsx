@@ -23,6 +23,7 @@ type Demanda = {
   data_abertura: string
   data_conclusao?: string
   prazo_estimado?: string
+  prazo_estimado?: string
   observacoes?: string
   imovel?: any
   contrato?: any
