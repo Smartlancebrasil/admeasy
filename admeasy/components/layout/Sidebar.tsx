@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase'
 import {
   LayoutDashboard, Building2, Users, FileText, TrendingUp,
   Calculator, Wrench, Truck, Calendar, DollarSign,
-  UserCircle, BuildingIcon, Settings, ChevronRight, LogOut
+  UserCircle, BuildingIcon, Settings, ChevronRight, LogOut, FileSearch
 } from 'lucide-react'
 
 const navItems = [
@@ -26,6 +26,7 @@ const navItems = [
   { href: '/demandas', label: 'Demandas', icon: Wrench, badge: 4 },
   { href: '/fornecedores', label: 'Fornecedores', icon: Truck },
   { href: '/visitas', label: 'Visitas', icon: Calendar },
+  { href: '/vistorias', label: 'Vistorias', icon: FileSearch },
   { href: '/financeiro', label: 'Financeiro', icon: DollarSign },
   { section: 'Config' },
   { href: '/configuracoes', label: 'Configurações', icon: Settings },
