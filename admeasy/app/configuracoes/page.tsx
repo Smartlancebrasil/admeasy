@@ -97,7 +97,13 @@ export default function ConfiguracoesPage() {
 
   async function salvarOrg(e: React.FormEvent) {
     e.preventDefault(); setSalvandoOrg(true)
-    await supabase.from('organizations').update(org).eq('id', ORG_ID)
+    const { error } = await supabase.from('organizations').update(org).eq('id', ORG_ID)
+    if (error) {
+      console.error('Erro ao salvar:', error)
+      alert('Erro: ' + error.message)
+      setSalvandoOrg(false)
+      return
+    }
     setSucessoOrg('Dados salvos!'); setSalvandoOrg(false)
     setTimeout(() => setSucessoOrg(''), 3000)
   }
