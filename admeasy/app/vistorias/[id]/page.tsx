@@ -1,36 +1,35 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import AppLayout from '@/components/layout/AppLayout'
 import Topbar from '@/components/layout/Topbar'
 import { supabase } from '@/lib/supabase'
-import { FileDown, ArrowLeft, Edit2 } from 'lucide-react'
+import { FileDown, ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 
-type Ambiente = {
-  nome: string
-  estado: string
-  observacao: string
-  fotos: string[]
-}
-
+type Ambiente = { nome: string; estado: string; observacao: string; fotos: string[] }
 type Vistoria = {
   id: string
+  codigo: number
   tipo: 'entrada' | 'saida'
   data_vistoria: string
   status: string
   observacoes_gerais?: string
   ambientes: Ambiente[]
-  imovel?: { endereco: string; numero?: string; bairro?: string; cidade?: string; estado?: string }
+  locadores: string[]
+  locatarios: string[]
+  testemunha1_nome?: string
+  testemunha1_cpf?: string
+  testemunha2_nome?: string
+  testemunha2_cpf?: string
+  imovel?: { endereco: string; numero?: string; complemento?: string; bairro?: string; cidade?: string; estado?: string }
   vistoriador?: { nome: string; crea?: string; cpf?: string }
 }
-
-type Org = { nome: string; logo_url?: string; cnpj?: string; creci?: string; endereco?: string; cidade?: string; telefone?: string }
+type Org = { nome: string; logo_url?: string; cnpj?: string; creci?: string; cidade?: string }
 
 export default function VistoriaDetalhePage() {
   const { id } = useParams()
-  const router = useRouter()
   const [vistoria, setVistoria] = useState<Vistoria | null>(null)
   const [org, setOrg] = useState<Org | null>(null)
   const [gerandoPdf, setGerandoPdf] = useState(false)
@@ -40,13 +39,18 @@ export default function VistoriaDetalhePage() {
   async function carregar() {
     const { data } = await supabase
       .from('vistorias')
-      .select('*, imovel:imoveis(endereco, numero, bairro, cidade, estado), vistoriador:vistoriadores(nome, crea, cpf)')
+      .select('*, imovel:imoveis(endereco, numero, complemento, bairro, cidade, estado), vistoriador:vistoriadores(nome, crea, cpf)')
       .eq('id', id)
       .single()
     if (data) setVistoria(data)
-
     const { data: o } = await supabase.from('organizations').select('*').eq('id', '00000000-0000-0000-0000-000000000001').single()
     if (o) setOrg(o)
+  }
+
+  function dataExtenso(dateStr: string) {
+    const meses = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro']
+    const d = new Date(dateStr + 'T12:00:00')
+    return `${d.getDate()} de ${meses[d.getMonth()]} de ${d.getFullYear()}`
   }
 
   async function gerarPdf() {
@@ -57,117 +61,190 @@ export default function VistoriaDetalhePage() {
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
 
     const W = 210
+    const ML = 15
+    const MR = W - 15
     let y = 15
+    let pagina = 1
 
-    // Cabeçalho
+    function addPaginaRodape() {
+      doc.setFontSize(7).setTextColor(150)
+      doc.text(`Página ${pagina} de ?`, W / 2, 290, { align: 'center' })
+      doc.setTextColor(0)
+    }
+
+    function novaPagina() {
+      addPaginaRodape()
+      doc.addPage()
+      pagina++
+      y = 15
+    }
+
+    function checkY(needed: number) {
+      if (y + needed > 275) novaPagina()
+    }
+
+    // ── CABEÇALHO ──
     if (org.logo_url) {
-      try {
-        doc.addImage(org.logo_url, 'JPEG', 15, y, 30, 15)
-      } catch {}
+      try { doc.addImage(org.logo_url, 'JPEG', ML, y, 28, 14) } catch {}
     }
-    doc.setFontSize(14).setFont('helvetica', 'bold')
-    doc.text('LAUDO DE VISTORIA', W / 2, y + 5, { align: 'center' })
-    doc.setFontSize(10).setFont('helvetica', 'normal')
-    doc.text(vistoria.tipo === 'entrada' ? 'VISTORIA DE ENTRADA' : 'VISTORIA DE SAÍDA', W / 2, y + 12, { align: 'center' })
-    y += 25
 
-    // Linha
-    doc.setDrawColor(200).line(15, y, W - 15, y)
-    y += 6
+    doc.setFontSize(20).setFont('helvetica', 'bold')
+    doc.text('Termo de vistoria', W / 2, y + 8, { align: 'center' })
 
-    // Dados
+    doc.setFontSize(8).setFont('helvetica', 'normal')
+    doc.text(`Código: ${vistoria.codigo || vistoria.id.slice(0, 6).toUpperCase()}`, MR, y + 3, { align: 'right' })
+    doc.text(`Data: ${new Date(vistoria.data_vistoria + 'T12:00:00').toLocaleDateString('pt-BR')}`, MR, y + 8, { align: 'right' })
+    doc.text(`Vistoriador: ${vistoria.vistoriador?.nome || '—'}`, MR, y + 13, { align: 'right' })
+
     doc.setFontSize(9).setFont('helvetica', 'bold')
-    doc.text('DADOS DO IMÓVEL', 15, y)
-    y += 5
+    doc.text(org.nome, W / 2, y + 14, { align: 'center' })
+    y += 20
+
+    // ── DADOS DO IMÓVEL ──
+    doc.setFillColor(230, 230, 230)
+    doc.rect(ML, y, MR - ML, 6, 'F')
+    doc.setFontSize(9).setFont('helvetica', 'bold').setTextColor(0)
+    doc.text('Dados do imóvel', W / 2, y + 4, { align: 'center' })
+    y += 8
+
+    const im = vistoria.imovel
+    const enderecoCompleto = `${im?.endereco || ''}, ${im?.numero || ''}${im?.complemento ? ', ' + im.complemento : ''}, ${im?.bairro || ''} - ${im?.cidade || ''} - ${im?.estado || ''}`
+
+    doc.setFontSize(9).setFont('helvetica', 'bold')
+    doc.text('Tipo de vistoria: ', ML, y)
     doc.setFont('helvetica', 'normal')
-    doc.text(`Endereço: ${vistoria.imovel?.endereco || ''}, ${vistoria.imovel?.numero || ''} — ${vistoria.imovel?.bairro || ''}, ${vistoria.imovel?.cidade || ''}`, 15, y)
+    doc.text(`${vistoria.tipo === 'entrada' ? 'Entrada' : 'Saída'}`, ML + 30, y)
     y += 5
-    doc.text(`Data da vistoria: ${new Date(vistoria.data_vistoria + 'T12:00:00').toLocaleDateString('pt-BR')}`, 15, y)
-    doc.text(`Vistoriador: ${vistoria.vistoriador?.nome || '—'}`, 110, y)
-    y += 5
+
+    doc.setFont('helvetica', 'bold')
+    doc.text('Imóvel: ', ML, y)
+    doc.setFont('helvetica', 'normal')
+    const endLines = doc.splitTextToSize(enderecoCompleto, MR - ML - 18)
+    doc.text(endLines, ML + 14, y)
+    y += endLines.length * 5 + 3
+
     if (vistoria.observacoes_gerais) {
-      doc.text(`Observações gerais: ${vistoria.observacoes_gerais}`, 15, y)
-      y += 5
+      doc.setFont('helvetica', 'bold')
+      doc.text('Observações: ', ML, y)
+      doc.setFont('helvetica', 'normal')
+      const obsLines = doc.splitTextToSize(vistoria.observacoes_gerais, MR - ML - 25)
+      doc.text(obsLines, ML + 24, y)
+      y += obsLines.length * 5 + 3
     }
-    y += 3
-    doc.setDrawColor(200).line(15, y, W - 15, y)
-    y += 6
+    y += 2
 
-    // Ambientes
+    // ── AMBIENTES ──
+    doc.setFillColor(230, 230, 230)
+    doc.rect(ML, y, MR - ML, 6, 'F')
+    doc.setFontSize(9).setFont('helvetica', 'bold')
+    doc.text('Ambientes', W / 2, y + 4, { align: 'center' })
+    y += 10
+
     for (const amb of vistoria.ambientes) {
-      if (y > 240) { doc.addPage(); y = 15 }
+      checkY(20)
 
+      // Nome do ambiente em negrito
       doc.setFontSize(10).setFont('helvetica', 'bold')
-      const corEstado = amb.estado === 'bom' ? [34, 197, 94] : amb.estado === 'regular' ? [234, 179, 8] : [239, 68, 68]
-      doc.setFillColor(corEstado[0], corEstado[1], corEstado[2])
-      doc.roundedRect(15, y - 4, W - 30, 7, 1, 1, 'F')
-      doc.setTextColor(255, 255, 255)
-      doc.text(`${amb.nome}  •  ${amb.estado?.toUpperCase() || 'NÃO AVALIADO'}`, 18, y)
-      doc.setTextColor(0, 0, 0)
-      y += 7
+      doc.text(amb.nome, ML, y)
+      y += 5
 
+      // Observações como lista com travessão
       if (amb.observacao) {
-        doc.setFontSize(8).setFont('helvetica', 'normal')
-        const lines = doc.splitTextToSize(amb.observacao, W - 35)
-        doc.text(lines, 18, y)
-        y += lines.length * 4 + 2
+        doc.setFontSize(9).setFont('helvetica', 'normal')
+        const linhas = amb.observacao.split('\n').filter(l => l.trim())
+        for (const linha of linhas) {
+          checkY(6)
+          const wrapped = doc.splitTextToSize(`- ${linha.trim()}`, MR - ML - 5)
+          doc.text(wrapped, ML + 2, y)
+          y += wrapped.length * 4.5
+        }
       }
+      y += 2
 
-      // Fotos
+      // Fotos em linha
       if (amb.fotos?.length > 0) {
-        const fotoW = 35
-        const fotoH = 26
-        let fx = 18
-        for (const fotoUrl of amb.fotos.slice(0, 5)) {
-          if (fx + fotoW > W - 15) { fx = 18; y += fotoH + 3 }
-          if (y + fotoH > 270) { doc.addPage(); y = 15; fx = 18 }
+        const fotoW = 55
+        const fotoH = 42
+        const gap = 3
+        const fotosPerRow = 3
+        let fx = ML
+        let row = 0
+
+        for (let fi = 0; fi < amb.fotos.length; fi++) {
+          if (fi > 0 && fi % fotosPerRow === 0) {
+            row++
+            fx = ML
+          }
+          const fy = y + row * (fotoH + gap)
+          checkY(fotoH + gap)
+
           try {
-            const resp = await fetch(fotoUrl)
+            const resp = await fetch(amb.fotos[fi])
             const blob = await resp.blob()
             const b64 = await new Promise<string>(res => {
               const r = new FileReader()
               r.onload = () => res((r.result as string).split(',')[1])
               r.readAsDataURL(blob)
             })
-            doc.addImage(b64, 'JPEG', fx, y, fotoW, fotoH)
+            const ext = amb.fotos[fi].includes('.png') ? 'PNG' : 'JPEG'
+            doc.addImage(b64, ext, fx, fy, fotoW, fotoH)
           } catch {}
-          fx += fotoW + 3
+          fx += fotoW + gap
         }
-        y += fotoH + 5
+
+        const totalRows = Math.ceil(amb.fotos.length / fotosPerRow)
+        y += totalRows * (fotoH + gap) + 5
       }
-      y += 4
+      y += 5
     }
 
-    // Assinaturas
-    if (y > 220) { doc.addPage(); y = 15 }
+    // ── ASSINATURAS ──
+    checkY(80)
     y += 5
-    doc.setDrawColor(200).line(15, y, W - 15, y)
-    y += 8
-    doc.setFontSize(9).setFont('helvetica', 'bold')
-    doc.text('ASSINATURAS', 15, y)
-    y += 8
 
-    const assinaturas = ['Vistoriador', 'Administradora', 'Locador', 'Locatário']
-    const colW = (W - 30) / 2
-    for (let i = 0; i < assinaturas.length; i++) {
-      const col = i % 2
-      const row = Math.floor(i / 2)
-      const x = 15 + col * (colW + 5)
-      const yy = y + row * 25
-      doc.setDrawColor(150).line(x, yy + 12, x + colW - 5, yy + 12)
+    const cidade = org.cidade || im?.cidade || 'São Paulo'
+    doc.setFontSize(9).setFont('helvetica', 'normal')
+    doc.text(`${cidade}, ${dataExtenso(vistoria.data_vistoria)}`, MR, y, { align: 'right' })
+    y += 12
+
+    const colW = (MR - ML - 5) / 2
+    const lineY = (nome: string, label: string, x: number, yy: number) => {
+      doc.setDrawColor(0).line(x, yy, x + colW, yy)
       doc.setFontSize(8).setFont('helvetica', 'normal')
-      doc.text(assinaturas[i], x + (colW - 5) / 2, yy + 16, { align: 'center' })
+      doc.text(`${label}: ${nome}`, x, yy + 4)
     }
 
-    // Rodapé
-    doc.setFontSize(7).setTextColor(150)
-    doc.text(`${org.nome} — ${org.cnpj || ''} — CRECI: ${org.creci || ''}`, W / 2, 285, { align: 'center' })
+    // Vistoriador + Locador(es) em grid
+    const assinaturas: { label: string; nome: string }[] = []
+    assinaturas.push({ label: 'Vistoriador(a)', nome: vistoria.vistoriador?.nome || '' })
+    for (const l of (vistoria.locadores || [])) assinaturas.push({ label: 'Locador(a)', nome: l })
+    for (const l of (vistoria.locatarios || [])) assinaturas.push({ label: 'Locatário(a)', nome: l })
+    assinaturas.push({ label: 'Testemunha1', nome: vistoria.testemunha1_nome ? `CPF: ${vistoria.testemunha1_cpf || ''}\nNome: ${vistoria.testemunha1_nome}` : 'CPF:\nNome:' })
+    assinaturas.push({ label: 'Testemunha2', nome: vistoria.testemunha2_nome ? `CPF: ${vistoria.testemunha2_cpf || ''}\nNome: ${vistoria.testemunha2_nome}` : 'CPF:\nNome:' })
 
+    for (let i = 0; i < assinaturas.length; i += 2) {
+      checkY(22)
+      const a1 = assinaturas[i]
+      const a2 = assinaturas[i + 1]
+
+      lineY(a1.nome, a1.label, ML, y)
+      if (a2) lineY(a2.nome, a2.label, ML + colW + 5, y)
+      y += 18
+    }
+
+    // Rodapé final
+    addPaginaRodape()
+
+    // Corrige "Página X de ?" — não há como saber total de páginas em jsPDF facilmente
     doc.save(`vistoria-${vistoria.tipo}-${vistoria.data_vistoria}.pdf`)
     setGerandoPdf(false)
   }
 
-  if (!vistoria) return <AppLayout><Topbar titulo="Vistoria" /><div className="p-6 text-gray-400">Carregando...</div></AppLayout>
+  if (!vistoria) return (
+    <AppLayout><Topbar titulo="Vistoria" />
+      <div className="p-6 text-gray-400">Carregando...</div>
+    </AppLayout>
+  )
 
   const estadoCor = (e: string) => e === 'bom' ? 'badge-green' : e === 'regular' ? 'badge-yellow' : e === 'ruim' ? 'badge-red' : 'badge-gray'
 
@@ -177,45 +254,49 @@ export default function VistoriaDetalhePage() {
       <div className="flex-1 overflow-y-auto p-6">
         <div className="max-w-3xl mx-auto space-y-5">
 
-          {/* Ações */}
           <div className="flex items-center justify-between">
             <Link href="/vistorias" className="btn btn-sm text-gray-500">
               <ArrowLeft size={13} />Voltar
             </Link>
-            <div className="flex gap-2">
-              <Link href={`/vistorias/${vistoria.id}/editar`} className="btn btn-sm">
-                <Edit2 size={13} />Editar
-              </Link>
-              <button onClick={gerarPdf} disabled={gerandoPdf} className="btn btn-primary btn-sm">
-                <FileDown size={13} />{gerandoPdf ? 'Gerando...' : 'Gerar PDF'}
-              </button>
-            </div>
+            <button onClick={gerarPdf} disabled={gerandoPdf} className="btn btn-primary btn-sm">
+              <FileDown size={13} />{gerandoPdf ? 'Gerando PDF...' : 'Gerar PDF'}
+            </button>
           </div>
 
           {/* Resumo */}
           <div className="card">
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div>
+              <div className="col-span-2">
                 <span className="text-gray-400 text-xs">Imóvel</span>
                 <p className="font-medium">{vistoria.imovel?.endereco}, {vistoria.imovel?.numero}</p>
-                <p className="text-gray-400 text-xs">{vistoria.imovel?.bairro} — {vistoria.imovel?.cidade}</p>
+                <p className="text-gray-400 text-xs">{vistoria.imovel?.bairro} — {vistoria.imovel?.cidade}/{vistoria.imovel?.estado}</p>
               </div>
               <div>
-                <span className="text-gray-400 text-xs">Vistoriador</span>
-                <p className="font-medium">{vistoria.vistoriador?.nome || '—'}</p>
+                <span className="text-gray-400 text-xs">Tipo</span>
+                <p className="font-medium">{vistoria.tipo === 'entrada' ? 'Entrada' : 'Saída'}</p>
               </div>
               <div>
                 <span className="text-gray-400 text-xs">Data</span>
                 <p className="font-medium">{new Date(vistoria.data_vistoria + 'T12:00:00').toLocaleDateString('pt-BR')}</p>
               </div>
               <div>
+                <span className="text-gray-400 text-xs">Vistoriador</span>
+                <p className="font-medium">{vistoria.vistoriador?.nome || '—'}</p>
+              </div>
+              <div>
                 <span className="text-gray-400 text-xs">Status</span>
                 <p><span className={`badge ${vistoria.status === 'concluida' ? 'badge-green' : 'badge-yellow'}`}>{vistoria.status === 'concluida' ? 'Concluída' : 'Rascunho'}</span></p>
               </div>
-              {vistoria.observacoes_gerais && (
-                <div className="col-span-2">
-                  <span className="text-gray-400 text-xs">Observações gerais</span>
-                  <p className="text-gray-700">{vistoria.observacoes_gerais}</p>
+              {vistoria.locadores?.length > 0 && (
+                <div>
+                  <span className="text-gray-400 text-xs">Locador(es)</span>
+                  {vistoria.locadores.map((l, i) => <p key={i} className="font-medium">{l}</p>)}
+                </div>
+              )}
+              {vistoria.locatarios?.length > 0 && (
+                <div>
+                  <span className="text-gray-400 text-xs">Locatário(s)</span>
+                  {vistoria.locatarios.map((l, i) => <p key={i} className="font-medium">{l}</p>)}
                 </div>
               )}
             </div>
@@ -228,11 +309,18 @@ export default function VistoriaDetalhePage() {
                 <h3 className="text-sm font-semibold">{amb.nome}</h3>
                 <span className={`badge ${estadoCor(amb.estado)}`}>{amb.estado || 'Não avaliado'}</span>
               </div>
-              {amb.observacao && <p className="text-sm text-gray-600 mb-3">{amb.observacao}</p>}
+              {amb.observacao && (
+                <div className="mb-3 text-sm text-gray-600">
+                  {amb.observacao.split('\n').filter(l => l.trim()).map((linha, li) => (
+                    <p key={li}>- {linha.trim()}</p>
+                  ))}
+                </div>
+              )}
               {amb.fotos?.length > 0 && (
                 <div className="flex gap-2 flex-wrap">
                   {amb.fotos.map((url, fi) => (
-                    <img key={fi} src={url} alt="" className="w-24 h-18 object-cover rounded-lg border border-gray-200" style={{ height: '72px' }} />
+                    <img key={fi} src={url} alt="" className="object-cover rounded-lg border border-gray-200"
+                      style={{ width: '90px', height: '70px' }} />
                   ))}
                 </div>
               )}
