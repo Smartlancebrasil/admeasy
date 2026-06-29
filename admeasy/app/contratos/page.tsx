@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react'
 import AppLayout from '@/components/layout/AppLayout'
 import Topbar from '@/components/layout/Topbar'
 import { supabase } from '@/lib/supabase'
-import { FileText, Plus, X, AlertTriangle } from 'lucide-react'
+import { FileText, Plus, X, AlertTriangle, Edit2, Save } from 'lucide-react'
+import { registrarLog } from '@/lib/logs'
 
 type Contrato = {
   id: string
@@ -14,19 +15,28 @@ type Contrato = {
   data_fim: string
   valor_mensal: number
   valor_atual?: number
+  valor_caucao?: number
   indice_reajuste: string
+  mes_reajuste?: number
+  multa_rescisao_locatario: number
+  multa_rescisao_locador: number
+  aviso_previo_dias: number
+  tipo_garantia?: string
   status: string
-  imovel?: { titulo: string; bairro?: string }
-  locatario?: { nome: string }
-  locador?: { nome: string }
+  observacoes?: string
+  imovel_id?: string
+  locatario_id?: string
+  locador_id?: string
+  imovel?: any
+  locatario?: any
+  locador?: any
 }
 
-type Cliente = { id: string; nome: string; tipo: string }
-type Imovel = { id: string; titulo: string; bairro?: string }
+type SelectOpt = { id: string; titulo?: string; nome?: string }
 
 function diasRestantes(dataFim: string) {
-  const hoje = new Date()
-  const fim = new Date(dataFim)
+  const hoje = new Date(); hoje.setHours(0,0,0,0)
+  const fim = new Date(dataFim + 'T00:00:00')
   return Math.ceil((fim.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24))
 }
 
@@ -39,127 +49,227 @@ function statusContrato(dataFim: string, status: string) {
   return 'ativo'
 }
 
-const statusBadge: Record<string, string> = {
-  ativo: 'badge badge-green',
-  vencendo: 'badge badge-red',
-  atencao: 'badge badge-yellow',
-  encerrado: 'badge badge-gray',
-  rescindido: 'badge badge-gray',
-  pendente: 'badge badge-yellow',
+const statusBadge: Record<string,string> = {
+  ativo:'badge badge-green', vencendo:'badge badge-red',
+  atencao:'badge badge-yellow', encerrado:'badge badge-gray',
+  rescindido:'badge badge-gray', pendente:'badge badge-yellow',
 }
-
-const statusLabel: Record<string, string> = {
-  ativo: 'Ativo',
-  vencendo: 'Vencendo',
-  atencao: 'Atenção',
-  encerrado: 'Encerrado',
-  rescindido: 'Rescindido',
-  pendente: 'Pendente',
+const statusLabel: Record<string,string> = {
+  ativo:'Ativo', vencendo:'Vencendo', atencao:'Atenção',
+  encerrado:'Encerrado', rescindido:'Rescindido', pendente:'Pendente',
 }
 
 function formatVal(val: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val)
 }
-
 function formatDate(date: string) {
   return new Intl.DateTimeFormat('pt-BR').format(new Date(date + 'T00:00:00'))
+}
+function getTitulo(val: any): string {
+  if (!val) return '—'; if (Array.isArray(val)) return val[0]?.titulo || '—'; return val.titulo || '—'
+}
+function getNome(val: any): string {
+  if (!val) return '—'; if (Array.isArray(val)) return val[0]?.nome || '—'; return val.nome || '—'
+}
+
+const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
+
+const formVazio = {
+  id:'', numero:'', tipo:'locacao_residencial',
+  imovel_id:'', locatario_id:'', locador_id:'',
+  data_inicio:'', data_fim:'',
+  valor_mensal:'', valor_caucao:'',
+  indice_reajuste:'igpm', mes_reajuste:'1',
+  multa_rescisao_locatario:'3', multa_rescisao_locador:'3',
+  aviso_previo_dias:'30', tipo_garantia:'caucao',
+  status:'ativo', observacoes:'',
+}
+
+function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar }: {
+  inicial: Record<string,string>
+  imoveis: SelectOpt[]
+  clientes: SelectOpt[]
+  onSalvar: (dados: Record<string,string>) => Promise<void>
+  onCancelar: () => void
+}) {
+  const [form, setForm] = useState(inicial)
+  const [salvando, setSalvando] = useState(false)
+  const [erro, setErro] = useState('')
+  const set = (c: string) => (e: React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) => setForm(f=>({...f,[c]:e.target.value}))
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault(); setSalvando(true); setErro('')
+    try { await onSalvar(form) } catch(err: any) { setErro(err.message) }
+    setSalvando(false)
+  }
+
+  return (
+    <div className="card mb-6">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-sm font-semibold">{inicial.id ? `Editando contrato #${inicial.numero}` : 'Novo contrato'}</h2>
+        <button onClick={onCancelar} className="btn btn-sm"><X size={13} /></button>
+      </div>
+      <form onSubmit={handleSubmit}>
+        <div className="grid grid-cols-2 gap-3">
+          <div><label className="label">Número *</label>
+            <input className="input" required value={form.numero} onChange={set('numero')} placeholder="Ex: 001/2024" /></div>
+          <div><label className="label">Tipo</label>
+            <select className="input" value={form.tipo} onChange={set('tipo')}>
+              <option value="locacao_residencial">Locação residencial</option>
+              <option value="locacao_comercial">Locação comercial</option>
+              <option value="compra_venda">Compra e venda</option>
+            </select></div>
+          <div className="col-span-2"><label className="label">Imóvel *</label>
+            <select className="input" required value={form.imovel_id} onChange={set('imovel_id')}>
+              <option value="">Selecionar imóvel</option>
+              {imoveis.map(i => <option key={i.id} value={i.id}>{i.titulo}</option>)}
+            </select></div>
+          <div><label className="label">Locatário *</label>
+            <select className="input" required value={form.locatario_id} onChange={set('locatario_id')}>
+              <option value="">Selecionar</option>
+              {clientes.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+            </select></div>
+          <div><label className="label">Locador *</label>
+            <select className="input" required value={form.locador_id} onChange={set('locador_id')}>
+              <option value="">Selecionar</option>
+              {clientes.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+            </select></div>
+          <div><label className="label">Data início *</label>
+            <input className="input" type="date" required value={form.data_inicio} onChange={set('data_inicio')} /></div>
+          <div><label className="label">Data fim *</label>
+            <input className="input" type="date" required value={form.data_fim} onChange={set('data_fim')} /></div>
+          <div><label className="label">Valor mensal (R$) *</label>
+            <input className="input" type="number" required value={form.valor_mensal} onChange={set('valor_mensal')} /></div>
+          <div><label className="label">Caução (R$)</label>
+            <input className="input" type="number" value={form.valor_caucao} onChange={set('valor_caucao')} /></div>
+          <div><label className="label">Índice de reajuste</label>
+            <select className="input" value={form.indice_reajuste} onChange={set('indice_reajuste')}>
+              <option value="igpm">IGP-M</option><option value="ipca">IPCA</option>
+              <option value="inpc">INPC</option><option value="ivar">IVAR</option>
+            </select></div>
+          <div><label className="label">Mês do reajuste</label>
+            <select className="input" value={form.mes_reajuste} onChange={set('mes_reajuste')}>
+              {meses.map((m,i) => <option key={i} value={i+1}>{m}</option>)}
+            </select></div>
+          <div><label className="label">Multa locatário (aluguéis)</label>
+            <input className="input" type="number" step="0.5" value={form.multa_rescisao_locatario} onChange={set('multa_rescisao_locatario')} /></div>
+          <div><label className="label">Multa locador (aluguéis)</label>
+            <input className="input" type="number" step="0.5" value={form.multa_rescisao_locador} onChange={set('multa_rescisao_locador')} /></div>
+          <div><label className="label">Aviso prévio (dias)</label>
+            <input className="input" type="number" value={form.aviso_previo_dias} onChange={set('aviso_previo_dias')} /></div>
+          <div><label className="label">Garantia</label>
+            <select className="input" value={form.tipo_garantia} onChange={set('tipo_garantia')}>
+              <option value="caucao">Caução</option><option value="fiador">Fiador</option>
+              <option value="seguro_fianca">Seguro fiança</option><option value="titulo_capitalizacao">Título de capitalização</option>
+            </select></div>
+          <div><label className="label">Status</label>
+            <select className="input" value={form.status} onChange={set('status')}>
+              <option value="ativo">Ativo</option><option value="pendente">Pendente</option>
+              <option value="encerrado">Encerrado</option><option value="rescindido">Rescindido</option>
+            </select></div>
+          <div className="col-span-2"><label className="label">Observações</label>
+            <textarea className="input" rows={3} value={form.observacoes} onChange={set('observacoes')} /></div>
+        </div>
+        {erro && <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-3 py-2 rounded-lg mt-3">{erro}</div>}
+        <div className="flex gap-2 mt-4">
+          <button type="submit" disabled={salvando} className="btn btn-primary">
+            <Save size={13} />{salvando ? 'Salvando...' : inicial.id ? 'Salvar alterações' : 'Criar contrato'}
+          </button>
+          <button type="button" className="btn" onClick={onCancelar}>Cancelar</button>
+        </div>
+      </form>
+    </div>
+  )
 }
 
 export default function ContratosPage() {
   const [contratos, setContratos] = useState<Contrato[]>([])
-  const [clientes, setClientes] = useState<Cliente[]>([])
-  const [imoveis, setImoveis] = useState<Imovel[]>([])
+  const [imoveis, setImoveis] = useState<SelectOpt[]>([])
+  const [clientes, setClientes] = useState<SelectOpt[]>([])
   const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [salvando, setSalvando] = useState(false)
-  const [erro, setErro] = useState('')
+  const [formInicial, setFormInicial] = useState<Record<string,string>|null>(null)
   const [sucesso, setSucesso] = useState('')
 
-  const [form, setForm] = useState({
-    numero: '', tipo: 'locacao_residencial',
-    imovel_id: '', locatario_id: '', locador_id: '',
-    data_inicio: '', data_fim: '',
-    valor_mensal: '', valor_caucao: '',
-    indice_reajuste: 'igpm', mes_reajuste: '1',
-    multa_rescisao_locatario: '3', multa_rescisao_locador: '3',
-    aviso_previo_dias: '30',
-    tipo_garantia: 'caucao', status: 'ativo', observacoes: '',
-  })
+  useEffect(() => { buscarTudo() }, [])
 
-  useEffect(() => {
-    buscarContratos()
-    buscarClientes()
-    buscarImoveis()
-  }, [])
-
-  async function buscarContratos() {
+  async function buscarTudo() {
     setLoading(true)
-    const { data } = await supabase
-      .from('contratos')
-      .select(`*, imovel:imoveis(titulo, bairro), locatario:clientes!contratos_locatario_id_fkey(nome), locador:clientes!contratos_locador_id_fkey(nome)`)
-      .order('created_at', { ascending: false })
-    if (data) setContratos(data)
+    const [cont, imov, cli] = await Promise.all([
+      supabase.from('contratos').select(`*, imovel:imoveis(titulo), locatario:clientes!contratos_locatario_id_fkey(nome), locador:clientes!contratos_locador_id_fkey(nome)`).order('created_at', {ascending:false}),
+      supabase.from('imoveis').select('id, titulo').order('titulo'),
+      supabase.from('clientes').select('id, nome').order('nome'),
+    ])
+    if (cont.data) setContratos(cont.data)
+    if (imov.data) setImoveis(imov.data)
+    if (cli.data) setClientes(cli.data)
     setLoading(false)
   }
 
-  async function buscarClientes() {
-    const { data } = await supabase.from('clientes').select('id, nome, tipo').order('nome')
-    if (data) setClientes(data)
+  function abrirNovo() { setFormInicial({...formVazio}) }
+
+  function abrirEdicao(c: Contrato) {
+    setFormInicial({
+      id: c.id, numero: c.numero||'', tipo: c.tipo||'locacao_residencial',
+      imovel_id: c.imovel_id||'', locatario_id: c.locatario_id||'', locador_id: c.locador_id||'',
+      data_inicio: c.data_inicio||'', data_fim: c.data_fim||'',
+      valor_mensal: c.valor_mensal?.toString()||'', valor_caucao: c.valor_caucao?.toString()||'',
+      indice_reajuste: c.indice_reajuste||'igpm', mes_reajuste: c.mes_reajuste?.toString()||'1',
+      multa_rescisao_locatario: c.multa_rescisao_locatario?.toString()||'3',
+      multa_rescisao_locador: c.multa_rescisao_locador?.toString()||'3',
+      aviso_previo_dias: c.aviso_previo_dias?.toString()||'30',
+      tipo_garantia: c.tipo_garantia||'caucao', status: c.status||'ativo',
+      observacoes: c.observacoes||'',
+    })
   }
 
-  async function buscarImoveis() {
-    const { data } = await supabase.from('imoveis').select('id, titulo, bairro').order('titulo')
-    if (data) setImoveis(data)
-  }
-
-  async function salvarContrato(e: React.FormEvent) {
-    e.preventDefault()
-    setSalvando(true)
-    setErro('')
-
-    const inicioDate = new Date(form.data_inicio)
+  async function salvar(dados: Record<string,string>) {
+    const inicioDate = new Date(dados.data_inicio)
     const proximoReajuste = new Date(inicioDate)
     proximoReajuste.setFullYear(proximoReajuste.getFullYear() + 1)
 
     const payload = {
-      numero: form.numero,
-      tipo: form.tipo,
-      imovel_id: form.imovel_id,
-      locatario_id: form.locatario_id,
-      locador_id: form.locador_id,
-      data_inicio: form.data_inicio,
-      data_fim: form.data_fim,
-      data_assinatura: form.data_inicio,
-      valor_mensal: parseFloat(form.valor_mensal),
-      valor_atual: parseFloat(form.valor_mensal),
-      valor_caucao: form.valor_caucao ? parseFloat(form.valor_caucao) : null,
-      indice_reajuste: form.indice_reajuste,
-      mes_reajuste: parseInt(form.mes_reajuste),
-      ultimo_reajuste: null,
-      proximo_reajuste: proximoReajuste.toISOString().split('T')[0],
-      multa_rescisao_locatario: parseFloat(form.multa_rescisao_locatario),
-      multa_rescisao_locador: parseFloat(form.multa_rescisao_locador),
-      aviso_previo_dias: parseInt(form.aviso_previo_dias),
-      tipo_garantia: form.tipo_garantia,
-      status: form.status,
-      observacoes: form.observacoes,
+      numero: dados.numero, tipo: dados.tipo,
+      imovel_id: dados.imovel_id, locatario_id: dados.locatario_id, locador_id: dados.locador_id,
+      data_inicio: dados.data_inicio, data_fim: dados.data_fim,
+      valor_mensal: parseFloat(dados.valor_mensal),
+      valor_atual: parseFloat(dados.valor_mensal),
+      valor_caucao: dados.valor_caucao ? parseFloat(dados.valor_caucao) : null,
+      indice_reajuste: dados.indice_reajuste, mes_reajuste: parseInt(dados.mes_reajuste),
+      proximo_reajuste: dados.id ? undefined : proximoReajuste.toISOString().split('T')[0],
+      multa_rescisao_locatario: parseFloat(dados.multa_rescisao_locatario),
+      multa_rescisao_locador: parseFloat(dados.multa_rescisao_locador),
+      aviso_previo_dias: parseInt(dados.aviso_previo_dias),
+      tipo_garantia: dados.tipo_garantia, status: dados.status,
+      observacoes: dados.observacoes||null,
     }
 
-    const { error } = await supabase.from('contratos').insert([payload])
-
-    if (error) {
-      setErro('Erro ao salvar: ' + error.message)
+    let error
+    if (dados.id) {
+      const res = await supabase.from('contratos').update(payload).eq('id', dados.id)
+      error = res.error
     } else {
-      setSucesso('Contrato criado com sucesso!')
-      setShowForm(false)
-      buscarContratos()
-      setTimeout(() => setSucesso(''), 3000)
+      const res = await supabase.from('contratos').insert([{...payload, data_assinatura: dados.data_inicio}])
+      error = res.error
     }
-    setSalvando(false)
+    if (error) throw new Error(error.message)
+
+    await registrarLog({
+      acao: dados.id ? 'editou' : 'criou',
+      modulo: 'contrato', registro_nome: `Contrato #${dados.numero}`,
+      descricao: `${dados.id ? 'Editou' : 'Criou'} o contrato #${dados.numero}`,
+    })
+
+    setFormInicial(null)
+    setSucesso(dados.id ? 'Contrato atualizado!' : 'Contrato criado!')
+    buscarTudo()
+    setTimeout(() => setSucesso(''), 3000)
   }
 
-  const locatarios = clientes.filter(c => ['locatario', 'comprador', 'lead'].includes(c.tipo))
-  const locadores = clientes.filter(c => ['locador', 'vendedor'].includes(c.tipo))
+  async function excluir(id: string, numero: string) {
+    if (!confirm(`Excluir contrato #${numero}?`)) return
+    await supabase.from('contratos').delete().eq('id', id)
+    buscarTudo()
+  }
 
   const vencendo = contratos.filter(c => {
     const st = statusContrato(c.data_fim, c.status)
@@ -169,204 +279,76 @@ export default function ContratosPage() {
   return (
     <AppLayout>
       <Topbar titulo="Contratos">
-        <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
-          {showForm ? <X size={14} /> : <Plus size={14} />}
-          {showForm ? 'Cancelar' : 'Novo contrato'}
-        </button>
+        <button className="btn btn-primary" onClick={abrirNovo}><Plus size={14} />Novo contrato</button>
       </Topbar>
-
       <div className="flex-1 overflow-y-auto p-6">
-        {sucesso && (
-          <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-4 text-sm">{sucesso}</div>
+        {sucesso && <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-4 text-sm">{sucesso}</div>}
+
+        {formInicial !== null && (
+          <FormContrato key={formInicial.id||'novo'} inicial={formInicial}
+            imoveis={imoveis} clientes={clientes}
+            onSalvar={salvar} onCancelar={() => setFormInicial(null)} />
         )}
 
-        {/* Alertas vencimento */}
-        {vencendo.length > 0 && !showForm && (
+        {vencendo.length > 0 && !formInicial && (
           <div className="card mb-4 border-yellow-200 bg-yellow-50">
             <div className="flex items-center gap-2 mb-2">
-              <AlertTriangle size={15} className="text-yellow-600" />
+              <AlertTriangle size={14} className="text-yellow-600" />
               <span className="text-sm font-medium text-yellow-800">{vencendo.length} contrato(s) vencendo em breve</span>
             </div>
             {vencendo.map(c => {
               const dias = diasRestantes(c.data_fim)
               return (
                 <div key={c.id} className="text-xs text-yellow-700 py-1 border-t border-yellow-200 first:border-0">
-                  #{c.numero} — {c.imovel?.titulo} · {c.locatario?.nome} · vence em {dias} dias ({formatDate(c.data_fim)})
+                  #{c.numero} — {getTitulo(c.imovel)} · {getNome(c.locatario)} · vence em {dias} dias ({formatDate(c.data_fim)})
                 </div>
               )
             })}
           </div>
         )}
 
-        {/* FORMULÁRIO */}
-        {showForm && (
-          <div className="card mb-6">
-            <h2 className="text-sm font-semibold mb-4">Novo contrato de locação</h2>
-            <form onSubmit={salvarContrato}>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label">Número do contrato *</label>
-                  <input className="input" required value={form.numero} onChange={e => setForm({...form, numero: e.target.value})} placeholder="Ex: 001/2024" />
-                </div>
-                <div>
-                  <label className="label">Tipo</label>
-                  <select className="input" value={form.tipo} onChange={e => setForm({...form, tipo: e.target.value})}>
-                    <option value="locacao_residencial">Locação residencial</option>
-                    <option value="locacao_comercial">Locação comercial</option>
-                    <option value="compra_venda">Compra e venda</option>
-                  </select>
-                </div>
-                <div className="col-span-2">
-                  <label className="label">Imóvel *</label>
-                  <select className="input" required value={form.imovel_id} onChange={e => setForm({...form, imovel_id: e.target.value})}>
-                    <option value="">Selecionar imóvel</option>
-                    {imoveis.map(i => <option key={i.id} value={i.id}>{i.titulo}{i.bairro ? ` — ${i.bairro}` : ''}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Locatário *</label>
-                  <select className="input" required value={form.locatario_id} onChange={e => setForm({...form, locatario_id: e.target.value})}>
-                    <option value="">Selecionar locatário</option>
-                    {locatarios.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                    {clientes.filter(c => !['locador','vendedor'].includes(c.tipo)).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Locador (proprietário) *</label>
-                  <select className="input" required value={form.locador_id} onChange={e => setForm({...form, locador_id: e.target.value})}>
-                    <option value="">Selecionar locador</option>
-                    {locadores.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Data de início *</label>
-                  <input className="input" type="date" required value={form.data_inicio} onChange={e => setForm({...form, data_inicio: e.target.value})} />
-                </div>
-                <div>
-                  <label className="label">Data de fim *</label>
-                  <input className="input" type="date" required value={form.data_fim} onChange={e => setForm({...form, data_fim: e.target.value})} />
-                </div>
-                <div>
-                  <label className="label">Valor mensal (R$) *</label>
-                  <input className="input" type="number" required value={form.valor_mensal} onChange={e => setForm({...form, valor_mensal: e.target.value})} placeholder="0,00" />
-                </div>
-                <div>
-                  <label className="label">Caução (R$)</label>
-                  <input className="input" type="number" value={form.valor_caucao} onChange={e => setForm({...form, valor_caucao: e.target.value})} placeholder="0,00" />
-                </div>
-                <div>
-                  <label className="label">Índice de reajuste</label>
-                  <select className="input" value={form.indice_reajuste} onChange={e => setForm({...form, indice_reajuste: e.target.value})}>
-                    <option value="igpm">IGP-M (FGV)</option>
-                    <option value="ipca">IPCA (IBGE)</option>
-                    <option value="inpc">INPC (IBGE)</option>
-                    <option value="ivar">IVAR (FGV)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Mês do reajuste anual</label>
-                  <select className="input" value={form.mes_reajuste} onChange={e => setForm({...form, mes_reajuste: e.target.value})}>
-                    {['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'].map((m,i) => (
-                      <option key={i} value={i+1}>{m}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Multa locatário (nº aluguéis)</label>
-                  <input className="input" type="number" step="0.5" value={form.multa_rescisao_locatario} onChange={e => setForm({...form, multa_rescisao_locatario: e.target.value})} />
-                </div>
-                <div>
-                  <label className="label">Multa locador (nº aluguéis)</label>
-                  <input className="input" type="number" step="0.5" value={form.multa_rescisao_locador} onChange={e => setForm({...form, multa_rescisao_locador: e.target.value})} />
-                </div>
-                <div>
-                  <label className="label">Aviso prévio (dias)</label>
-                  <input className="input" type="number" value={form.aviso_previo_dias} onChange={e => setForm({...form, aviso_previo_dias: e.target.value})} />
-                </div>
-                <div>
-                  <label className="label">Garantia</label>
-                  <select className="input" value={form.tipo_garantia} onChange={e => setForm({...form, tipo_garantia: e.target.value})}>
-                    <option value="caucao">Caução</option>
-                    <option value="fiador">Fiador</option>
-                    <option value="seguro_fianca">Seguro fiança</option>
-                    <option value="titulo_capitalizacao">Título de capitalização</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Status</label>
-                  <select className="input" value={form.status} onChange={e => setForm({...form, status: e.target.value})}>
-                    <option value="ativo">Ativo</option>
-                    <option value="pendente">Pendente</option>
-                  </select>
-                </div>
-                <div className="col-span-2">
-                  <label className="label">Observações</label>
-                  <textarea className="input" rows={3} value={form.observacoes} onChange={e => setForm({...form, observacoes: e.target.value})} placeholder="Cláusulas especiais, acordos, pet, reforma..." />
-                </div>
-              </div>
-              {erro && <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-3 py-2 rounded-lg mt-3">{erro}</div>}
-              <div className="flex gap-2 mt-4">
-                <button type="submit" disabled={salvando} className="btn btn-primary">
-                  {salvando ? 'Salvando...' : 'Criar contrato'}
-                </button>
-                <button type="button" className="btn" onClick={() => setShowForm(false)}>Cancelar</button>
-              </div>
-            </form>
-          </div>
-        )}
-
-        {/* TABELA */}
         <div className="card p-0 overflow-hidden">
           {loading ? (
-            <div className="text-center py-12 text-gray-400 text-sm">Carregando contratos...</div>
+            <div className="text-center py-12 text-gray-400 text-sm">Carregando...</div>
           ) : contratos.length === 0 ? (
             <div className="text-center py-12 text-gray-400">
               <FileText size={36} className="mx-auto mb-2 opacity-30" />
               <div className="font-medium text-gray-500">Nenhum contrato cadastrado</div>
-              <div className="text-sm mt-1">Clique em "Novo contrato" para começar</div>
             </div>
           ) : (
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100">
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">#</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Imóvel</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Locatário</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Locador</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Início</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Vencimento</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Valor</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Índice</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Status</th>
-                  <th className="px-4 py-3"></th>
+                  {['#','Imóvel','Locatário','Locador','Início','Vencimento','Valor','Índice','Status',''].map(h => (
+                    <th key={h} className="text-left px-4 py-3 text-xs font-medium text-gray-400">{h}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {contratos.map((c) => {
+                {contratos.map(c => {
                   const st = statusContrato(c.data_fim, c.status)
                   const dias = diasRestantes(c.data_fim)
                   return (
                     <tr key={c.id} className="border-b border-gray-50 hover:bg-gray-50">
                       <td className="px-4 py-3 text-gray-400 text-xs font-mono">#{c.numero}</td>
-                      <td className="px-4 py-3">
-                        <div className="font-medium text-gray-900 text-sm">{c.imovel?.titulo || '—'}</div>
-                      </td>
-                      <td className="px-4 py-3 text-gray-600 text-sm">{c.locatario?.nome || '—'}</td>
-                      <td className="px-4 py-3 text-gray-600 text-sm">{c.locador?.nome || '—'}</td>
+                      <td className="px-4 py-3 font-medium text-gray-900 text-sm">{getTitulo(c.imovel)}</td>
+                      <td className="px-4 py-3 text-gray-600 text-sm">{getNome(c.locatario)}</td>
+                      <td className="px-4 py-3 text-gray-600 text-sm">{getNome(c.locador)}</td>
                       <td className="px-4 py-3 text-gray-500 text-xs">{formatDate(c.data_inicio)}</td>
                       <td className="px-4 py-3 text-xs">
-                        <div className={st === 'vencendo' ? 'text-red-600 font-semibold' : st === 'atencao' ? 'text-yellow-600 font-medium' : 'text-gray-500'}>
+                        <div className={st==='vencendo'?'text-red-600 font-semibold':st==='atencao'?'text-yellow-600 font-medium':'text-gray-500'}>
                           {formatDate(c.data_fim)}
                         </div>
                         {dias > 0 && dias <= 60 && <div className="text-[10px] text-gray-400">{dias} dias</div>}
                       </td>
                       <td className="px-4 py-3 font-medium text-sm">{formatVal(c.valor_atual || c.valor_mensal)}</td>
                       <td className="px-4 py-3 text-xs text-gray-500 uppercase">{c.indice_reajuste}</td>
+                      <td className="px-4 py-3"><span className={statusBadge[st]||'badge badge-gray'}>{statusLabel[st]||st}</span></td>
                       <td className="px-4 py-3">
-                        <span className={statusBadge[st] || 'badge badge-gray'}>{statusLabel[st] || st}</span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <button className="btn text-xs py-1 px-2.5">Ver</button>
+                        <div className="flex gap-1.5">
+                          <button className="btn btn-sm" onClick={() => abrirEdicao(c)}><Edit2 size={12} />Editar</button>
+                          <button className="btn btn-sm" style={{color:'var(--text-danger)'}} onClick={() => excluir(c.id, c.numero)}><X size={12} /></button>
+                        </div>
                       </td>
                     </tr>
                   )
