@@ -30,9 +30,21 @@ type Contrato = {
   valor_mensal: number
   taxa_administracao: number
   dia_vencimento: number
-  imovel?: { titulo: string }
-  locatario?: { nome: string }
-  locador?: { nome: string }
+  imovel?: { titulo: string } | { titulo: string }[]
+  locatario?: { nome: string } | { nome: string }[]
+  locador?: { nome: string } | { nome: string }[]
+}
+
+function getNome(val?: { nome: string } | { nome: string }[]): string {
+  if (!val) return '—'
+  if (Array.isArray(val)) return val[0]?.nome || '—'
+  return val.nome || '—'
+}
+
+function getTitulo(val?: { titulo: string } | { titulo: string }[]): string {
+  if (!val) return '—'
+  if (Array.isArray(val)) return val[0]?.titulo || '—'
+  return val.titulo || '—'
 }
 
 function formatVal(val: number) {
@@ -256,13 +268,13 @@ export default function FinanceiroPage() {
                   <select className="input" required value={form.contrato_id} onChange={e => selecionarContrato(e.target.value)}>
                     <option value="">Selecionar contrato</option>
                     {contratos.map(c => (
-                      <option key={c.id} value={c.id}>#{c.numero} — {c.imovel?.titulo} · {c.locatario?.nome}</option>
+                      <option key={c.id} value={c.id}>#{c.numero} — {getTitulo(c.imovel)} · {getNome(c.locatario)}</option>
                     ))}
                   </select>
                 </div>
                 {contratoSel && (
                   <div className="col-span-2 bg-blue-50 border border-blue-100 rounded-lg p-3 text-xs text-blue-700">
-                    <strong>Locador:</strong> {contratoSel.locador?.nome} · <strong>Valor base:</strong> {formatVal(contratoSel.valor_mensal)}
+                    <strong>Locador:</strong> {getNome(contratoSel.locador)} · <strong>Valor base:</strong> {formatVal(contratoSel.valor_mensal)}
                   </div>
                 )}
                 <div>
@@ -338,8 +350,8 @@ export default function FinanceiroPage() {
                         <div className="text-[10px] text-gray-400">{meses[venc.getMonth()].slice(0,3)}</div>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium text-sm text-gray-900">{c.contrato?.imovel?.titulo || '—'}</div>
-                        <div className="text-xs text-gray-400">{c.locatario?.nome} · {c.mes_referencia}</div>
+                        <div className="font-medium text-sm text-gray-900">{getTitulo(c.contrato?.imovel) || '—'}</div>
+                        <div className="text-xs text-gray-400">{getNome(c.locatario)} · {c.mes_referencia}</div>
                         {atrasado && <div className="text-xs text-red-600 font-medium">{Math.abs(dias)} dias em atraso</div>}
                         {!atrasado && dias >= 0 && dias <= 7 && <div className="text-xs text-yellow-600">Vence em {dias} dias</div>}
                       </div>
@@ -391,8 +403,8 @@ export default function FinanceiroPage() {
                   {cobrancas.map(c => (
                     <tr key={c.id} className="border-b border-gray-50 hover:bg-gray-50">
                       <td className="px-4 py-3">
-                        <div className="font-medium text-gray-900 text-sm">{c.contrato?.imovel?.titulo || '—'}</div>
-                        <div className="text-xs text-gray-400">{c.locatario?.nome}</div>
+                        <div className="font-medium text-gray-900 text-sm">{getTitulo(c.contrato?.imovel) || '—'}</div>
+                        <div className="text-xs text-gray-400">{getNome(c.locatario)}</div>
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-500 capitalize">{c.mes_referencia}</td>
                       <td className="px-4 py-3 text-xs text-gray-500">{formatDate(c.data_vencimento)}</td>
@@ -441,8 +453,8 @@ export default function FinanceiroPage() {
               <tbody>
                 {cobrancas.filter(c => c.status_cobranca === 'pago').map(c => (
                   <tr key={c.id} className="border-b border-gray-50 hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium text-sm">{c.locador?.nome || '—'}</td>
-                    <td className="px-4 py-3 text-xs text-gray-500">{c.contrato?.imovel?.titulo || '—'}</td>
+                    <td className="px-4 py-3 font-medium text-sm">{getNome(c.locador) || '—'}</td>
+                    <td className="px-4 py-3 text-xs text-gray-500">{getTitulo(c.contrato?.imovel) || '—'}</td>
                     <td className="px-4 py-3 text-xs text-gray-500 capitalize">{c.mes_referencia}</td>
                     <td className="px-4 py-3 text-sm">{formatVal(c.valor_aluguel)}</td>
                     <td className="px-4 py-3 text-xs text-blue-600 font-medium">− {formatVal(c.valor_taxa_adm)}</td>
