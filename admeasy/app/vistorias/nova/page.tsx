@@ -10,17 +10,22 @@ import { Save, Plus, X, Camera, ChevronDown, ChevronUp } from 'lucide-react'
 const ORG_ID = '00000000-0000-0000-0000-000000000001'
 
 const AMBIENTES_PADRAO = [
+  'Sala',
   'Sala de estar',
   'Sala de jantar',
   'Cozinha',
+  'Quarto Casal',
   'Quarto 1',
   'Quarto 2',
   'Quarto 3',
+  'Quarto 4',
   'Suíte 1',
   'Suíte 2',
+  'Suíte 3',
   'Banheiro 1',
   'Banheiro 2',
-  'Lavabo',
+  'Lavabo 1',
+  'Lavabo 2',
   'Área de serviço',
   'Lavanderia',
   'Varanda',
