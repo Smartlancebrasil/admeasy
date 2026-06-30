@@ -3,9 +3,11 @@
 import { useEffect, useState } from 'react'
 import AppLayout from '@/components/layout/AppLayout'
 import { supabase } from '@/lib/supabase'
-import { FileText, Plus, X, AlertTriangle, Edit2, FileDown } from 'lucide-react'
+import { FileText, Plus, X, AlertTriangle, Edit2, FileDown, UserPlus } from 'lucide-react'
 import { registrarLog } from '@/lib/logs'
 import Link from 'next/link'
+
+const ORG_ID = '00000000-0000-0000-0000-000000000001'
 
 type Contrato = {
   id: string
@@ -86,16 +88,115 @@ const formVazio = {
   status:'ativo', observacoes:'',
 }
 
-function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar }: {
+const clienteRapidoVazio = { nome: '', cpf: '', telefone: '', email: '' }
+
+/**
+ * Mini-modal de cadastro rápido de cliente (locador ou locatário).
+ * Fica fora do FormContrato para não ser recriado a cada digitação.
+ */
+function ModalClienteRapido({ tipo, onSalvar, onFechar }: {
+  tipo: 'locatario' | 'locador'
+  onSalvar: (cliente: { id: string; nome: string }) => void
+  onFechar: () => void
+}) {
+  const [dados, setDados] = useState(clienteRapidoVazio)
+  const [salvando, setSalvando] = useState(false)
+  const [erro, setErro] = useState('')
+
+  const set = (campo: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setDados(d => ({ ...d, [campo]: e.target.value }))
+
+  async function salvar(e: React.FormEvent) {
+    e.preventDefault()
+    if (!dados.nome.trim()) return
+    setSalvando(true)
+    setErro('')
+
+    const { data, error } = await supabase
+      .from('clientes')
+      .insert([{
+        nome: dados.nome,
+        cpf: dados.cpf || null,
+        telefone: dados.telefone || null,
+        email: dados.email || null,
+        tipo,
+        status: 'ativo',
+        tem_portal: false,
+        organization_id: ORG_ID,
+      }])
+      .select('id, nome')
+      .single()
+
+    setSalvando(false)
+    if (error) { setErro('Erro: ' + error.message); return }
+    onSalvar(data)
+  }
+
+  return (
+    <div
+      style={{ background: 'rgba(0,0,0,0.6)' }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      onClick={onFechar}
+    >
+      <div
+        className="card w-full max-w-md"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h3 style={{ color: '#f4f4f3' }} className="text-sm font-semibold">
+            Cadastro rápido — {tipo === 'locatario' ? 'Locatário' : 'Locador'}
+          </h3>
+          <button onClick={onFechar} className="btn btn-sm"><X size={13} /></button>
+        </div>
+        <form onSubmit={salvar}>
+          <div className="space-y-3">
+            <div>
+              <label className="label">Nome completo *</label>
+              <input className="input" required autoFocus value={dados.nome} onChange={set('nome')} placeholder="Nome completo" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label">CPF</label>
+                <input className="input" value={dados.cpf} onChange={set('cpf')} placeholder="000.000.000-00" />
+              </div>
+              <div>
+                <label className="label">Telefone</label>
+                <input className="input" value={dados.telefone} onChange={set('telefone')} placeholder="(11) 99999-9999" />
+              </div>
+            </div>
+            <div>
+              <label className="label">E-mail</label>
+              <input className="input" type="email" value={dados.email} onChange={set('email')} />
+            </div>
+          </div>
+          {erro && <div style={{ background: '#2e1717', border: '0.5px solid #4a2424', color: '#ef4444' }} className="text-sm px-3 py-2 rounded-lg mt-3">{erro}</div>}
+          <p style={{ color: '#5b5e6b' }} className="text-[10px] mt-3">
+            Dados completos (RG, endereço, profissão...) podem ser preenchidos depois na área de Clientes.
+          </p>
+          <div className="flex gap-2 mt-4">
+            <button type="submit" disabled={salvando} className="btn btn-primary flex-1">
+              {salvando ? 'Salvando...' : 'Cadastrar e selecionar'}
+            </button>
+            <button type="button" className="btn" onClick={onFechar}>Cancelar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClienteCriado }: {
   inicial: Record<string,string>
   imoveis: SelectOpt[]
   clientes: SelectOpt[]
   onSalvar: (dados: Record<string,string>) => Promise<void>
   onCancelar: () => void
+  onClienteCriado: () => Promise<void>
 }) {
   const [form, setForm] = useState(inicial)
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
+  const [modalCadastro, setModalCadastro] = useState<'locatario' | 'locador' | null>(null)
   const set = (c: string) => (e: React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) => setForm(f=>({...f,[c]:e.target.value}))
 
   const caucaoVal = parseFloat(form.valor_caucao) || 0
@@ -108,6 +209,12 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar }: {
     setSalvando(false)
   }
 
+  async function aoCriarCliente(campo: 'locatario_id' | 'locador_id', cliente: { id: string; nome: string }) {
+    await onClienteCriado()
+    setForm(f => ({ ...f, [campo]: cliente.id }))
+    setModalCadastro(null)
+  }
+
   return (
     <div className="card mb-6">
       <div className="flex items-center justify-between mb-4">
@@ -116,7 +223,7 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar }: {
       </div>
       {erro && <div style={{ background: '#2e1717', border: '0.5px solid #4a2424', color: '#ef4444' }} className="px-3 py-2 rounded-lg mb-3 text-sm">{erro}</div>}
       <form onSubmit={handleSubmit}>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div><label className="label">Número *</label>
             <input className="input" required value={form.numero} onChange={set('numero')} placeholder="Ex: 001/2024" /></div>
           <div><label className="label">Tipo</label>
@@ -125,21 +232,40 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar }: {
               <option value="locacao_comercial">Locação comercial</option>
               <option value="compra_venda">Compra e venda</option>
             </select></div>
-          <div className="col-span-2"><label className="label">Imóvel *</label>
+          <div className="sm:col-span-2"><label className="label">Imóvel *</label>
             <select className="input" required value={form.imovel_id} onChange={set('imovel_id')}>
               <option value="">Selecionar imóvel</option>
               {imoveis.map(i => <option key={i.id} value={i.id}>{i.titulo}</option>)}
             </select></div>
-          <div><label className="label">Locatário *</label>
+
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="label" style={{ marginBottom: 0 }}>Locatário *</label>
+              <button type="button" onClick={() => setModalCadastro('locatario')}
+                style={{ color: '#5b9bf5' }} className="text-[11px] flex items-center gap-1 hover:underline">
+                <UserPlus size={11} />Cadastrar
+              </button>
+            </div>
             <select className="input" required value={form.locatario_id} onChange={set('locatario_id')}>
               <option value="">Selecionar</option>
               {clientes.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-            </select></div>
-          <div><label className="label">Locador *</label>
+            </select>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="label" style={{ marginBottom: 0 }}>Locador *</label>
+              <button type="button" onClick={() => setModalCadastro('locador')}
+                style={{ color: '#5b9bf5' }} className="text-[11px] flex items-center gap-1 hover:underline">
+                <UserPlus size={11} />Cadastrar
+              </button>
+            </div>
             <select className="input" required value={form.locador_id} onChange={set('locador_id')}>
               <option value="">Selecionar</option>
               {clientes.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-            </select></div>
+            </select>
+          </div>
+
           <div><label className="label">Data início *</label>
             <input className="input" type="date" required value={form.data_inicio} onChange={set('data_inicio')} /></div>
           <div><label className="label">Data fim *</label>
@@ -153,7 +279,7 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar }: {
           </div>
 
           {caucaoVal > 0 && (
-            <div className="col-span-2">
+            <div className="sm:col-span-2">
               <label className="label">Parcelamento do caução</label>
               <div className="flex gap-2 flex-wrap">
                 {[1,2,3,4,5].map(p => (
@@ -207,7 +333,7 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar }: {
               <option value="encerrado">Encerrado</option>
               <option value="rescindido">Rescindido</option>
             </select></div>
-          <div className="col-span-2"><label className="label">Observações</label>
+          <div className="sm:col-span-2"><label className="label">Observações</label>
             <textarea className="input" rows={2} value={form.observacoes} onChange={set('observacoes')} /></div>
         </div>
         <div className="flex gap-2 mt-4">
@@ -217,6 +343,14 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar }: {
           <button type="button" className="btn" onClick={onCancelar}>Cancelar</button>
         </div>
       </form>
+
+      {modalCadastro && (
+        <ModalClienteRapido
+          tipo={modalCadastro}
+          onFechar={() => setModalCadastro(null)}
+          onSalvar={(cliente) => aoCriarCliente(modalCadastro === 'locatario' ? 'locatario_id' : 'locador_id', cliente)}
+        />
+      )}
     </div>
   )
 }
@@ -228,8 +362,6 @@ export default function ContratosPage() {
   const [loading, setLoading] = useState(true)
   const [formInicial, setFormInicial] = useState<Record<string,string>|null>(null)
   const [sucesso, setSucesso] = useState('')
-
-  const ORG_ID = '00000000-0000-0000-0000-000000000001'
 
   useEffect(() => { buscarTudo() }, [])
 
@@ -244,6 +376,11 @@ export default function ContratosPage() {
     if (imov.data) setImoveis(imov.data)
     if (cli.data) setClientes(cli.data)
     setLoading(false)
+  }
+
+  async function recarregarClientes() {
+    const { data } = await supabase.from('clientes').select('id, nome').order('nome')
+    if (data) setClientes(data)
   }
 
   function abrirNovo() { setFormInicial({...formVazio}) }
@@ -351,7 +488,7 @@ export default function ContratosPage() {
 
   return (
     <AppLayout>
-      <div style={{ background: '#0d1117', minHeight: '100vh' }} className="flex-1 overflow-y-auto p-6">
+      <div style={{ background: '#0d1117', minHeight: '100vh' }} className="flex-1 overflow-y-auto p-4 lg:p-6">
         <div className="max-w-[1600px] mx-auto">
 
           <div className="flex items-center justify-between mb-5">
@@ -364,7 +501,8 @@ export default function ContratosPage() {
           {formInicial !== null && (
             <FormContrato key={formInicial.id||'novo'} inicial={formInicial}
               imoveis={imoveis} clientes={clientes}
-              onSalvar={salvar} onCancelar={() => setFormInicial(null)} />
+              onSalvar={salvar} onCancelar={() => setFormInicial(null)}
+              onClienteCriado={recarregarClientes} />
           )}
 
           {vencendo.length > 0 && !formInicial && (
@@ -384,7 +522,7 @@ export default function ContratosPage() {
             </div>
           )}
 
-          <div className="card p-0 overflow-hidden">
+          <div className="card p-0 overflow-hidden overflow-x-auto">
             {loading ? (
               <div style={{ color: '#8b8d98' }} className="text-center py-12 text-sm">Carregando...</div>
             ) : contratos.length === 0 ? (
@@ -397,7 +535,7 @@ export default function ContratosPage() {
                 <thead>
                   <tr style={{ borderBottom: '0.5px solid #2a2f3a' }}>
                     {['#','Imóvel','Locatário','Locador','Início','Vencimento','Valor','Índice','Status',''].map(h => (
-                      <th key={h} style={{ color: '#8b8d98' }} className="text-left px-4 py-3 text-xs font-medium">{h}</th>
+                      <th key={h} style={{ color: '#8b8d98' }} className="text-left px-4 py-3 text-xs font-medium whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -407,18 +545,18 @@ export default function ContratosPage() {
                     const dias = diasRestantes(c.data_fim)
                     return (
                       <tr key={c.id} style={{ borderBottom: '0.5px solid #1c2128' }} className="hover:bg-[#161b22]">
-                        <td style={{ color: '#8b8d98' }} className="px-4 py-3 text-xs font-mono">#{c.numero}</td>
-                        <td style={{ color: '#f4f4f3' }} className="px-4 py-3 font-medium text-sm">{getTitulo(c.imovel)}</td>
-                        <td style={{ color: '#c3c2b7' }} className="px-4 py-3 text-sm">{getNome(c.locatario)}</td>
-                        <td style={{ color: '#c3c2b7' }} className="px-4 py-3 text-sm">{getNome(c.locador)}</td>
-                        <td style={{ color: '#8b8d98' }} className="px-4 py-3 text-xs">{formatDate(c.data_inicio)}</td>
-                        <td className="px-4 py-3 text-xs">
+                        <td style={{ color: '#8b8d98' }} className="px-4 py-3 text-xs font-mono whitespace-nowrap">#{c.numero}</td>
+                        <td style={{ color: '#f4f4f3' }} className="px-4 py-3 font-medium text-sm whitespace-nowrap">{getTitulo(c.imovel)}</td>
+                        <td style={{ color: '#c3c2b7' }} className="px-4 py-3 text-sm whitespace-nowrap">{getNome(c.locatario)}</td>
+                        <td style={{ color: '#c3c2b7' }} className="px-4 py-3 text-sm whitespace-nowrap">{getNome(c.locador)}</td>
+                        <td style={{ color: '#8b8d98' }} className="px-4 py-3 text-xs whitespace-nowrap">{formatDate(c.data_inicio)}</td>
+                        <td className="px-4 py-3 text-xs whitespace-nowrap">
                           <div style={{ color: st==='vencendo' ? '#ef4444' : st==='atencao' ? '#f59e0b' : '#8b8d98' }} className={st==='vencendo'||st==='atencao' ? 'font-semibold' : ''}>
                             {formatDate(c.data_fim)}
                           </div>
                           {dias > 0 && dias <= 60 && <div style={{ color: '#5b5e6b' }} className="text-[10px]">{dias} dias</div>}
                         </td>
-                        <td style={{ color: '#f4f4f3' }} className="px-4 py-3 font-medium text-sm">{formatVal(c.valor_atual || c.valor_mensal)}</td>
+                        <td style={{ color: '#f4f4f3' }} className="px-4 py-3 font-medium text-sm whitespace-nowrap">{formatVal(c.valor_atual || c.valor_mensal)}</td>
                         <td style={{ color: '#8b8d98' }} className="px-4 py-3 text-xs uppercase">{c.indice_reajuste}</td>
                         <td className="px-4 py-3"><span className={statusBadge[st]||'badge badge-gray'}>{statusLabel[st]||st}</span></td>
                         <td className="px-4 py-3">
