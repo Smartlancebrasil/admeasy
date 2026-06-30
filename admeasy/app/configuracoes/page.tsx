@@ -3,9 +3,10 @@
 import { useEffect, useState } from 'react'
 import AppLayout from '@/components/layout/AppLayout'
 import { supabase } from '@/lib/supabase'
-import { Save, Plus, X, Edit2, Building2, Users, Shield, UserPlus, Mail } from 'lucide-react'
+import { Save, Plus, X, Edit2, Building2, Users, Shield, UserPlus, Mail, Trash2, ExternalLink, CheckCircle2, Clock } from 'lucide-react'
 
 const ORG_ID = '00000000-0000-0000-0000-000000000001'
+const SUPABASE_AUTH_URL = 'https://supabase.com/dashboard/project/ckhcbiuwcfnbmlloduwj/auth/users'
 
 const UFs = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
 
@@ -37,8 +38,8 @@ function FormVistoriador({ inicial, onSalvar, onCancelar }: {
   return (
     <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-lg p-4 mb-3">
       <form onSubmit={submit}>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="col-span-2"><label className="label">Nome completo *</label>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="sm:col-span-2"><label className="label">Nome completo *</label>
             <input className="input" required value={form.nome} onChange={set('nome')} /></div>
           <div><label className="label">CPF</label>
             <input className="input" value={form.cpf} onChange={set('cpf')} placeholder="000.000.000-00" /></div>
@@ -60,6 +61,50 @@ function FormVistoriador({ inicial, onSalvar, onCancelar }: {
   )
 }
 
+/**
+ * Form para editar nome e perfil de um convite pendente (cadastro feito pelo admin,
+ * antes de o login ser criado no Supabase Auth).
+ */
+function FormEditarConvite({ convite, onSalvar, onCancelar }: {
+  convite: Convite
+  onSalvar: (id: string, dados: { nome: string; perfil: string }) => Promise<void>
+  onCancelar: () => void
+}) {
+  const [nome, setNome] = useState(convite.nome || '')
+  const [perfil, setPerfil] = useState(convite.perfil)
+  const [salvando, setSalvando] = useState(false)
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    setSalvando(true)
+    await onSalvar(convite.id, { nome, perfil })
+    setSalvando(false)
+  }
+
+  return (
+    <form onSubmit={submit} style={{ background: '#16243a', border: '0.5px solid #1e3a5f' }} className="rounded-lg p-3 mt-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+        <div>
+          <label className="label">Nome</label>
+          <input className="input" value={nome} onChange={e => setNome(e.target.value)} />
+        </div>
+        <div>
+          <label className="label">Perfil</label>
+          <select className="input" value={perfil} onChange={e => setPerfil(e.target.value)}>
+            {perfis.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+          </select>
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <button type="submit" disabled={salvando} className="btn btn-primary btn-sm">
+          {salvando ? 'Salvando...' : 'Salvar'}
+        </button>
+        <button type="button" className="btn btn-sm" onClick={onCancelar}>Cancelar</button>
+      </div>
+    </form>
+  )
+}
+
 export default function ConfiguracoesPage() {
   const [aba, setAba] = useState<'imobiliaria'|'vistoriadores'|'usuarios'>('imobiliaria')
   const [org, setOrg] = useState<Org>({})
@@ -74,6 +119,7 @@ export default function ConfiguracoesPage() {
   const [enviandoConvite, setEnviandoConvite] = useState(false)
   const [sucessoConvite, setSucessoConvite] = useState('')
   const [editandoUsuario, setEditandoUsuario] = useState<string|null>(null)
+  const [editandoConvite, setEditandoConvite] = useState<string|null>(null)
 
   useEffect(() => { carregarOrg(); carregarVistoriadores(); carregarUsuarios() }, [])
 
@@ -104,7 +150,7 @@ export default function ConfiguracoesPage() {
     }
     setSucessoOrg('Dados salvos!'); setSalvandoOrg(false)
     setTimeout(() => setSucessoOrg(''), 3000)
-  }   
+  }
 
   async function salvarVistoriador(dados: Record<string,string>) {
     const payload = { nome: dados.nome, cpf: dados.cpf||null, crea: dados.crea||null, telefone: dados.telefone||null, email: dados.email||null, organization_id: ORG_ID, ativo: true }
@@ -127,11 +173,23 @@ export default function ConfiguracoesPage() {
       perfil: conviteForm.perfil, nome: conviteForm.nome,
       criado_por: userData.user?.id,
     }])
-    setSucessoConvite(`Convite registrado para ${conviteForm.email}! Compartilhe o link de acesso com ele.`)
+    setSucessoConvite(`Cadastro de ${conviteForm.nome || conviteForm.email} registrado! Agora crie o login no Supabase com o mesmo e-mail.`)
     setConviteForm({ nome: '', email: '', perfil: 'corretor' })
     setShowConvite(false); setEnviandoConvite(false)
     carregarUsuarios()
-    setTimeout(() => setSucessoConvite(''), 5000)
+    setTimeout(() => setSucessoConvite(''), 6000)
+  }
+
+  async function editarConvite(id: string, dados: { nome: string; perfil: string }) {
+    await supabase.from('convites').update(dados).eq('id', id)
+    setEditandoConvite(null)
+    carregarUsuarios()
+  }
+
+  async function excluirConvite(id: string, nomeOuEmail: string) {
+    if (!confirm(`Excluir o cadastro de "${nomeOuEmail}"? Isso não afeta um login já criado no Supabase, apenas o registro pendente aqui.`)) return
+    await supabase.from('convites').delete().eq('id', id)
+    carregarUsuarios()
   }
 
   async function alterarPerfil(userId: string, novoPerfil: string) {
@@ -144,6 +202,12 @@ export default function ConfiguracoesPage() {
     carregarUsuarios()
   }
 
+  async function excluirUsuario(u: Usuario) {
+    if (!confirm(`Remover "${u.nome}" do sistema? O login dele no Supabase Auth NÃO é excluído automaticamente — você precisa removê-lo manualmente lá também, se quiser bloquear o acesso por completo.`)) return
+    await supabase.from('users').delete().eq('id', u.id)
+    carregarUsuarios()
+  }
+
   const setOrg_ = (campo: string) => (e: React.ChangeEvent<HTMLInputElement|HTMLSelectElement>) =>
     setOrg(o => ({...o, [campo]: e.target.value}))
 
@@ -151,12 +215,12 @@ export default function ConfiguracoesPage() {
 
   return (
     <AppLayout>
-      <div style={{ background: '#0d1117', minHeight: '100vh' }} className="flex-1 overflow-y-auto p-6">
+      <div style={{ background: '#0d1117', minHeight: '100vh' }} className="flex-1 overflow-y-auto p-4 lg:p-6">
         <div className="max-w-[1600px] mx-auto">
 
           <h1 style={{ color: '#f4f4f3' }} className="text-lg font-medium mb-5">Configurações</h1>
 
-          <div style={{ borderBottom: '0.5px solid #2a2f3a' }} className="flex gap-0 mb-6">
+          <div style={{ borderBottom: '0.5px solid #2a2f3a' }} className="flex gap-0 mb-6 overflow-x-auto">
             {[
               { key: 'imobiliaria', label: 'Dados da imobiliária', icon: Building2 },
               { key: 'vistoriadores', label: 'Vistoriadores', icon: Users },
@@ -164,7 +228,7 @@ export default function ConfiguracoesPage() {
             ].map(a => (
               <button key={a.key} onClick={() => setAba(a.key as any)}
                 style={aba===a.key ? { borderBottom: '2px solid #2563eb', color: '#5b9bf5' } : { borderBottom: '2px solid transparent', color: '#8b8d98' }}
-                className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-all">
+                className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-all whitespace-nowrap">
                 <a.icon size={14} />{a.label}
               </button>
             ))}
@@ -174,11 +238,11 @@ export default function ConfiguracoesPage() {
           {aba === 'imobiliaria' && (
             <form onSubmit={salvarOrg}>
               {sucessoOrg && <div style={{ background: '#1a2e1f', border: '0.5px solid #2d4a35', color: '#3fb950' }} className="px-4 py-3 rounded-lg mb-4 text-sm">{sucessoOrg}</div>}
-              <div className="grid grid-cols-2 gap-5">
-                <div className="card col-span-2">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                <div className="card lg:col-span-2">
                   <h3 style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-4">Identidade</h3>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="col-span-2"><label className="label">Nome da imobiliária *</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="sm:col-span-2"><label className="label">Nome da imobiliária *</label>
                       <input className="input" value={org.nome||''} onChange={setOrg_('nome')} placeholder="Ex: Echelli Negócios Imobiliários" /></div>
                     <div><label className="label">CNPJ</label>
                       <input className="input" value={org.cnpj||''} onChange={setOrg_('cnpj')} placeholder="00.000.000/0001-00" /></div>
@@ -231,16 +295,16 @@ export default function ConfiguracoesPage() {
                       <input className="input" value={org.cep||''} onChange={setOrg_('cep')} /></div>
                   </div>
                 </div>
-                <div className="card col-span-2">
+                <div className="card lg:col-span-2">
                   <h3 style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-4">Logo e aparência nos documentos</h3>
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div><label className="label">Cor principal</label>
                       <div className="flex items-center gap-2">
                         <input type="color" style={{ border: '0.5px solid #2a2f3a' }} className="h-9 w-14 rounded p-0.5" value={org.cor_primaria||'#185FA5'} onChange={setOrg_('cor_primaria')} />
                         <input className="input flex-1" value={org.cor_primaria||'#185FA5'} onChange={setOrg_('cor_primaria')} />
                       </div>
                     </div>
-                    <div className="col-span-2">
+                    <div className="sm:col-span-2">
                       <label className="label">Logo da imobiliária</label>
                       <div className="flex items-center gap-3 mt-1">
                         {org.logo_url && <img src={org.logo_url} alt="Logo" style={{ border: '0.5px solid #2a2f3a' }} className="h-12 object-contain rounded px-2" />}
@@ -283,7 +347,7 @@ export default function ConfiguracoesPage() {
               {formVist && formVist.id === '' && (
                 <FormVistoriador inicial={formVist} onSalvar={salvarVistoriador} onCancelar={() => setFormVist(null)} />
               )}
-              <div className="card p-0 overflow-hidden">
+              <div className="card p-0 overflow-hidden overflow-x-auto">
                 {vistoriadores.length === 0 ? (
                   <div style={{ color: '#8b8d98' }} className="text-center py-10 text-sm">Nenhum vistoriador cadastrado</div>
                 ) : (
@@ -291,7 +355,7 @@ export default function ConfiguracoesPage() {
                     <thead>
                       <tr style={{ borderBottom: '0.5px solid #2a2f3a' }}>
                         {['Nome','CPF','CREA','Telefone','E-mail','Status',''].map(h => (
-                          <th key={h} style={{ color: '#8b8d98' }} className="text-left px-4 py-3 text-xs font-medium">{h}</th>
+                          <th key={h} style={{ color: '#8b8d98' }} className="text-left px-4 py-3 text-xs font-medium whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
                     </thead>
@@ -304,10 +368,10 @@ export default function ConfiguracoesPage() {
                             </td>
                           ) : (
                             <>
-                              <td style={{ color: '#f4f4f3' }} className="px-4 py-3 font-medium">{v.nome}</td>
-                              <td style={{ color: '#8b8d98' }} className="px-4 py-3">{v.cpf||'—'}</td>
-                              <td style={{ color: '#8b8d98' }} className="px-4 py-3">{v.crea||'—'}</td>
-                              <td style={{ color: '#8b8d98' }} className="px-4 py-3">{v.telefone||'—'}</td>
+                              <td style={{ color: '#f4f4f3' }} className="px-4 py-3 font-medium whitespace-nowrap">{v.nome}</td>
+                              <td style={{ color: '#8b8d98' }} className="px-4 py-3 whitespace-nowrap">{v.cpf||'—'}</td>
+                              <td style={{ color: '#8b8d98' }} className="px-4 py-3 whitespace-nowrap">{v.crea||'—'}</td>
+                              <td style={{ color: '#8b8d98' }} className="px-4 py-3 whitespace-nowrap">{v.telefone||'—'}</td>
                               <td style={{ color: '#8b8d98' }} className="px-4 py-3">{v.email||'—'}</td>
                               <td className="px-4 py-3"><span className={`badge ${v.ativo?'badge-green':'badge-gray'}`}>{v.ativo?'Ativo':'Inativo'}</span></td>
                               <td className="px-4 py-3">
@@ -336,9 +400,26 @@ export default function ConfiguracoesPage() {
             <div>
               {sucessoConvite && <div style={{ background: '#1a2e1f', border: '0.5px solid #2d4a35', color: '#3fb950' }} className="px-4 py-3 rounded-lg mb-4 text-sm">{sucessoConvite}</div>}
 
+              {/* Passo a passo de como ativar o acesso */}
+              <div style={{ background: '#16243a', border: '0.5px solid #1e3a5f' }} className="rounded-xl p-4 mb-5">
+                <h3 style={{ color: '#5b9bf5' }} className="text-sm font-semibold mb-2 flex items-center gap-2">
+                  <Shield size={14} />Como dar acesso a um colaborador
+                </h3>
+                <ol style={{ color: '#c3c2b7' }} className="text-xs space-y-1.5 list-decimal list-inside">
+                  <li>Cadastre o nome, e-mail e perfil dele aqui em "Adicionar usuário"</li>
+                  <li>Acesse o Supabase e crie o login (e-mail + senha) com o <strong>mesmo e-mail</strong> cadastrado aqui</li>
+                  <li>Informe o e-mail e a senha criada ao colaborador</li>
+                  <li>O colaborador poderá depois trocar a própria senha pela tela "Esqueci minha senha" — ele não pode alterar o e-mail/usuário</li>
+                </ol>
+                <a href={SUPABASE_AUTH_URL} target="_blank" rel="noopener noreferrer"
+                  style={{ color: '#5b9bf5' }} className="text-xs font-medium flex items-center gap-1.5 mt-3 hover:underline">
+                  <ExternalLink size={12} />Abrir Supabase → Authentication → Add User
+                </a>
+              </div>
+
               <div className="card mb-5">
                 <h3 style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-3">Perfis disponíveis</h3>
-                <div className="grid grid-cols-5 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                   {perfis.map(p => (
                     <div key={p.value} style={{ background: '#0d1117', border: '0.5px solid #2a2f3a' }} className="text-center p-3 rounded-lg">
                       <span className={`badge ${p.cor} text-xs`}>{p.label}</span>
@@ -350,7 +431,7 @@ export default function ConfiguracoesPage() {
 
               <div className="card mb-5">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 style={{ color: '#f4f4f3' }} className="text-sm font-semibold">Usuários do sistema ({usuarios.length})</h3>
+                  <h3 style={{ color: '#f4f4f3' }} className="text-sm font-semibold">Usuários com acesso confirmado ({usuarios.length})</h3>
                   <button className="btn btn-primary btn-sm" onClick={() => setShowConvite(!showConvite)}>
                     <UserPlus size={13} />Adicionar usuário
                   </button>
@@ -358,8 +439,8 @@ export default function ConfiguracoesPage() {
 
                 {showConvite && (
                   <form onSubmit={enviarConvite} style={{ background: '#16243a', border: '0.5px solid #1e3a5f' }} className="rounded-lg p-4 mb-4">
-                    <h4 style={{ color: '#5b9bf5' }} className="text-xs font-semibold mb-3">Novo usuário</h4>
-                    <div className="grid grid-cols-3 gap-3">
+                    <h4 style={{ color: '#5b9bf5' }} className="text-xs font-semibold mb-3">Cadastrar novo usuário</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div><label className="label">Nome completo *</label>
                         <input className="input" required value={conviteForm.nome} onChange={e => setConviteForm(f=>({...f,nome:e.target.value}))} placeholder="Nome do usuário" /></div>
                       <div><label className="label">E-mail *</label>
@@ -368,9 +449,6 @@ export default function ConfiguracoesPage() {
                         <select className="input" value={conviteForm.perfil} onChange={e => setConviteForm(f=>({...f,perfil:e.target.value}))}>
                           {perfis.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
                         </select></div>
-                    </div>
-                    <div style={{ background: '#0d1117', border: '0.5px solid #1e3a5f', color: '#7daee8' }} className="rounded p-3 mt-3 text-xs">
-                      <strong>Como funciona:</strong> Cadastre o usuário aqui, depois acesse o Supabase → Authentication → Add User e crie o login com o mesmo e-mail. O sistema vinculará automaticamente ao perfil definido.
                     </div>
                     <div className="flex gap-2 mt-3">
                       <button type="submit" disabled={enviandoConvite} className="btn btn-primary btn-sm">
@@ -382,13 +460,13 @@ export default function ConfiguracoesPage() {
                 )}
 
                 {usuarios.length === 0 ? (
-                  <div style={{ color: '#8b8d98' }} className="text-center py-8 text-sm">Nenhum usuário cadastrado além do admin</div>
+                  <div style={{ color: '#8b8d98' }} className="text-center py-8 text-sm">Nenhum usuário com login confirmado ainda</div>
                 ) : (
                   <table className="w-full text-sm">
                     <thead>
                       <tr style={{ borderBottom: '0.5px solid #2a2f3a' }}>
                         {['Nome','E-mail','Perfil','Status',''].map(h => (
-                          <th key={h} style={{ color: '#8b8d98' }} className="text-left px-4 py-2 text-xs font-medium">{h}</th>
+                          <th key={h} style={{ color: '#8b8d98' }} className="text-left px-4 py-2 text-xs font-medium whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
                     </thead>
@@ -397,10 +475,10 @@ export default function ConfiguracoesPage() {
                         <tr key={u.id} style={{ borderBottom: '0.5px solid #1c2128' }} className="hover:bg-[#161b22]">
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
-                              <div style={{ background: '#16243a', color: '#5b9bf5' }} className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium">
+                              <div style={{ background: '#16243a', color: '#5b9bf5' }} className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0">
                                 {u.nome?.slice(0,2).toUpperCase()}
                               </div>
-                              <span style={{ color: '#f4f4f3' }} className="font-medium">{u.nome}</span>
+                              <span style={{ color: '#f4f4f3' }} className="font-medium whitespace-nowrap">{u.nome}</span>
                             </div>
                           </td>
                           <td style={{ color: '#8b8d98' }} className="px-4 py-3">{u.email}</td>
@@ -416,15 +494,20 @@ export default function ConfiguracoesPage() {
                             )}
                           </td>
                           <td className="px-4 py-3">
-                            <span className={`badge ${u.ativo?'badge-green':'badge-gray'}`}>{u.ativo?'Ativo':'Inativo'}</span>
+                            <span style={u.ativo ? { color: '#3fb950' } : { color: '#8b8d98' }} className="flex items-center gap-1 text-xs font-medium whitespace-nowrap">
+                              <CheckCircle2 size={12} />{u.ativo ? 'Ativo' : 'Inativo'}
+                            </span>
                           </td>
                           <td className="px-4 py-3">
-                            <div className="flex gap-2">
+                            <div className="flex gap-2 flex-wrap">
                               <button className="btn btn-sm text-xs" onClick={() => setEditandoUsuario(editandoUsuario===u.id?null:u.id)}>
                                 <Edit2 size={11} />Perfil
                               </button>
                               <button className="btn btn-sm text-xs" onClick={() => toggleAtivo(u)}>
                                 {u.ativo ? 'Desativar' : 'Ativar'}
+                              </button>
+                              <button className="btn btn-sm text-xs" style={{ color: '#ef4444' }} onClick={() => excluirUsuario(u)}>
+                                <Trash2 size={11} />
                               </button>
                             </div>
                           </td>
@@ -437,19 +520,35 @@ export default function ConfiguracoesPage() {
 
               {convites.filter(c => !c.usado).length > 0 && (
                 <div className="card">
-                  <h3 style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-3">Cadastros pendentes de acesso</h3>
-                  <div className="space-y-2">
+                  <h3 style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-1">Cadastrados aqui, aguardando login no Supabase ({convites.filter(c => !c.usado).length})</h3>
+                  <p style={{ color: '#8b8d98' }} className="text-xs mb-3">Esses usuários já têm perfil definido, mas ainda não têm e-mail/senha criados no Supabase Auth.</p>
+                  <div className="space-y-1">
                     {convites.filter(c => !c.usado).map(c => (
-                      <div key={c.id} style={{ borderBottom: '0.5px solid #1c2128' }} className="flex items-center justify-between py-2 last:border-0">
-                        <div>
-                          <div style={{ color: '#f4f4f3' }} className="text-sm font-medium">{c.nome || c.email}</div>
-                          <div style={{ color: '#8b8d98' }} className="text-xs">{c.email}</div>
+                      <div key={c.id} style={{ borderBottom: '0.5px solid #1c2128' }} className="py-2 last:border-0">
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Clock size={13} style={{ color: '#f59e0b' }} className="flex-shrink-0" />
+                            <div className="min-w-0">
+                              <div style={{ color: '#f4f4f3' }} className="text-sm font-medium truncate">{c.nome || c.email}</div>
+                              <div style={{ color: '#8b8d98' }} className="text-xs truncate">{c.email}</div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <span className={`badge ${perfilInfo(c.perfil)?.cor||'badge-gray'}`}>{perfilInfo(c.perfil)?.label||c.perfil}</span>
+                            <button className="btn btn-sm text-xs" onClick={() => setEditandoConvite(editandoConvite === c.id ? null : c.id)}>
+                              <Edit2 size={11} />
+                            </button>
+                            <button className="btn btn-sm text-xs" style={{ color: '#ef4444' }} onClick={() => excluirConvite(c.id, c.nome || c.email)}>
+                              <Trash2 size={11} />
+                            </button>
+                          </div>
                         </div>
-                        <span className={`badge ${perfilInfo(c.perfil)?.cor||'badge-gray'}`}>{perfilInfo(c.perfil)?.label||c.perfil}</span>
+                        {editandoConvite === c.id && (
+                          <FormEditarConvite convite={c} onSalvar={editarConvite} onCancelar={() => setEditandoConvite(null)} />
+                        )}
                       </div>
                     ))}
                   </div>
-                  <p style={{ color: '#5b5e6b' }} className="text-xs mt-3">Para ativar o acesso: Supabase → Authentication → Add User com o mesmo e-mail.</p>
                 </div>
               )}
             </div>
