@@ -19,6 +19,7 @@ const navItems = [
   { href: '/reajuste', label: 'Reajuste', icon: TrendingUp },
   { href: '/rescisao', label: 'Calc. rescisão', icon: Calculator },
   { section: 'Partes' },
+  { href: '/analise-cadastral', label: 'Análise cadastral', icon: ClipboardCheck },
   { href: '/clientes', label: 'Clientes', icon: Users },
   { href: '/portal-locatario', label: 'Portal locatário', icon: UserCircle },
   { href: '/portal-locador', label: 'Portal locador', icon: BuildingIcon },
