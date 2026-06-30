@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import AppLayout from '@/components/layout/AppLayout'
 import { supabase } from '@/lib/supabase'
-import { Building2, Plus, Search, X, UserPlus } from 'lucide-react'
+import { Building2, Plus, Search, X, UserPlus, Edit2, Trash2 } from 'lucide-react'
 
 const ORG_ID = '00000000-0000-0000-0000-000000000001'
 
@@ -12,19 +12,30 @@ type Imovel = {
   titulo: string
   tipo?: string
   finalidade?: string
+  proprietario_id?: string
   endereco?: string
+  numero?: string
+  complemento?: string
   bairro?: string
   cidade?: string
   estado?: string
+  cep?: string
   area_total?: number
+  area_util?: number
   quartos?: number
+  suites?: number
   banheiros?: number
   vagas?: number
+  andar?: number
+  mobiliado?: boolean
+  pet?: boolean
   valor_aluguel?: number
   valor_venda?: number
   valor_condominio?: number
+  valor_iptu?: number
   status: string
   publicado_portal: boolean
+  descricao?: string
   created_at: string
 }
 
@@ -209,6 +220,7 @@ export default function ImoveisPage() {
   const [erro, setErro] = useState('')
   const [sucesso, setSucesso] = useState('')
   const [modalProprietario, setModalProprietario] = useState(false)
+  const [editandoId, setEditandoId] = useState<string | null>(null)
 
   const [form, setForm] = useState({
     titulo: '', tipo: 'apartamento', finalidade: 'aluguel',
@@ -250,6 +262,49 @@ export default function ImoveisPage() {
     setModalProprietario(false)
   }
 
+  function abrirEdicao(i: Imovel) {
+    setEditandoId(i.id)
+    setForm({
+      titulo: i.titulo || '', tipo: i.tipo || 'apartamento', finalidade: i.finalidade || 'aluguel',
+      proprietario_id: i.proprietario_id || '',
+      endereco: i.endereco || '', numero: i.numero || '', complemento: i.complemento || '',
+      bairro: i.bairro || '', cidade: i.cidade || '', estado: i.estado || '', cep: i.cep || '',
+      area_total: i.area_total?.toString() || '', area_util: i.area_util?.toString() || '',
+      quartos: i.quartos?.toString() || '0', suites: i.suites?.toString() || '0',
+      banheiros: i.banheiros?.toString() || '0', vagas: i.vagas?.toString() || '0',
+      andar: i.andar?.toString() || '', mobiliado: !!i.mobiliado, pet: !!i.pet,
+      valor_aluguel: i.valor_aluguel?.toString() || '', valor_venda: i.valor_venda?.toString() || '',
+      valor_condominio: i.valor_condominio?.toString() || '', valor_iptu: i.valor_iptu?.toString() || '',
+      status: i.status || 'disponivel', publicado_portal: !!i.publicado_portal, descricao: i.descricao || '',
+    })
+    setErro('')
+    setShowForm(true)
+  }
+
+  function fecharForm() {
+    setShowForm(false)
+    setEditandoId(null)
+    setErro('')
+    setForm({
+      titulo: '', tipo: 'apartamento', finalidade: 'aluguel',
+      proprietario_id: '',
+      endereco: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '', cep: '',
+      area_total: '', area_util: '', quartos: '0', suites: '0', banheiros: '0', vagas: '0',
+      andar: '', mobiliado: false, pet: false,
+      valor_aluguel: '', valor_venda: '', valor_condominio: '', valor_iptu: '',
+      status: 'disponivel', publicado_portal: false, descricao: '',
+    })
+  }
+
+  async function excluirImovel(id: string, titulo: string) {
+    if (!confirm(`Excluir o imóvel "${titulo}"? Esta ação não pode ser desfeita.`)) return
+    const { error } = await supabase.from('imoveis').delete().eq('id', id)
+    if (error) { alert('Erro ao excluir: ' + error.message); return }
+    setSucesso('Imóvel excluído.')
+    buscarImoveis()
+    setTimeout(() => setSucesso(''), 3000)
+  }
+
   async function salvarImovel(e: React.FormEvent) {
     e.preventDefault()
     setSalvando(true)
@@ -283,16 +338,18 @@ export default function ImoveisPage() {
       status: form.status,
       publicado_portal: form.publicado_portal,
       descricao: form.descricao,
-      fotos: [],
+      ...(editandoId ? {} : { fotos: [] }),
     }
 
-    const { error } = await supabase.from('imoveis').insert([payload])
+    const { error } = editandoId
+      ? await supabase.from('imoveis').update(payload).eq('id', editandoId)
+      : await supabase.from('imoveis').insert([payload])
 
     if (error) {
       setErro('Erro ao salvar: ' + error.message)
     } else {
-      setSucesso('Imóvel cadastrado com sucesso!')
-      setShowForm(false)
+      setSucesso(editandoId ? 'Imóvel atualizado com sucesso!' : 'Imóvel cadastrado com sucesso!')
+      fecharForm()
       buscarImoveis()
       setTimeout(() => setSucesso(''), 3000)
     }
@@ -318,7 +375,7 @@ export default function ImoveisPage() {
 
           <div className="flex items-center justify-between mb-5">
             <h1 style={{ color: '#f4f4f3' }} className="text-lg font-medium">Imóveis</h1>
-            <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
+            <button className="btn btn-primary" onClick={() => showForm ? fecharForm() : setShowForm(true)}>
               {showForm ? <X size={14} /> : <Plus size={14} />}
               {showForm ? 'Cancelar' : 'Cadastrar imóvel'}
             </button>
@@ -332,7 +389,7 @@ export default function ImoveisPage() {
 
           {showForm && (
             <div className="card mb-6">
-              <h2 style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-4">Cadastrar novo imóvel</h2>
+              <h2 style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-4">{editandoId ? 'Editar imóvel' : 'Cadastrar novo imóvel'}</h2>
               <form onSubmit={salvarImovel}>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="sm:col-span-2">
@@ -483,9 +540,9 @@ export default function ImoveisPage() {
                 {erro && <div style={{ background: '#2e1717', border: '0.5px solid #4a2424', color: '#ef4444' }} className="text-sm px-3 py-2 rounded-lg mt-3">{erro}</div>}
                 <div className="flex gap-2 mt-4">
                   <button type="submit" disabled={salvando} className="btn btn-primary">
-                    {salvando ? 'Salvando...' : 'Salvar imóvel'}
+                    {salvando ? 'Salvando...' : editandoId ? 'Salvar alterações' : 'Salvar imóvel'}
                   </button>
-                  <button type="button" className="btn" onClick={() => setShowForm(false)}>Cancelar</button>
+                  <button type="button" className="btn" onClick={fecharForm}>Cancelar</button>
                 </div>
               </form>
 
@@ -556,7 +613,16 @@ export default function ImoveisPage() {
                       </td>
                       <td className="px-4 py-3"><span className={statusBadge[i.status] || 'badge badge-gray'}>{statusLabel[i.status] || i.status}</span></td>
                       <td className="px-4 py-3"><span className={`badge ${i.publicado_portal ? 'badge-green' : 'badge-gray'}`}>{i.publicado_portal ? 'Publicado' : 'Rascunho'}</span></td>
-                      <td className="px-4 py-3"><button className="btn text-xs py-1 px-2.5">Ver</button></td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-1.5">
+                          <button className="btn btn-sm" onClick={() => abrirEdicao(i)}>
+                            <Edit2 size={12} />Editar
+                          </button>
+                          <button className="btn btn-sm" style={{ color: '#ef4444' }} onClick={() => excluirImovel(i.id, i.titulo)}>
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
