@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import AppLayout from '@/components/layout/AppLayout'
 import { supabase } from '@/lib/supabase'
-import { Plus, ClipboardList, ArrowDownToLine, ArrowUpFromLine, FileText } from 'lucide-react'
+import { Plus, ClipboardList, ArrowDownToLine, ArrowUpFromLine, FileText, Edit2, Trash2 } from 'lucide-react'
 
 type Vistoria = {
   id: string
@@ -20,6 +20,7 @@ export default function VistoriasPage() {
   const [vistorias, setVistorias] = useState<Vistoria[]>([])
   const [filtro, setFiltro] = useState<'todos' | 'entrada' | 'saida'>('todos')
   const [loading, setLoading] = useState(true)
+  const [excluindo, setExcluindo] = useState<string | null>(null)
 
   useEffect(() => { carregar() }, [])
 
@@ -31,6 +32,14 @@ export default function VistoriasPage() {
       .order('data_vistoria', { ascending: false })
     if (data) setVistorias(data)
     setLoading(false)
+  }
+
+  async function excluir(id: string) {
+    if (!confirm('Excluir esta vistoria? Esta ação não pode ser desfeita.')) return
+    setExcluindo(id)
+    await supabase.from('vistorias').delete().eq('id', id)
+    setExcluindo(null)
+    carregar()
   }
 
   const filtradas = vistorias.filter(v => filtro === 'todos' || v.tipo === filtro)
@@ -101,9 +110,18 @@ export default function VistoriasPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <Link href={`/vistorias/${v.id}`} className="btn btn-sm">
-                          <FileText size={12} />Abrir
-                        </Link>
+                        <div className="flex gap-1.5">
+                          <Link href={`/vistorias/${v.id}`} className="btn btn-sm">
+                            <FileText size={12} />Abrir
+                          </Link>
+                          <Link href={`/vistorias/nova?id=${v.id}`} className="btn btn-sm">
+                            <Edit2 size={12} />
+                          </Link>
+                          <button onClick={() => excluir(v.id)} disabled={excluindo === v.id}
+                            className="btn btn-sm" style={{ color: '#ef4444' }}>
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}

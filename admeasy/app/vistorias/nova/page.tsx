@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import AppLayout from '@/components/layout/AppLayout'
 import { supabase } from '@/lib/supabase'
 import { Save, Plus, X, Camera, ChevronDown, ChevronUp } from 'lucide-react'
@@ -34,6 +34,10 @@ type Vistoriador = { id: string; nome: string }
 
 export default function NovaVistoriaPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const editId = searchParams.get('id')
+  const [carregandoEdicao, setCarregandoEdicao] = useState(!!editId)
+
   const [imoveis, setImoveis] = useState<Imovel[]>([])
   const [vistoriadores, setVistoriadores] = useState<Vistoriador[]>([])
   const [salvando, setSalvando] = useState(false)
@@ -55,6 +59,10 @@ export default function NovaVistoriaPage() {
 
   useEffect(() => { carregarDados() }, [])
 
+  useEffect(() => {
+    if (editId) carregarVistoriaParaEdicao(editId)
+  }, [editId])
+
   async function carregarDados() {
     const { data: imv } = await supabase.from('imoveis').select('id, endereco, numero, bairro, cidade, estado').eq('organization_id', ORG_ID).order('endereco')
     if (imv) setImoveis(imv)
@@ -62,9 +70,34 @@ export default function NovaVistoriaPage() {
     if (vist) setVistoriadores(vist)
   }
 
+  async function carregarVistoriaParaEdicao(id: string) {
+    const { data } = await supabase.from('vistorias').select('*').eq('id', id).single()
+    if (data) {
+      setImovelId(data.imovel_id || '')
+      setVistoriadorId(data.vistoriador_id || '')
+      setTipo(data.tipo || 'entrada')
+      setData(data.data_vistoria || new Date().toISOString().split('T')[0])
+      setObsGerais(data.observacoes_gerais || '')
+      setLocadores(data.locadores?.length ? data.locadores : [''])
+      setLocatarios(data.locatarios?.length ? data.locatarios : [''])
+      setTestemunha1Nome(data.testemunha1_nome || '')
+      setTestemunha1Cpf(data.testemunha1_cpf || '')
+      setTestemunha2Nome(data.testemunha2_nome || '')
+      setTestemunha2Cpf(data.testemunha2_cpf || '')
+      setAmbientes((data.ambientes || []).map((a: any) => ({
+        nome: a.nome,
+        estado: a.estado || '',
+        observacao: a.observacao || '',
+        fotos: (a.fotos || []).map((url: string) => ({ url })),
+        aberto: false,
+      })))
+    }
+    setCarregandoEdicao(false)
+  }
+
   async function aoSelecionarImovel(id: string) {
     setImovelId(id)
-    if (!id) return
+    if (!id || editId) return
     const { data: contrato } = await supabase
       .from('contratos')
       .select('locador_id, locatario_id, locador:clientes!locador_id(nome), locatario:clientes!locatario_id(nome)')
@@ -152,20 +185,37 @@ export default function NovaVistoriaPage() {
       testemunha2_cpf: testemunha2Cpf,
     }
 
-    const { data: saved, error } = await supabase.from('vistorias').insert([payload]).select().single()
-    setSalvando(false)
-    if (error) { alert('Erro: ' + error.message); return }
-    router.push(`/vistorias/${saved.id}`)
+    if (editId) {
+      const { error } = await supabase.from('vistorias').update(payload).eq('id', editId)
+      setSalvando(false)
+      if (error) { alert('Erro: ' + error.message); return }
+      router.push(`/vistorias/${editId}`)
+    } else {
+      const { data: saved, error } = await supabase.from('vistorias').insert([payload]).select().single()
+      setSalvando(false)
+      if (error) { alert('Erro: ' + error.message); return }
+      router.push(`/vistorias/${saved.id}`)
+    }
   }
 
   const estadoCor = (e: string) => e === 'bom' ? { background: '#3fb950', color: '#fff' } : e === 'regular' ? { background: '#f59e0b', color: '#fff' } : e === 'ruim' ? { background: '#ef4444', color: '#fff' } : { background: '#1f2430', color: '#8b8d98' }
+
+  if (carregandoEdicao) {
+    return (
+      <AppLayout>
+        <div style={{ background: '#0d1117', minHeight: '100vh', color: '#8b8d98' }} className="flex-1 p-6">
+          Carregando vistoria...
+        </div>
+      </AppLayout>
+    )
+  }
 
   return (
     <AppLayout>
       <div style={{ background: '#0d1117', minHeight: '100vh' }} className="flex-1 overflow-y-auto p-6">
         <div className="max-w-3xl mx-auto space-y-5">
 
-          <h1 style={{ color: '#f4f4f3' }} className="text-lg font-medium">Nova Vistoria</h1>
+          <h1 style={{ color: '#f4f4f3' }} className="text-lg font-medium">{editId ? 'Editar Vistoria' : 'Nova Vistoria'}</h1>
 
           <div className="card">
             <h3 style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-4">Dados gerais</h3>
@@ -377,7 +427,7 @@ export default function NovaVistoriaPage() {
             </button>
             <button type="button" disabled={salvando} onClick={() => salvar('concluida')}
               className="btn btn-primary">
-              <Save size={14} />{salvando ? 'Salvando...' : 'Concluir vistoria'}
+              <Save size={14} />{salvando ? 'Salvando...' : editId ? 'Salvar alterações' : 'Concluir vistoria'}
             </button>
           </div>
         </div>
