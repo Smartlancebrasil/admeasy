@@ -1,14 +1,14 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
 import AppLayout from '@/components/layout/AppLayout'
-import Topbar from '@/components/layout/Topbar'
 import { supabase } from '@/lib/supabase'
 import {
-  Building2, FileText, Users, TrendingUp, AlertTriangle, CheckCircle2,
-  Wallet, ArrowUpRight, ArrowDownRight, CalendarClock, Scale, Percent, BarChart3
+  Building2, FileText, TrendingUp, AlertTriangle, Wallet,
+  CalendarClock, Scale, Percent
 } from 'lucide-react'
+import Chart from 'chart.js/auto'
 
 const ORG_ID = '00000000-0000-0000-0000-000000000001'
 
@@ -17,7 +17,6 @@ function formatValCompact(val: number) {
   if (Math.abs(val) >= 1000) return `R$ ${(val / 1000).toFixed(1)}k`
   return formatVal(val)
 }
-function formatDate(d: string) { return new Intl.DateTimeFormat('pt-BR').format(new Date(d + 'T00:00:00')) }
 function diasEntre(data: string) {
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0)
   const d = new Date(data + 'T00:00:00')
@@ -29,7 +28,7 @@ function getNome(val: any) {
   return val.nome || val.titulo || '—'
 }
 function mesLabel(mesStr: string) {
-  const [ano, mes] = mesStr.split('-')
+  const [, mes] = mesStr.split('-')
   const nomes = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
   return nomes[parseInt(mes) - 1]
 }
@@ -40,18 +39,17 @@ export default function DashboardPage() {
   const [totalImoveis, setTotalImoveis] = useState(0)
   const [imoveisAlugados, setImoveisAlugados] = useState(0)
   const [imoveisDisponiveis, setImoveisDisponiveis] = useState(0)
-  const [totalClientes, setTotalClientes] = useState(0)
+  const [imoveisAnalise, setImoveisAnalise] = useState(0)
   const [contratosAtivos, setContratosAtivos] = useState(0)
 
   const [cobrancasPagas, setCobrancasPagas] = useState<any[]>([])
-  const [cobrancasPendentes, setCobrancasPendentes] = useState<any[]>([])
   const [cobrancasAtrasadas, setCobrancasAtrasadas] = useState<any[]>([])
   const [cobrancasProximas, setCobrancasProximas] = useState<any[]>([])
+  const [cobrancasPendentesTotal, setCobrancasPendentesTotal] = useState(0)
 
   const [taxaAdmTotal, setTaxaAdmTotal] = useState(0)
   const [taxaAdmTicketMedio, setTaxaAdmTicketMedio] = useState(0)
   const [fluxoCaixa, setFluxoCaixa] = useState({ entradas: 0, saidas: 0, saldo: 0 })
-  const [ticketMedio, setTicketMedio] = useState(0)
   const [taxaInadimplencia, setTaxaInadimplencia] = useState(0)
 
   const [contratosVencidos, setContratosVencidos] = useState<any[]>([])
@@ -62,22 +60,68 @@ export default function DashboardPage() {
 
   const [evolucaoCarteira, setEvolucaoCarteira] = useState<{ mes: string; imoveis: number; receita: number }[]>([])
 
+  const evoChartRef = useRef<HTMLCanvasElement>(null)
+  const statusChartRef = useRef<HTMLCanvasElement>(null)
+  const chartInstances = useRef<Chart[]>([])
+
   useEffect(() => { carregarTudo() }, [])
+
+  useEffect(() => {
+    if (loading) return
+    chartInstances.current.forEach(c => c.destroy())
+    chartInstances.current = []
+
+    if (evoChartRef.current) {
+      const c = new Chart(evoChartRef.current, {
+        type: 'line',
+        data: {
+          labels: evolucaoCarteira.map(m => mesLabel(m.mes)),
+          datasets: [
+            { label: 'Receita', data: evolucaoCarteira.map(m => m.receita), borderColor: '#2a78d6', backgroundColor: 'rgba(42,120,214,0.1)', fill: true, tension: 0.35, pointRadius: 0, borderWidth: 2 },
+            { label: 'Contratos', data: evolucaoCarteira.map(m => m.imoveis), borderColor: '#1baf7a', backgroundColor: 'rgba(27,175,122,0.08)', fill: true, tension: 0.35, pointRadius: 0, borderWidth: 2, yAxisID: 'y1' },
+          ],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          interaction: { intersect: false, mode: 'index' },
+          plugins: { legend: { display: false }, tooltip: { backgroundColor: '#1f2430', titleColor: '#fff', bodyColor: '#c3c2b7' } },
+          scales: {
+            x: { grid: { display: false }, ticks: { color: '#8b8d98', font: { size: 10 } } },
+            y: { display: false },
+            y1: { display: false, position: 'right' },
+          },
+        },
+      })
+      chartInstances.current.push(c)
+    }
+
+    if (statusChartRef.current) {
+      const c = new Chart(statusChartRef.current, {
+        type: 'doughnut',
+        data: {
+          labels: ['Alugados', 'Disponíveis', 'Em análise'],
+          datasets: [{ data: [imoveisAlugados, imoveisDisponiveis, imoveisAnalise], backgroundColor: ['#2a78d6', '#1baf7a', '#eda100'], borderColor: '#161b22', borderWidth: 3 }],
+        },
+        options: { responsive: true, maintainAspectRatio: false, cutout: '68%', plugins: { legend: { display: false } } },
+      })
+      chartInstances.current.push(c)
+    }
+
+    return () => { chartInstances.current.forEach(c => c.destroy()) }
+  }, [loading, evolucaoCarteira, imoveisAlugados, imoveisDisponiveis, imoveisAnalise])
 
   async function carregarTudo() {
     setLoading(true)
     const hoje = new Date()
     const mesAtual = hoje.toISOString().slice(0, 7)
 
-    const { data: imoveis } = await supabase.from('imoveis').select('id, status, created_at').eq('organization_id', ORG_ID)
+    const { data: imoveis } = await supabase.from('imoveis').select('id, status').eq('organization_id', ORG_ID)
     if (imoveis) {
       setTotalImoveis(imoveis.length)
       setImoveisAlugados(imoveis.filter(i => i.status === 'alugado').length)
       setImoveisDisponiveis(imoveis.filter(i => i.status === 'disponivel').length)
+      setImoveisAnalise(imoveis.filter(i => i.status === 'em_analise').length)
     }
-
-    const { count: clientesCount } = await supabase.from('clientes').select('id', { count: 'exact', head: true }).eq('organization_id', ORG_ID)
-    setTotalClientes(clientesCount || 0)
 
     const { data: contratos } = await supabase
       .from('contratos')
@@ -87,9 +131,6 @@ export default function DashboardPage() {
     if (contratos) {
       const ativos = contratos.filter(c => c.status === 'ativo')
       setContratosAtivos(ativos.length)
-
-      const somaValores = ativos.reduce((acc, c) => acc + (c.valor_atual || c.valor_mensal || 0), 0)
-      setTicketMedio(ativos.length > 0 ? somaValores / ativos.length : 0)
 
       const somaTaxas = ativos.reduce((acc, c) => {
         const valor = c.valor_atual || c.valor_mensal || 0
@@ -107,7 +148,6 @@ export default function DashboardPage() {
       }).sort((a, b) => diasEntre(a.data_fim) - diasEntre(b.data_fim))
       setContratosAVencer(aVencer)
 
-      // Evolução da carteira — últimos 6 meses
       const meses: { mes: string; imoveis: number; receita: number }[] = []
       for (let i = 5; i >= 0; i--) {
         const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1)
@@ -138,14 +178,13 @@ export default function DashboardPage() {
       }).sort((a, b) => diasEntre(a.data_vencimento) - diasEntre(b.data_vencimento))
 
       setCobrancasPagas(pagas)
-      setCobrancasPendentes(pendentes.filter(c => diasEntre(c.data_vencimento) >= 0))
       setCobrancasAtrasadas(atrasadas)
       setCobrancasProximas(proximas)
+      setCobrancasPendentesTotal(pendentes.length)
 
       const somaTaxas = cobrancas.reduce((acc, c) => acc + (c.valor_taxa_adm || 0), 0)
       setTaxaAdmTotal(somaTaxas)
 
-      // Taxa de inadimplência = atrasadas / total cobranças do mês
       const totalCobrancas = cobrancas.length
       setTaxaInadimplencia(totalCobrancas > 0 ? (atrasadas.length / totalCobrancas) * 100 : 0)
     }
@@ -158,7 +197,6 @@ export default function DashboardPage() {
       setFluxoCaixa({ entradas, saidas, saldo: entradas - saidas })
     }
 
-    // Processos judiciais
     const { data: processos } = await supabase.from('processos_judiciais').select('status, valor_causa').eq('organization_id', ORG_ID)
     if (processos) {
       const ativos = processos.filter(p => p.status === 'em_andamento' || p.status === 'suspenso')
@@ -169,211 +207,160 @@ export default function DashboardPage() {
     setLoading(false)
   }
 
-  if (loading) return <AppLayout><Topbar titulo="Dashboard" /><div className="p-6 text-gray-400">Carregando...</div></AppLayout>
-
-  const maxReceita = Math.max(...evolucaoCarteira.map(m => m.receita), 1)
-  const maxImoveis = Math.max(...evolucaoCarteira.map(m => m.imoveis), 1)
+  if (loading) {
+    return (
+      <AppLayout>
+        <div className="flex-1 flex items-center justify-center" style={{ background: '#0d1117', minHeight: '100vh' }}>
+          <span className="text-gray-400 text-sm">Carregando dashboard...</span>
+        </div>
+      </AppLayout>
+    )
+  }
 
   return (
     <AppLayout>
-      <Topbar titulo="Dashboard" />
-      <div className="flex-1 overflow-y-auto p-6 space-y-5">
+      <div style={{ background: '#0d1117', minHeight: '100vh' }} className="flex-1 overflow-y-auto p-6">
+        <div className="max-w-6xl mx-auto">
 
-        {/* Alertas críticos */}
-        {(cobrancasAtrasadas.length > 0 || contratosVencidos.length > 0 || processosAtivos > 0) && (
-          <div className="grid grid-cols-3 gap-4">
-            {cobrancasAtrasadas.length > 0 && (
-              <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-                <div className="flex items-center gap-2 mb-2"><AlertTriangle size={14} className="text-red-600" /><span className="text-sm font-semibold text-red-800">{cobrancasAtrasadas.length} em atraso</span></div>
-                {cobrancasAtrasadas.slice(0, 2).map((c, i) => (
-                  <div key={i} className="text-xs text-red-600 py-0.5">{getNome(c.contrato?.locatario)} — {formatVal(c.valor_aluguel)}</div>
-                ))}
-              </div>
-            )}
-            {contratosVencidos.length > 0 && (
-              <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-                <div className="flex items-center gap-2 mb-2"><CalendarClock size={14} className="text-red-600" /><span className="text-sm font-semibold text-red-800">{contratosVencidos.length} contrato(s) vencido(s)</span></div>
-                {contratosVencidos.slice(0, 2).map((c, i) => (
-                  <div key={i} className="text-xs text-red-600 py-0.5">#{c.numero} — {getNome(c.imovel)}</div>
-                ))}
-              </div>
-            )}
-            {processosAtivos > 0 && (
-              <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
-                <div className="flex items-center gap-2 mb-2"><Scale size={14} className="text-orange-600" /><span className="text-sm font-semibold text-orange-800">{processosAtivos} processo(s) ativo(s)</span></div>
-                <div className="text-xs text-orange-600">Valor total em causa: {formatVal(processosValorTotal)}</div>
-                <Link href="/processos-judiciais" className="text-[10px] text-orange-700 hover:underline">Ver processos →</Link>
-              </div>
-            )}
-          </div>
-        )}
+          <h1 style={{ color: '#f4f4f3' }} className="text-lg font-medium mb-5">Dashboard</h1>
 
-        {/* Cards principais */}
-        <div className="grid grid-cols-4 gap-4">
-          <div className="card">
-            <div className="flex items-center gap-2 text-gray-400 text-xs mb-2"><Building2 size={13} />Imóveis</div>
-            <div className="text-2xl font-semibold">{totalImoveis}</div>
-            <div className="text-xs text-gray-400 mt-1">{imoveisAlugados} alugados · {imoveisDisponiveis} disponíveis</div>
-          </div>
-          <div className="card">
-            <div className="flex items-center gap-2 text-gray-400 text-xs mb-2"><FileText size={13} />Contratos ativos</div>
-            <div className="text-2xl font-semibold">{contratosAtivos}</div>
-            <div className="text-xs text-gray-400 mt-1">{contratosVencidos.length > 0 ? `${contratosVencidos.length} vencido(s)` : 'Todos em dia'}</div>
-          </div>
-          <div className="card">
-            <div className="flex items-center gap-2 text-gray-400 text-xs mb-2"><TrendingUp size={13} />Taxa adm. (mês)</div>
-            <div className="text-2xl font-semibold text-green-600">{formatVal(taxaAdmTotal)}</div>
-            <div className="text-xs text-gray-400 mt-1">Ticket médio: {formatVal(taxaAdmTicketMedio)}</div>
-          </div>
-          <div className="card">
-            <div className="flex items-center gap-2 text-gray-400 text-xs mb-2"><Users size={13} />Clientes</div>
-            <div className="text-2xl font-semibold">{totalClientes}</div>
-            <div className="text-xs text-gray-400 mt-1">Cadastrados no sistema</div>
-          </div>
-        </div>
-
-        {/* Linha 2: financeiro */}
-        <div className="grid grid-cols-4 gap-4">
-          <div className="card">
-            <div className="flex items-center gap-2 text-gray-400 text-xs mb-2"><Wallet size={13} />Saldo (fluxo de caixa)</div>
-            <div className={`text-xl font-semibold ${fluxoCaixa.saldo >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatVal(fluxoCaixa.saldo)}</div>
-            <div className="flex gap-3 mt-2 text-xs">
-              <span className="flex items-center gap-1 text-green-600"><ArrowUpRight size={11} />{formatValCompact(fluxoCaixa.entradas)}</span>
-              <span className="flex items-center gap-1 text-red-500"><ArrowDownRight size={11} />{formatValCompact(fluxoCaixa.saidas)}</span>
-            </div>
-          </div>
-          <div className="card">
-            <div className="flex items-center gap-2 text-gray-400 text-xs mb-2"><TrendingUp size={13} />Ticket médio aluguel</div>
-            <div className="text-xl font-semibold">{formatVal(ticketMedio)}</div>
-            <div className="text-xs text-gray-400 mt-1">Valor médio dos contratos ativos</div>
-          </div>
-          <div className="card">
-            <div className="flex items-center gap-2 text-gray-400 text-xs mb-2"><Percent size={13} />Taxa de inadimplência</div>
-            <div className={`text-xl font-semibold ${taxaInadimplencia > 10 ? 'text-red-600' : taxaInadimplencia > 0 ? 'text-yellow-600' : 'text-green-600'}`}>{taxaInadimplencia.toFixed(1)}%</div>
-            <div className="text-xs text-gray-400 mt-1">{cobrancasAtrasadas.length} de {cobrancasPagas.length + cobrancasPendentes.length + cobrancasAtrasadas.length} cobranças</div>
-          </div>
-          <div className="card">
-            <div className="flex items-center gap-2 text-gray-400 text-xs mb-2"><CheckCircle2 size={13} />Pagos este mês</div>
-            <div className="text-xl font-semibold text-green-600">{cobrancasPagas.length}</div>
-            <div className="text-xs text-gray-400 mt-1">cobranças recebidas</div>
-          </div>
-        </div>
-
-        {/* Evolução da carteira */}
-        <div className="card">
-          <h3 className="text-sm font-semibold mb-4 flex items-center gap-2"><BarChart3 size={14} className="text-blue-500" />Evolução da carteira (últimos 6 meses)</h3>
-          <div className="grid grid-cols-6 gap-3">
-            {evolucaoCarteira.map((m, i) => (
-              <div key={i} className="text-center">
-                <div className="h-24 flex items-end justify-center gap-1 mb-2">
-                  <div className="bg-blue-200 rounded-t w-4" style={{ height: `${(m.imoveis / maxImoveis) * 90 + 5}px` }} title={`${m.imoveis} contratos`} />
-                  <div className="bg-green-300 rounded-t w-4" style={{ height: `${(m.receita / maxReceita) * 90 + 5}px` }} title={formatVal(m.receita)} />
+          {/* Alertas */}
+          {(cobrancasAtrasadas.length > 0 || contratosVencidos.length > 0 || processosAtivos > 0) && (
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              {cobrancasAtrasadas.length > 0 && (
+                <div style={{ background: '#2e1717', border: '0.5px solid #4a2424' }} className="rounded-xl p-3.5">
+                  <div className="flex items-center gap-2 mb-1.5"><AlertTriangle size={13} style={{ color: '#ef4444' }} /><span style={{ color: '#fca5a5' }} className="text-xs font-medium">{cobrancasAtrasadas.length} aluguel(éis) em atraso</span></div>
+                  {cobrancasAtrasadas.slice(0, 2).map((c, i) => (
+                    <div key={i} style={{ color: '#c3c2b7' }} className="text-[11px] py-0.5">{getNome(c.contrato?.locatario)} — {formatVal(c.valor_aluguel)}</div>
+                  ))}
                 </div>
-                <div className="text-[10px] text-gray-400">{mesLabel(m.mes)}</div>
-                <div className="text-[10px] font-medium text-gray-600">{m.imoveis}</div>
-                <div className="text-[9px] text-green-600">{formatValCompact(m.receita)}</div>
-              </div>
-            ))}
-          </div>
-          <div className="flex gap-4 mt-3 text-[10px] text-gray-400">
-            <span className="flex items-center gap-1"><span className="w-2 h-2 bg-blue-200 rounded-sm inline-block" />Contratos ativos</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 bg-green-300 rounded-sm inline-block" />Receita mensal</span>
-          </div>
-        </div>
+              )}
+              {contratosVencidos.length > 0 && (
+                <div style={{ background: '#2e1717', border: '0.5px solid #4a2424' }} className="rounded-xl p-3.5">
+                  <div className="flex items-center gap-2 mb-1.5"><CalendarClock size={13} style={{ color: '#ef4444' }} /><span style={{ color: '#fca5a5' }} className="text-xs font-medium">{contratosVencidos.length} contrato(s) vencido(s)</span></div>
+                  {contratosVencidos.slice(0, 2).map((c, i) => (
+                    <div key={i} style={{ color: '#c3c2b7' }} className="text-[11px] py-0.5">#{c.numero} — {getNome(c.imovel)}</div>
+                  ))}
+                </div>
+              )}
+              {processosAtivos > 0 && (
+                <div style={{ background: '#2e2515', border: '0.5px solid #4a3a1f' }} className="rounded-xl p-3.5">
+                  <div className="flex items-center gap-2 mb-1.5"><Scale size={13} style={{ color: '#f59e0b' }} /><span style={{ color: '#fcd34d' }} className="text-xs font-medium">{processosAtivos} processo(s) ativo(s)</span></div>
+                  <div style={{ color: '#c3c2b7' }} className="text-[11px]">Valor em causa: {formatVal(processosValorTotal)}</div>
+                  <Link href="/processos-judiciais" style={{ color: '#fcd34d' }} className="text-[10px] hover:underline">Ver processos →</Link>
+                </div>
+              )}
+            </div>
+          )}
 
-        <div className="grid grid-cols-2 gap-5">
-          {/* Painel de cobranças */}
-          <div className="card">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold flex items-center gap-2"><Wallet size={14} className="text-blue-500" />Painel de cobranças</h3>
-              <Link href="/financeiro" className="text-xs text-blue-600 hover:underline">Ver financeiro →</Link>
+          {/* Cards principais */}
+          <div className="grid grid-cols-4 gap-3 mb-3">
+            <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-xl p-3.5">
+              <div style={{ color: '#8b8d98' }} className="flex items-center gap-1.5 text-[11px] mb-1.5"><Wallet size={12} />Saldo em conta</div>
+              <div style={{ color: fluxoCaixa.saldo >= 0 ? '#3fb950' : '#ef4444' }} className="text-xl font-medium">{formatVal(fluxoCaixa.saldo)}</div>
+              <div className="flex gap-2.5 mt-1.5 text-[10px]">
+                <span style={{ color: '#3fb950' }}>↑ {formatValCompact(fluxoCaixa.entradas)}</span>
+                <span style={{ color: '#ef4444' }}>↓ {formatValCompact(fluxoCaixa.saidas)}</span>
+              </div>
+            </div>
+            <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-xl p-3.5">
+              <div style={{ color: '#8b8d98' }} className="flex items-center gap-1.5 text-[11px] mb-1.5"><TrendingUp size={12} />Taxa de adm. (mês)</div>
+              <div style={{ color: '#f4f4f3' }} className="text-xl font-medium">{formatVal(taxaAdmTotal)}</div>
+              <div style={{ color: '#8b8d98' }} className="text-[10px] mt-1.5">Ticket médio: {formatVal(taxaAdmTicketMedio)}</div>
+            </div>
+            <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-xl p-3.5">
+              <div style={{ color: '#8b8d98' }} className="flex items-center gap-1.5 text-[11px] mb-1.5"><Percent size={12} />Inadimplência</div>
+              <div style={{ color: taxaInadimplencia > 10 ? '#ef4444' : taxaInadimplencia > 0 ? '#f59e0b' : '#3fb950' }} className="text-xl font-medium">{taxaInadimplencia.toFixed(1)}%</div>
+              <div style={{ color: '#8b8d98' }} className="text-[10px] mt-1.5">{cobrancasAtrasadas.length} de {cobrancasPagas.length + cobrancasPendentesTotal} cobranças</div>
+            </div>
+            <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-xl p-3.5">
+              <div style={{ color: '#8b8d98' }} className="flex items-center gap-1.5 text-[11px] mb-1.5"><FileText size={12} />Contratos ativos</div>
+              <div style={{ color: '#f4f4f3' }} className="text-xl font-medium">{contratosAtivos}</div>
+              <div style={{ color: contratosAVencer.length > 0 ? '#f59e0b' : '#8b8d98' }} className="text-[10px] mt-1.5">{contratosAVencer.length > 0 ? `${contratosAVencer.length} vencendo em 30d` : 'Todos em dia'}</div>
+            </div>
+          </div>
+
+          {/* Gráficos */}
+          <div className="grid grid-cols-[1.4fr_1fr] gap-3 mb-3">
+            <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-xl p-4">
+              <div className="flex items-center justify-between mb-2.5">
+                <p style={{ color: '#f4f4f3' }} className="text-xs font-medium">Evolução da carteira</p>
+                <span style={{ color: '#8b8d98' }} className="text-[11px]">últimos 6 meses</span>
+              </div>
+              <div style={{ position: 'relative', height: '160px' }}>
+                <canvas ref={evoChartRef} />
+              </div>
+            </div>
+            <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-xl p-4">
+              <p style={{ color: '#f4f4f3' }} className="text-xs font-medium mb-2.5">Imóveis por status</p>
+              <div style={{ position: 'relative', height: '140px' }} className="mb-2">
+                <canvas ref={statusChartRef} />
+              </div>
+              <div className="flex flex-col gap-1 text-[11px]" style={{ color: '#c3c2b7' }}>
+                <span className="flex items-center gap-1.5"><span style={{ width: 8, height: 8, borderRadius: 2, background: '#2a78d6' }} />Alugados {imoveisAlugados}</span>
+                <span className="flex items-center gap-1.5"><span style={{ width: 8, height: 8, borderRadius: 2, background: '#1baf7a' }} />Disponíveis {imoveisDisponiveis}</span>
+                <span className="flex items-center gap-1.5"><span style={{ width: 8, height: 8, borderRadius: 2, background: '#eda100' }} />Em análise {imoveisAnalise}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Painéis inferiores */}
+          <div className="grid grid-cols-2 gap-3">
+            <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-xl p-4">
+              <div className="flex items-center justify-between mb-2.5">
+                <p style={{ color: '#f4f4f3' }} className="text-xs font-medium">Cobranças do mês</p>
+                <Link href="/financeiro" style={{ color: '#3987e5' }} className="text-[11px] hover:underline">Ver financeiro →</Link>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                {cobrancasProximas.slice(0, 2).map((c, i) => (
+                  <div key={'p' + i} style={{ background: '#2e2515' }} className="flex justify-between items-center px-2.5 py-2 rounded-lg">
+                    <span style={{ color: '#c3c2b7' }} className="text-[11px]">{getNome(c.contrato?.locatario)} · #{c.contrato?.numero}</span>
+                    <span style={{ color: '#f59e0b' }} className="text-[11px] font-medium">Vence em {diasEntre(c.data_vencimento)}d</span>
+                  </div>
+                ))}
+                {cobrancasAtrasadas.slice(0, 2).map((c, i) => (
+                  <div key={'a' + i} style={{ background: '#2e1717' }} className="flex justify-between items-center px-2.5 py-2 rounded-lg">
+                    <span style={{ color: '#c3c2b7' }} className="text-[11px]">{getNome(c.contrato?.locatario)} · #{c.contrato?.numero}</span>
+                    <span style={{ color: '#ef4444' }} className="text-[11px] font-medium">{Math.abs(diasEntre(c.data_vencimento))}d atraso</span>
+                  </div>
+                ))}
+                {cobrancasPagas.slice(0, 2).map((c, i) => (
+                  <div key={'g' + i} style={{ background: '#1a2e1f' }} className="flex justify-between items-center px-2.5 py-2 rounded-lg">
+                    <span style={{ color: '#c3c2b7' }} className="text-[11px]">{getNome(c.contrato?.locatario)} · #{c.contrato?.numero}</span>
+                    <span style={{ color: '#3fb950' }} className="text-[11px] font-medium">Pago</span>
+                  </div>
+                ))}
+                {cobrancasProximas.length === 0 && cobrancasAtrasadas.length === 0 && cobrancasPagas.length === 0 && (
+                  <p style={{ color: '#8b8d98' }} className="text-[11px] text-center py-4">Nenhuma cobrança este mês</p>
+                )}
+              </div>
             </div>
 
-            {cobrancasProximas.length > 0 && (
-              <div className="mb-3">
-                <p className="text-[10px] font-medium text-yellow-600 uppercase tracking-wide mb-1.5">Vence em até 5 dias</p>
-                {cobrancasProximas.map((c, i) => (
-                  <div key={i} className="flex items-center justify-between py-1.5 border-b border-gray-50 text-xs">
-                    <div><span className="font-medium text-gray-700">{getNome(c.contrato?.locatario)}</span><span className="text-gray-400 ml-1.5">#{c.contrato?.numero}</span></div>
-                    <div className="text-right"><span className="font-medium">{formatVal(c.valor_aluguel)}</span><span className="text-yellow-600 ml-1.5">{diasEntre(c.data_vencimento)}d</span></div>
+            <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-xl p-4">
+              <div className="flex items-center justify-between mb-2.5">
+                <p style={{ color: '#f4f4f3' }} className="text-xs font-medium">Contratos vencendo</p>
+                <Link href="/contratos" style={{ color: '#3987e5' }} className="text-[11px] hover:underline">Ver todos →</Link>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                {contratosVencidos.slice(0, 2).map((c, i) => (
+                  <div key={'v' + i} style={{ background: '#2e1717' }} className="flex justify-between items-center px-2.5 py-2 rounded-lg">
+                    <span style={{ color: '#c3c2b7' }} className="text-[11px]">#{c.numero} · {getNome(c.imovel)}</span>
+                    <span style={{ color: '#ef4444' }} className="text-[11px] font-medium">vencido {Math.abs(diasEntre(c.data_fim))}d</span>
                   </div>
                 ))}
-              </div>
-            )}
-
-            {cobrancasAtrasadas.length > 0 && (
-              <div className="mb-3">
-                <p className="text-[10px] font-medium text-red-600 uppercase tracking-wide mb-1.5">Em atraso</p>
-                {cobrancasAtrasadas.slice(0, 5).map((c, i) => (
-                  <div key={i} className="flex items-center justify-between py-1.5 border-b border-gray-50 text-xs">
-                    <div><span className="font-medium text-gray-700">{getNome(c.contrato?.locatario)}</span><span className="text-gray-400 ml-1.5">#{c.contrato?.numero}</span></div>
-                    <div className="text-right"><span className="font-medium text-red-600">{formatVal(c.valor_aluguel)}</span><span className="text-red-500 ml-1.5">{Math.abs(diasEntre(c.data_vencimento))}d atraso</span></div>
+                {contratosAVencer.slice(0, 3).map((c, i) => (
+                  <div key={'av' + i} style={{ background: diasEntre(c.data_fim) <= 15 ? '#2e2515' : '#161b22', border: diasEntre(c.data_fim) <= 15 ? 'none' : '0.5px solid #2a2f3a' }} className="flex justify-between items-center px-2.5 py-2 rounded-lg">
+                    <span style={{ color: '#c3c2b7' }} className="text-[11px]">#{c.numero} · {getNome(c.imovel)}</span>
+                    <span style={{ color: diasEntre(c.data_fim) <= 15 ? '#f59e0b' : '#8b8d98' }} className="text-[11px] font-medium">{diasEntre(c.data_fim)}d restantes</span>
                   </div>
                 ))}
+                {contratosVencidos.length === 0 && contratosAVencer.length === 0 && (
+                  <p style={{ color: '#8b8d98' }} className="text-[11px] text-center py-4">Nenhum contrato vencendo nos próximos 30 dias</p>
+                )}
               </div>
-            )}
-
-            {cobrancasPagas.length > 0 && (
-              <div>
-                <p className="text-[10px] font-medium text-green-600 uppercase tracking-wide mb-1.5">Pagos este mês</p>
-                {cobrancasPagas.slice(0, 5).map((c, i) => (
-                  <div key={i} className="flex items-center justify-between py-1.5 border-b border-gray-50 text-xs">
-                    <div><span className="font-medium text-gray-700">{getNome(c.contrato?.locatario)}</span><span className="text-gray-400 ml-1.5">#{c.contrato?.numero}</span></div>
-                    <div className="text-right"><span className="font-medium text-green-600">{formatVal(c.valor_aluguel)}</span>{c.data_pagamento && <span className="text-gray-400 ml-1.5">{formatDate(c.data_pagamento)}</span>}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {cobrancasProximas.length === 0 && cobrancasAtrasadas.length === 0 && cobrancasPagas.length === 0 && (
-              <p className="text-xs text-gray-400 text-center py-6">Nenhuma cobrança este mês</p>
-            )}
-          </div>
-
-          {/* Contratos vencendo */}
-          <div className="card">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold flex items-center gap-2"><CalendarClock size={14} className="text-orange-500" />Contratos — vencimentos</h3>
-              <Link href="/contratos" className="text-xs text-blue-600 hover:underline">Ver todos →</Link>
             </div>
-
-            {contratosVencidos.length > 0 && (
-              <div className="mb-3">
-                <p className="text-[10px] font-medium text-red-600 uppercase tracking-wide mb-1.5">Vencidos</p>
-                {contratosVencidos.map((c, i) => (
-                  <div key={i} className="flex items-center justify-between py-1.5 border-b border-gray-50 text-xs">
-                    <div><span className="font-medium text-gray-700">#{c.numero}</span><span className="text-gray-400 ml-1.5">{getNome(c.imovel)}</span></div>
-                    <span className="text-red-500">venceu há {Math.abs(diasEntre(c.data_fim))}d</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {contratosAVencer.length > 0 ? (
-              <div>
-                <p className="text-[10px] font-medium text-orange-600 uppercase tracking-wide mb-1.5">A vencer (próximos 30 dias)</p>
-                {contratosAVencer.map((c, i) => (
-                  <div key={i} className="flex items-center justify-between py-1.5 border-b border-gray-50 text-xs">
-                    <div><span className="font-medium text-gray-700">#{c.numero}</span><span className="text-gray-400 ml-1.5">{getNome(c.imovel)} · {getNome(c.locatario)}</span></div>
-                    <span className={diasEntre(c.data_fim) <= 15 ? 'text-red-500 font-medium' : 'text-orange-500'}>{diasEntre(c.data_fim)}d</span>
-                  </div>
-                ))}
-              </div>
-            ) : contratosVencidos.length === 0 && (
-              <p className="text-xs text-gray-400 text-center py-6">Nenhum contrato vencendo nos próximos 30 dias</p>
-            )}
           </div>
-        </div>
 
-        {/* Imóveis por status */}
-        <div className="card">
-          <h3 className="text-sm font-semibold mb-4">Imóveis por status</h3>
-          <div className="grid grid-cols-4 gap-3">
-            <div className="bg-blue-50 rounded-lg p-3 text-center"><div className="text-xl font-semibold text-blue-700">{imoveisAlugados}</div><div className="text-xs text-blue-500 mt-0.5">Alugados</div></div>
-            <div className="bg-green-50 rounded-lg p-3 text-center"><div className="text-xl font-semibold text-green-700">{imoveisDisponiveis}</div><div className="text-xs text-green-500 mt-0.5">Disponíveis</div></div>
-            <div className="bg-yellow-50 rounded-lg p-3 text-center"><div className="text-xl font-semibold text-yellow-700">0</div><div className="text-xs text-yellow-500 mt-0.5">Em análise</div></div>
-            <div className="bg-gray-50 rounded-lg p-3 text-center"><div className="text-xl font-semibold text-gray-700">0</div><div className="text-xs text-gray-500 mt-0.5">Vendidos</div></div>
-          </div>
         </div>
       </div>
     </AppLayout>
