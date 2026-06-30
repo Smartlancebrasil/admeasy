@@ -46,6 +46,9 @@ export default function DashboardPage() {
   const [cobrancasAtrasadas, setCobrancasAtrasadas] = useState<any[]>([])
   const [cobrancasProximas, setCobrancasProximas] = useState<any[]>([])
   const [cobrancasPendentesTotal, setCobrancasPendentesTotal] = useState(0)
+  const [totalPago, setTotalPago] = useState(0)
+  const [totalAVencer, setTotalAVencer] = useState(0)
+  const [totalAtrasado, setTotalAtrasado] = useState(0)
 
   const [taxaAdmTotal, setTaxaAdmTotal] = useState(0)
   const [taxaAdmTicketMedio, setTaxaAdmTicketMedio] = useState(0)
@@ -162,11 +165,12 @@ export default function DashboardPage() {
       setEvolucaoCarteira(meses)
     }
 
+    // Busca todas as cobrancas pendentes (de qualquer mes, incluindo atrasadas antigas)
+    // e pagas/proximas relevantes
     const { data: cobrancas } = await supabase
       .from('cobrancas')
       .select('*, contrato:contratos(numero, imovel:imoveis(titulo), locatario:clientes!contratos_locatario_id_fkey(nome))')
       .eq('organization_id', ORG_ID)
-      .gte('data_vencimento', mesAtual + '-01')
 
     if (cobrancas) {
       const pagas = cobrancas.filter(c => c.status_cobranca === 'pago')
@@ -181,6 +185,10 @@ export default function DashboardPage() {
       setCobrancasAtrasadas(atrasadas)
       setCobrancasProximas(proximas)
       setCobrancasPendentesTotal(pendentes.length)
+
+      setTotalPago(pagas.reduce((acc, c) => acc + (c.valor_aluguel || 0), 0))
+      setTotalAVencer(pendentes.filter(c => diasEntre(c.data_vencimento) >= 0).reduce((acc, c) => acc + (c.valor_aluguel || 0), 0))
+      setTotalAtrasado(atrasadas.reduce((acc, c) => acc + (c.valor_aluguel || 0), 0))
 
       const somaTaxas = cobrancas.reduce((acc, c) => acc + (c.valor_taxa_adm || 0), 0)
       setTaxaAdmTotal(somaTaxas)
@@ -311,27 +319,44 @@ export default function DashboardPage() {
                 <p style={{ color: '#f4f4f3' }} className="text-xs font-medium">Cobranças do mês</p>
                 <Link href="/financeiro" style={{ color: '#3987e5' }} className="text-[11px] hover:underline">Ver financeiro →</Link>
               </div>
+
+              {/* Totais resumidos */}
+              <div className="grid grid-cols-3 gap-2 mb-3">
+                <div style={{ background: '#1a2e1f' }} className="rounded-lg p-2 text-center">
+                  <div style={{ color: '#3fb950' }} className="text-sm font-medium">{formatValCompact(totalPago)}</div>
+                  <div style={{ color: '#8b8d98' }} className="text-[10px] mt-0.5">Pago</div>
+                </div>
+                <div style={{ background: '#2e2515' }} className="rounded-lg p-2 text-center">
+                  <div style={{ color: '#f59e0b' }} className="text-sm font-medium">{formatValCompact(totalAVencer)}</div>
+                  <div style={{ color: '#8b8d98' }} className="text-[10px] mt-0.5">A vencer</div>
+                </div>
+                <div style={{ background: '#2e1717' }} className="rounded-lg p-2 text-center">
+                  <div style={{ color: '#ef4444' }} className="text-sm font-medium">{formatValCompact(totalAtrasado)}</div>
+                  <div style={{ color: '#8b8d98' }} className="text-[10px] mt-0.5">Atrasado</div>
+                </div>
+              </div>
+
               <div className="flex flex-col gap-1.5">
-                {cobrancasProximas.slice(0, 2).map((c, i) => (
-                  <div key={'p' + i} style={{ background: '#2e2515' }} className="flex justify-between items-center px-2.5 py-2 rounded-lg">
-                    <span style={{ color: '#c3c2b7' }} className="text-[11px]">{getNome(c.contrato?.locatario)} · #{c.contrato?.numero}</span>
-                    <span style={{ color: '#f59e0b' }} className="text-[11px] font-medium">Vence em {diasEntre(c.data_vencimento)}d</span>
-                  </div>
-                ))}
-                {cobrancasAtrasadas.slice(0, 2).map((c, i) => (
+                {cobrancasAtrasadas.slice(0, 3).map((c, i) => (
                   <div key={'a' + i} style={{ background: '#2e1717' }} className="flex justify-between items-center px-2.5 py-2 rounded-lg">
                     <span style={{ color: '#c3c2b7' }} className="text-[11px]">{getNome(c.contrato?.locatario)} · #{c.contrato?.numero}</span>
                     <span style={{ color: '#ef4444' }} className="text-[11px] font-medium">{Math.abs(diasEntre(c.data_vencimento))}d atraso</span>
                   </div>
                 ))}
-                {cobrancasPagas.slice(0, 2).map((c, i) => (
+                {cobrancasProximas.slice(0, 3).map((c, i) => (
+                  <div key={'p' + i} style={{ background: '#2e2515' }} className="flex justify-between items-center px-2.5 py-2 rounded-lg">
+                    <span style={{ color: '#c3c2b7' }} className="text-[11px]">{getNome(c.contrato?.locatario)} · #{c.contrato?.numero}</span>
+                    <span style={{ color: '#f59e0b' }} className="text-[11px] font-medium">Vence em {diasEntre(c.data_vencimento)}d</span>
+                  </div>
+                ))}
+                {cobrancasPagas.slice(0, 3).map((c, i) => (
                   <div key={'g' + i} style={{ background: '#1a2e1f' }} className="flex justify-between items-center px-2.5 py-2 rounded-lg">
                     <span style={{ color: '#c3c2b7' }} className="text-[11px]">{getNome(c.contrato?.locatario)} · #{c.contrato?.numero}</span>
                     <span style={{ color: '#3fb950' }} className="text-[11px] font-medium">Pago</span>
                   </div>
                 ))}
                 {cobrancasProximas.length === 0 && cobrancasAtrasadas.length === 0 && cobrancasPagas.length === 0 && (
-                  <p style={{ color: '#8b8d98' }} className="text-[11px] text-center py-4">Nenhuma cobrança este mês</p>
+                  <p style={{ color: '#8b8d98' }} className="text-[11px] text-center py-4">Nenhuma cobrança cadastrada</p>
                 )}
               </div>
             </div>
