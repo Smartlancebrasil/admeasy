@@ -4,8 +4,9 @@ import { useEffect, useState } from 'react'
 import AppLayout from '@/components/layout/AppLayout'
 import Topbar from '@/components/layout/Topbar'
 import { supabase } from '@/lib/supabase'
-import { FileText, Plus, X, AlertTriangle, Edit2 } from 'lucide-react'
+import { FileText, Plus, X, AlertTriangle, Edit2, FileDown } from 'lucide-react'
 import { registrarLog } from '@/lib/logs'
+import Link from 'next/link'
 
 type Contrato = {
   id: string
@@ -421,12 +422,14 @@ export default function ContratosPage() {
                       <td className="px-4 py-3">
                         <div className="flex gap-1.5">
                           <button className="btn btn-sm" onClick={() => abrirEdicao(c)}><Edit2 size={12} />Editar</button>
+                          <Link href={`/contratos/${c.id}/pdf`} className="btn btn-sm text-blue-600"><FileDown size={12} />PDF</Link>
                           <button className="btn btn-sm" style={{color:'var(--text-danger)'}} onClick={() => excluir(c.id, c.numero)}><X size={12} /></button>
                         </div>
                       </td>
                     </tr>
                   )
-                })}
+    
+    })}
               </tbody>
             </table>
           )}
