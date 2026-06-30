@@ -26,7 +26,6 @@ const navItems = [
   { href: '/analise-cadastral', label: 'Análise cadastral', icon: ShieldCheck },
   { href: '/clientes', label: 'Clientes', icon: Users },
   { href: '/portal-locatario', label: 'Portal locatário', icon: UserCircle },
-  { href: '/portal-locador', label: 'Portal locador', icon: BuildingIcon },
   { section: 'Operações' },
   { href: '/demandas', label: 'Demandas', icon: Wrench, badge: 4 },
   { href: '/fornecedores', label: 'Fornecedores', icon: Truck },
