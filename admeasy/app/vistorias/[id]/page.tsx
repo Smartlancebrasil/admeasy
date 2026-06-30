@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import AppLayout from '@/components/layout/AppLayout'
-import Topbar from '@/components/layout/Topbar'
 import { supabase } from '@/lib/supabase'
 import { FileDown, ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
@@ -83,7 +82,6 @@ export default function VistoriaDetalhePage() {
       if (y + needed > 275) novaPagina()
     }
 
-    // ── CABEÇALHO ──
     if (org.logo_url) {
       try { doc.addImage(org.logo_url, 'JPEG', ML, y, 28, 14) } catch {}
     }
@@ -100,7 +98,6 @@ export default function VistoriaDetalhePage() {
     doc.text(org.nome, W / 2, y + 14, { align: 'center' })
     y += 20
 
-    // ── DADOS DO IMÓVEL ──
     doc.setFillColor(230, 230, 230)
     doc.rect(ML, y, MR - ML, 6, 'F')
     doc.setFontSize(9).setFont('helvetica', 'bold').setTextColor(0)
@@ -133,7 +130,6 @@ export default function VistoriaDetalhePage() {
     }
     y += 2
 
-    // ── AMBIENTES ──
     doc.setFillColor(230, 230, 230)
     doc.rect(ML, y, MR - ML, 6, 'F')
     doc.setFontSize(9).setFont('helvetica', 'bold')
@@ -143,12 +139,10 @@ export default function VistoriaDetalhePage() {
     for (const amb of vistoria.ambientes) {
       checkY(20)
 
-      // Nome do ambiente em negrito
       doc.setFontSize(10).setFont('helvetica', 'bold')
       doc.text(amb.nome, ML, y)
       y += 5
 
-      // Observações como lista com travessão
       if (amb.observacao) {
         doc.setFontSize(9).setFont('helvetica', 'normal')
         const linhas = amb.observacao.split('\n').filter(l => l.trim())
@@ -161,7 +155,6 @@ export default function VistoriaDetalhePage() {
       }
       y += 2
 
-      // Fotos em linha
       if (amb.fotos?.length > 0) {
         const fotoW = 55
         const fotoH = 42
@@ -198,7 +191,6 @@ export default function VistoriaDetalhePage() {
       y += 5
     }
 
-    // ── ASSINATURAS ──
     checkY(80)
     y += 5
 
@@ -214,7 +206,6 @@ export default function VistoriaDetalhePage() {
       doc.text(`${label}: ${nome}`, x, yy + 4)
     }
 
-    // Vistoriador + Locador(es) em grid
     const assinaturas: { label: string; nome: string }[] = []
     assinaturas.push({ label: 'Vistoriador(a)', nome: vistoria.vistoriador?.nome || '' })
     for (const l of (vistoria.locadores || [])) assinaturas.push({ label: 'Locador(a)', nome: l })
@@ -232,17 +223,17 @@ export default function VistoriaDetalhePage() {
       y += 18
     }
 
-    // Rodapé final
     addPaginaRodape()
 
-    // Corrige "Página X de ?" — não há como saber total de páginas em jsPDF facilmente
     doc.save(`vistoria-${vistoria.tipo}-${vistoria.data_vistoria}.pdf`)
     setGerandoPdf(false)
   }
 
   if (!vistoria) return (
-    <AppLayout><Topbar titulo="Vistoria" />
-      <div className="p-6 text-gray-400">Carregando...</div>
+    <AppLayout>
+      <div style={{ background: '#0d1117', minHeight: '100vh', color: '#8b8d98' }} className="flex-1 p-6">
+        Carregando...
+      </div>
     </AppLayout>
   )
 
@@ -250,12 +241,13 @@ export default function VistoriaDetalhePage() {
 
   return (
     <AppLayout>
-      <Topbar titulo={`Vistoria de ${vistoria.tipo === 'entrada' ? 'Entrada' : 'Saída'}`} />
-      <div className="flex-1 overflow-y-auto p-6">
+      <div style={{ background: '#0d1117', minHeight: '100vh' }} className="flex-1 overflow-y-auto p-6">
         <div className="max-w-3xl mx-auto space-y-5">
 
+          <h1 style={{ color: '#f4f4f3' }} className="text-lg font-medium">Vistoria de {vistoria.tipo === 'entrada' ? 'Entrada' : 'Saída'}</h1>
+
           <div className="flex items-center justify-between">
-            <Link href="/vistorias" className="btn btn-sm text-gray-500">
+            <Link href="/vistorias" className="btn btn-sm">
               <ArrowLeft size={13} />Voltar
             </Link>
             <button onClick={gerarPdf} disabled={gerandoPdf} className="btn btn-primary btn-sm">
@@ -263,54 +255,52 @@ export default function VistoriaDetalhePage() {
             </button>
           </div>
 
-          {/* Resumo */}
           <div className="card">
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div className="col-span-2">
-                <span className="text-gray-400 text-xs">Imóvel</span>
-                <p className="font-medium">{vistoria.imovel?.endereco}, {vistoria.imovel?.numero}</p>
-                <p className="text-gray-400 text-xs">{vistoria.imovel?.bairro} — {vistoria.imovel?.cidade}/{vistoria.imovel?.estado}</p>
+                <span style={{ color: '#8b8d98' }} className="text-xs">Imóvel</span>
+                <p style={{ color: '#f4f4f3' }} className="font-medium">{vistoria.imovel?.endereco}, {vistoria.imovel?.numero}</p>
+                <p style={{ color: '#8b8d98' }} className="text-xs">{vistoria.imovel?.bairro} — {vistoria.imovel?.cidade}/{vistoria.imovel?.estado}</p>
               </div>
               <div>
-                <span className="text-gray-400 text-xs">Tipo</span>
-                <p className="font-medium">{vistoria.tipo === 'entrada' ? 'Entrada' : 'Saída'}</p>
+                <span style={{ color: '#8b8d98' }} className="text-xs">Tipo</span>
+                <p style={{ color: '#f4f4f3' }} className="font-medium">{vistoria.tipo === 'entrada' ? 'Entrada' : 'Saída'}</p>
               </div>
               <div>
-                <span className="text-gray-400 text-xs">Data</span>
-                <p className="font-medium">{new Date(vistoria.data_vistoria + 'T12:00:00').toLocaleDateString('pt-BR')}</p>
+                <span style={{ color: '#8b8d98' }} className="text-xs">Data</span>
+                <p style={{ color: '#f4f4f3' }} className="font-medium">{new Date(vistoria.data_vistoria + 'T12:00:00').toLocaleDateString('pt-BR')}</p>
               </div>
               <div>
-                <span className="text-gray-400 text-xs">Vistoriador</span>
-                <p className="font-medium">{vistoria.vistoriador?.nome || '—'}</p>
+                <span style={{ color: '#8b8d98' }} className="text-xs">Vistoriador</span>
+                <p style={{ color: '#f4f4f3' }} className="font-medium">{vistoria.vistoriador?.nome || '—'}</p>
               </div>
               <div>
-                <span className="text-gray-400 text-xs">Status</span>
+                <span style={{ color: '#8b8d98' }} className="text-xs">Status</span>
                 <p><span className={`badge ${vistoria.status === 'concluida' ? 'badge-green' : 'badge-yellow'}`}>{vistoria.status === 'concluida' ? 'Concluída' : 'Rascunho'}</span></p>
               </div>
               {vistoria.locadores?.length > 0 && (
                 <div>
-                  <span className="text-gray-400 text-xs">Locador(es)</span>
-                  {vistoria.locadores.map((l, i) => <p key={i} className="font-medium">{l}</p>)}
+                  <span style={{ color: '#8b8d98' }} className="text-xs">Locador(es)</span>
+                  {vistoria.locadores.map((l, i) => <p key={i} style={{ color: '#f4f4f3' }} className="font-medium">{l}</p>)}
                 </div>
               )}
               {vistoria.locatarios?.length > 0 && (
                 <div>
-                  <span className="text-gray-400 text-xs">Locatário(s)</span>
-                  {vistoria.locatarios.map((l, i) => <p key={i} className="font-medium">{l}</p>)}
+                  <span style={{ color: '#8b8d98' }} className="text-xs">Locatário(s)</span>
+                  {vistoria.locatarios.map((l, i) => <p key={i} style={{ color: '#f4f4f3' }} className="font-medium">{l}</p>)}
                 </div>
               )}
             </div>
           </div>
 
-          {/* Ambientes */}
           {vistoria.ambientes?.map((amb, i) => (
             <div key={i} className="card">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold">{amb.nome}</h3>
+                <h3 style={{ color: '#f4f4f3' }} className="text-sm font-semibold">{amb.nome}</h3>
                 <span className={`badge ${estadoCor(amb.estado)}`}>{amb.estado || 'Não avaliado'}</span>
               </div>
               {amb.observacao && (
-                <div className="mb-3 text-sm text-gray-600">
+                <div style={{ color: '#c3c2b7' }} className="mb-3 text-sm">
                   {amb.observacao.split('\n').filter(l => l.trim()).map((linha, li) => (
                     <p key={li}>- {linha.trim()}</p>
                   ))}
@@ -319,7 +309,7 @@ export default function VistoriaDetalhePage() {
               {amb.fotos?.length > 0 && (
                 <div className="flex gap-2 flex-wrap">
                   {amb.fotos.map((url, fi) => (
-                    <img key={fi} src={url} alt="" className="object-cover rounded-lg border border-gray-200"
+                    <img key={fi} src={url} alt="" style={{ border: '0.5px solid #2a2f3a' }} className="object-cover rounded-lg"
                       style={{ width: '90px', height: '70px' }} />
                   ))}
                 </div>

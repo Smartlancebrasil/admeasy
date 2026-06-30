@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import AppLayout from '@/components/layout/AppLayout'
-import Topbar from '@/components/layout/Topbar'
 import { supabase } from '@/lib/supabase'
 import { Plus, X, Edit2, Scale, Gavel } from 'lucide-react'
 import { registrarLog } from '@/lib/logs'
@@ -109,60 +108,65 @@ export default function ProcessosJudiciaisPage() {
 
   return (
     <AppLayout>
-      <Topbar titulo="Processos Judiciais">
-        <button className="btn btn-primary" onClick={abrirNovo}><Plus size={14} />Novo processo</button>
-      </Topbar>
-      <div className="flex-1 overflow-y-auto p-6">
-        {sucesso && <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-4 text-sm">{sucesso}</div>}
+      <div style={{ background: '#0d1117', minHeight: '100vh' }} className="flex-1 overflow-y-auto p-6">
+        <div className="max-w-[1600px] mx-auto">
 
-        {formInicial !== null && (
-          <div className="card mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-semibold">{formInicial.id ? 'Editando processo' : 'Novo processo judicial'}</h2>
-              <button onClick={() => setFormInicial(null)}><X size={14} /></button>
-            </div>
-            <FormProcesso inicial={formInicial} contratos={contratos} clientes={clientes} onSalvar={salvar} salvando={salvando} />
+          <div className="flex items-center justify-between mb-5">
+            <h1 style={{ color: '#f4f4f3' }} className="text-lg font-medium">Processos Judiciais</h1>
+            <button className="btn btn-primary" onClick={abrirNovo}><Plus size={14} />Novo processo</button>
           </div>
-        )}
 
-        <div className="card p-0 overflow-hidden">
-          {loading ? (
-            <div className="text-center py-12 text-gray-400 text-sm">Carregando...</div>
-          ) : processos.length === 0 ? (
-            <div className="text-center py-12 text-gray-400">
-              <Scale size={36} className="mx-auto mb-2 opacity-30" />
-              <p className="font-medium text-gray-500">Nenhum processo judicial cadastrado</p>
+          {sucesso && <div style={{ background: '#1a2e1f', border: '0.5px solid #2d4a35', color: '#3fb950' }} className="px-4 py-3 rounded-lg mb-4 text-sm">{sucesso}</div>}
+
+          {formInicial !== null && (
+            <div className="card mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 style={{ color: '#f4f4f3' }} className="text-sm font-semibold">{formInicial.id ? 'Editando processo' : 'Novo processo judicial'}</h2>
+                <button onClick={() => setFormInicial(null)}><X size={14} /></button>
+              </div>
+              <FormProcesso inicial={formInicial} contratos={contratos} clientes={clientes} onSalvar={salvar} salvando={salvando} />
             </div>
-          ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100">
-                  {['Nº Processo', 'Tipo', 'Cliente', 'Contrato', 'Vara/Comarca', 'Valor causa', 'Status', ''].map(h => (
-                    <th key={h} className="text-left px-4 py-3 text-xs font-medium text-gray-400">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {processos.map(p => (
-                  <tr key={p.id} className="border-b border-gray-50 hover:bg-gray-50">
-                    <td className="px-4 py-3 text-xs font-mono">{p.numero_processo || '—'}</td>
-                    <td className="px-4 py-3 text-sm">{tipoLabel[p.tipo] || p.tipo}</td>
-                    <td className="px-4 py-3 text-sm">{getNome(p.cliente)}</td>
-                    <td className="px-4 py-3 text-xs text-gray-500">{p.contrato ? `#${getNome(p.contrato)}` : '—'}</td>
-                    <td className="px-4 py-3 text-xs text-gray-500">{p.vara || '—'}{p.comarca ? ` / ${p.comarca}` : ''}</td>
-                    <td className="px-4 py-3 text-sm font-medium">{formatVal(p.valor_causa || 0)}</td>
-                    <td className="px-4 py-3"><span className={`badge ${statusConfig[p.status]?.badge || 'badge-gray'}`}>{statusConfig[p.status]?.label || p.status}</span></td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-1.5">
-                        <button className="btn btn-sm" onClick={() => abrirEdicao(p)}><Edit2 size={12} />Editar</button>
-                        <button className="btn btn-sm" style={{ color: 'var(--text-danger)' }} onClick={() => excluir(p.id)}><X size={12} /></button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           )}
+
+          <div className="card p-0 overflow-hidden">
+            {loading ? (
+              <div style={{ color: '#8b8d98' }} className="text-center py-12 text-sm">Carregando...</div>
+            ) : processos.length === 0 ? (
+              <div style={{ color: '#8b8d98' }} className="text-center py-12">
+                <Scale size={36} className="mx-auto mb-2 opacity-30" />
+                <p style={{ color: '#c3c2b7' }} className="font-medium">Nenhum processo judicial cadastrado</p>
+              </div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr style={{ borderBottom: '0.5px solid #2a2f3a' }}>
+                    {['Nº Processo', 'Tipo', 'Cliente', 'Contrato', 'Vara/Comarca', 'Valor causa', 'Status', ''].map(h => (
+                      <th key={h} style={{ color: '#8b8d98' }} className="text-left px-4 py-3 text-xs font-medium">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {processos.map(p => (
+                    <tr key={p.id} style={{ borderBottom: '0.5px solid #1c2128' }} className="hover:bg-[#161b22]">
+                      <td style={{ color: '#8b8d98' }} className="px-4 py-3 text-xs font-mono">{p.numero_processo || '—'}</td>
+                      <td style={{ color: '#f4f4f3' }} className="px-4 py-3 text-sm">{tipoLabel[p.tipo] || p.tipo}</td>
+                      <td style={{ color: '#c3c2b7' }} className="px-4 py-3 text-sm">{getNome(p.cliente)}</td>
+                      <td style={{ color: '#8b8d98' }} className="px-4 py-3 text-xs">{p.contrato ? `#${getNome(p.contrato)}` : '—'}</td>
+                      <td style={{ color: '#8b8d98' }} className="px-4 py-3 text-xs">{p.vara || '—'}{p.comarca ? ` / ${p.comarca}` : ''}</td>
+                      <td style={{ color: '#f4f4f3' }} className="px-4 py-3 text-sm font-medium">{formatVal(p.valor_causa || 0)}</td>
+                      <td className="px-4 py-3"><span className={`badge ${statusConfig[p.status]?.badge || 'badge-gray'}`}>{statusConfig[p.status]?.label || p.status}</span></td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-1.5">
+                          <button className="btn btn-sm" onClick={() => abrirEdicao(p)}><Edit2 size={12} />Editar</button>
+                          <button className="btn btn-sm" style={{ color: '#ef4444' }} onClick={() => excluir(p.id)}><X size={12} /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
       </div>
     </AppLayout>

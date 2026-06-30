@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import AppLayout from '@/components/layout/AppLayout'
-import Topbar from '@/components/layout/Topbar'
 import { supabase } from '@/lib/supabase'
 import { TrendingUp, Check, Edit2, Undo2, History, X } from 'lucide-react'
 import { registrarLog } from '@/lib/logs'
@@ -87,7 +86,6 @@ export default function ReajustePage() {
     setEditandoValor(false)
     setValorEditado('')
     setShowHistorico(false)
-    // Busca histórico de reajustes
     const { data } = await supabase
       .from('reajustes')
       .select('*')
@@ -171,191 +169,201 @@ export default function ReajustePage() {
 
   return (
     <AppLayout>
-      <Topbar titulo="Calculadora de reajuste" />
-      <div className="flex-1 overflow-y-auto p-6">
-        {sucesso && (
-          <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-4 text-sm font-medium flex items-center justify-between">
-            {sucesso}
-            <button onClick={() => setSucesso('')}><X size={14} /></button>
-          </div>
-        )}
+      <div style={{ background: '#0d1117', minHeight: '100vh' }} className="flex-1 overflow-y-auto p-6">
+        <div className="max-w-[1600px] mx-auto">
 
-        <div className="grid grid-cols-2 gap-6">
-          {/* Seleção do contrato */}
-          <div className="card">
-            <h2 className="text-sm font-semibold mb-4 flex items-center gap-2">
-              <TrendingUp size={15} className="text-blue-500" />Selecione o contrato
-            </h2>
-            {loading ? (
-              <div className="text-sm text-gray-400">Carregando contratos...</div>
-            ) : contratos.length === 0 ? (
-              <div className="text-sm text-gray-400">Nenhum contrato ativo encontrado</div>
-            ) : (
-              <div className="space-y-2">
-                {contratos.map(c => (
-                  <div key={c.id}
-                    onClick={() => selecionarContrato(c)}
-                    className={`p-3 rounded-lg border cursor-pointer transition-all ${contratoSel?.id === c.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">#{c.numero} — {getTitulo(c.imovel)}</div>
-                        <div className="text-xs text-gray-400 mt-0.5">{getNome(c.locatario)} · Índice: {(c.indice_reajuste || 'igpm').toUpperCase()}</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-sm font-semibold text-gray-900">{formatVal(c.valor_atual || c.valor_mensal)}</div>
-                        <div className="text-xs text-gray-400">valor atual</div>
-                      </div>
-                    </div>
-                    {c.proximo_reajuste && (
-                      <div className="text-[10px] text-gray-400 mt-1">
-                        Próximo reajuste: {new Intl.DateTimeFormat('pt-BR').format(new Date(c.proximo_reajuste + 'T00:00:00'))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <h1 style={{ color: '#f4f4f3' }} className="text-lg font-medium mb-5">Calculadora de reajuste</h1>
 
-          {/* Calculadora */}
-          <div>
-            {!contratoSel ? (
-              <div className="card text-center py-16 text-gray-400">
-                <TrendingUp size={36} className="mx-auto mb-3 opacity-30" />
-                <div className="font-medium text-gray-500">Selecione um contrato</div>
-                <div className="text-sm mt-1">para calcular o reajuste</div>
-              </div>
-            ) : (
-              <>
-                <div className="card mb-4">
-                  <h2 className="text-sm font-semibold mb-4">Índice de reajuste — acumulado 12 meses</h2>
-                  <div className="grid grid-cols-2 gap-2 mb-4">
-                    {indices.map(idx => (
-                      <div key={idx.key}
-                        onClick={() => { setIndiceSel(idx.key); setPctCustom(''); setEditandoValor(false); setValorEditado('') }}
-                        className={`p-3 rounded-lg border cursor-pointer transition-all ${indiceSel === idx.key && !pctCustom ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                        <div className="text-xs font-medium text-gray-600">{idx.label} <span className="text-gray-400">({idx.fonte})</span></div>
-                        <div className="text-xl font-semibold text-blue-600 mt-1">+{idx.pct.toFixed(2).replace('.', ',')}%</div>
-                      </div>
-                    ))}
-                  </div>
-                  <div>
-                    <label className="label">Ou informe percentual manual (%)</label>
-                    <input className="input" type="number" step="0.01" value={pctCustom}
-                      onChange={e => { setPctCustom(e.target.value); setIndiceSel(''); setEditandoValor(false); setValorEditado('') }}
-                      placeholder="Ex: 4.50" />
-                  </div>
-                </div>
+          {sucesso && (
+            <div style={{ background: '#1a2e1f', border: '0.5px solid #2d4a35', color: '#3fb950' }} className="px-4 py-3 rounded-lg mb-4 text-sm font-medium flex items-center justify-between">
+              {sucesso}
+              <button onClick={() => setSucesso('')}><X size={14} /></button>
+            </div>
+          )}
 
-                <div className="card mb-4">
-                  <h2 className="text-sm font-semibold mb-4">Resultado do reajuste</h2>
-                  <div className="space-y-2 mb-4">
-                    <div className="flex justify-between py-2 border-b border-gray-100 text-sm">
-                      <span className="text-gray-500">Valor atual</span>
-                      <span className="font-medium">{formatVal(valorBase)}</span>
-                    </div>
-                    <div className="flex justify-between py-2 border-b border-gray-100 text-sm">
-                      <span className="text-gray-500">Índice aplicado</span>
-                      <span className="font-medium text-blue-600">+{pct.toFixed(2).replace('.', ',')}%</span>
-                    </div>
-                    <div className="flex justify-between py-2 border-b border-gray-100 text-sm">
-                      <span className="text-gray-500">Acréscimo mensal</span>
-                      <span className="font-medium text-green-600">+ {formatVal(acrescimo)}</span>
-                    </div>
-
-                    {/* Novo valor — editável */}
-                    <div className="flex justify-between items-center py-3">
-                      <span className="font-semibold text-base">Novo valor mensal</span>
-                      <div className="flex items-center gap-2">
-                        {editandoValor ? (
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm text-gray-400">R$</span>
-                            <input
-                              className="input text-right font-bold text-green-600 text-lg w-32 py-1"
-                              value={valorEditado}
-                              onChange={e => setValorEditado(e.target.value)}
-                              placeholder={novoValorCalculado.toFixed(2)}
-                              autoFocus
-                            />
-                            <button onClick={() => { setEditandoValor(false); setValorEditado('') }}
-                              className="text-gray-400 hover:text-gray-600"><X size={14} /></button>
+          <div className="grid grid-cols-2 gap-6">
+            <div className="card">
+              <h2 style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-4 flex items-center gap-2">
+                <TrendingUp size={15} style={{ color: '#5b9bf5' }} />Selecione o contrato
+              </h2>
+              {loading ? (
+                <div style={{ color: '#8b8d98' }} className="text-sm">Carregando contratos...</div>
+              ) : contratos.length === 0 ? (
+                <div style={{ color: '#8b8d98' }} className="text-sm">Nenhum contrato ativo encontrado</div>
+              ) : (
+                <div className="space-y-2">
+                  {contratos.map(c => {
+                    const sel = contratoSel?.id === c.id
+                    return (
+                      <div key={c.id}
+                        onClick={() => selecionarContrato(c)}
+                        style={sel ? { border: '0.5px solid #2563eb', background: '#16243a' } : { border: '0.5px solid #2a2f3a' }}
+                        className="p-3 rounded-lg cursor-pointer transition-all hover:border-gray-500">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div style={{ color: '#f4f4f3' }} className="text-sm font-medium">#{c.numero} — {getTitulo(c.imovel)}</div>
+                            <div style={{ color: '#8b8d98' }} className="text-xs mt-0.5">{getNome(c.locatario)} · Índice: {(c.indice_reajuste || 'igpm').toUpperCase()}</div>
                           </div>
-                        ) : (
-                          <>
-                            <span className="font-bold text-green-600 text-lg">{formatVal(novoValor)}</span>
-                            <button
-                              onClick={() => { setEditandoValor(true); setValorEditado(novoValorCalculado.toFixed(2)) }}
-                              className="text-gray-300 hover:text-blue-500 transition-colors"
-                              title="Editar valor manualmente">
-                              <Edit2 size={13} />
-                            </button>
-                          </>
+                          <div className="text-right">
+                            <div style={{ color: '#f4f4f3' }} className="text-sm font-semibold">{formatVal(c.valor_atual || c.valor_mensal)}</div>
+                            <div style={{ color: '#8b8d98' }} className="text-xs">valor atual</div>
+                          </div>
+                        </div>
+                        {c.proximo_reajuste && (
+                          <div style={{ color: '#5b5e6b' }} className="text-[10px] mt-1">
+                            Próximo reajuste: {new Intl.DateTimeFormat('pt-BR').format(new Date(c.proximo_reajuste + 'T00:00:00'))}
+                          </div>
                         )}
                       </div>
-                    </div>
-                    {editandoValor && (
-                      <p className="text-[10px] text-orange-500">⚠ Valor editado manualmente — diferente do cálculo automático</p>
-                    )}
-                  </div>
-
-                  {/* Comparativo */}
-                  <div className="bg-gray-50 rounded-lg p-3 mb-4">
-                    <div className="text-xs font-medium text-gray-500 mb-2">Comparativo entre índices</div>
-                    {indices.map(idx => (
-                      <div key={idx.key} className="flex justify-between text-xs py-1">
-                        <span className="text-gray-500">{idx.label} (+{idx.pct.toFixed(2).replace('.', ',')}%)</span>
-                        <span className="font-medium text-green-600">{formatVal(valorBase * (1 + idx.pct / 100))}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="flex gap-2">
-                    <button onClick={aplicarReajuste} disabled={aplicando || pct === 0}
-                      className="btn btn-primary flex-1">
-                      <Check size={14} />{aplicando ? 'Aplicando...' : 'Aplicar reajuste ao contrato'}
-                    </button>
-                  </div>
-                  <p className="text-[10px] text-gray-400 mt-2">O reajuste será salvo no histórico e o contrato atualizado automaticamente.</p>
+                    )
+                  })}
                 </div>
+              )}
+            </div>
 
-                {/* Histórico de reajustes */}
-                {historico.length > 0 && (
-                  <div className="card">
-                    <button
-                      onClick={() => setShowHistorico(!showHistorico)}
-                      className="flex items-center gap-2 text-sm font-semibold w-full text-left">
-                      <History size={14} className="text-gray-400" />
-                      Histórico de reajustes ({historico.length})
-                      <span className="ml-auto text-gray-400 text-xs">{showHistorico ? '▲' : '▼'}</span>
-                    </button>
-
-                    {showHistorico && (
-                      <div className="mt-3 space-y-2">
-                        {historico.map(r => (
-                          <div key={r.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100">
-                            <div>
-                              <div className="text-xs font-medium text-gray-700">
-                                {new Date(r.data_aplicacao + 'T12:00:00').toLocaleDateString('pt-BR')} — {r.indice} +{r.percentual.toFixed(2).replace('.', ',')}%
-                              </div>
-                              <div className="text-xs text-gray-400 mt-0.5">
-                                {formatVal(r.valor_anterior)} → <span className="text-green-600 font-medium">{formatVal(r.valor_novo)}</span>
-                              </div>
-                            </div>
-                            <button
-                              onClick={() => desfazerReajuste(r)}
-                              disabled={desfazendo === r.id}
-                              className="btn btn-sm text-orange-500 border-orange-200 hover:bg-orange-50"
-                              title="Desfazer este reajuste">
-                              <Undo2 size={12} />{desfazendo === r.id ? '...' : 'Desfazer'}
-                            </button>
+            <div>
+              {!contratoSel ? (
+                <div className="card text-center py-16" style={{ color: '#8b8d98' }}>
+                  <TrendingUp size={36} className="mx-auto mb-3 opacity-30" />
+                  <div style={{ color: '#c3c2b7' }} className="font-medium">Selecione um contrato</div>
+                  <div className="text-sm mt-1">para calcular o reajuste</div>
+                </div>
+              ) : (
+                <>
+                  <div className="card mb-4">
+                    <h2 style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-4">Índice de reajuste — acumulado 12 meses</h2>
+                    <div className="grid grid-cols-2 gap-2 mb-4">
+                      {indices.map(idx => {
+                        const sel = indiceSel === idx.key && !pctCustom
+                        return (
+                          <div key={idx.key}
+                            onClick={() => { setIndiceSel(idx.key); setPctCustom(''); setEditandoValor(false); setValorEditado('') }}
+                            style={sel ? { border: '0.5px solid #2563eb', background: '#16243a' } : { border: '0.5px solid #2a2f3a' }}
+                            className="p-3 rounded-lg cursor-pointer transition-all hover:border-gray-500">
+                            <div style={{ color: '#a8aab5' }} className="text-xs font-medium">{idx.label} <span style={{ color: '#5b5e6b' }}>({idx.fonte})</span></div>
+                            <div style={{ color: '#5b9bf5' }} className="text-xl font-semibold mt-1">+{idx.pct.toFixed(2).replace('.', ',')}%</div>
                           </div>
-                        ))}
-                      </div>
-                    )}
+                        )
+                      })}
+                    </div>
+                    <div>
+                      <label className="label">Ou informe percentual manual (%)</label>
+                      <input className="input" type="number" step="0.01" value={pctCustom}
+                        onChange={e => { setPctCustom(e.target.value); setIndiceSel(''); setEditandoValor(false); setValorEditado('') }}
+                        placeholder="Ex: 4.50" />
+                    </div>
                   </div>
-                )}
-              </>
-            )}
+
+                  <div className="card mb-4">
+                    <h2 style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-4">Resultado do reajuste</h2>
+                    <div className="space-y-2 mb-4">
+                      <div style={{ borderBottom: '0.5px solid #1c2128' }} className="flex justify-between py-2 text-sm">
+                        <span style={{ color: '#8b8d98' }}>Valor atual</span>
+                        <span style={{ color: '#f4f4f3' }} className="font-medium">{formatVal(valorBase)}</span>
+                      </div>
+                      <div style={{ borderBottom: '0.5px solid #1c2128' }} className="flex justify-between py-2 text-sm">
+                        <span style={{ color: '#8b8d98' }}>Índice aplicado</span>
+                        <span style={{ color: '#5b9bf5' }} className="font-medium">+{pct.toFixed(2).replace('.', ',')}%</span>
+                      </div>
+                      <div style={{ borderBottom: '0.5px solid #1c2128' }} className="flex justify-between py-2 text-sm">
+                        <span style={{ color: '#8b8d98' }}>Acréscimo mensal</span>
+                        <span style={{ color: '#3fb950' }} className="font-medium">+ {formatVal(acrescimo)}</span>
+                      </div>
+
+                      <div className="flex justify-between items-center py-3">
+                        <span style={{ color: '#f4f4f3' }} className="font-semibold text-base">Novo valor mensal</span>
+                        <div className="flex items-center gap-2">
+                          {editandoValor ? (
+                            <div className="flex items-center gap-2">
+                              <span style={{ color: '#8b8d98' }} className="text-sm">R$</span>
+                              <input
+                                className="input text-right font-bold text-lg w-32 py-1"
+                                style={{ color: '#3fb950' }}
+                                value={valorEditado}
+                                onChange={e => setValorEditado(e.target.value)}
+                                placeholder={novoValorCalculado.toFixed(2)}
+                                autoFocus
+                              />
+                              <button onClick={() => { setEditandoValor(false); setValorEditado('') }}
+                                style={{ color: '#5b5e6b' }} className="hover:text-gray-300"><X size={14} /></button>
+                            </div>
+                          ) : (
+                            <>
+                              <span style={{ color: '#3fb950' }} className="font-bold text-lg">{formatVal(novoValor)}</span>
+                              <button
+                                onClick={() => { setEditandoValor(true); setValorEditado(novoValorCalculado.toFixed(2)) }}
+                                style={{ color: '#5b5e6b' }} className="hover:text-blue-400 transition-colors"
+                                title="Editar valor manualmente">
+                                <Edit2 size={13} />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      {editandoValor && (
+                        <p style={{ color: '#f59e0b' }} className="text-[10px]">⚠ Valor editado manualmente — diferente do cálculo automático</p>
+                      )}
+                    </div>
+
+                    <div style={{ background: '#0d1117', border: '0.5px solid #2a2f3a' }} className="rounded-lg p-3 mb-4">
+                      <div style={{ color: '#8b8d98' }} className="text-xs font-medium mb-2">Comparativo entre índices</div>
+                      {indices.map(idx => (
+                        <div key={idx.key} className="flex justify-between text-xs py-1">
+                          <span style={{ color: '#8b8d98' }}>{idx.label} (+{idx.pct.toFixed(2).replace('.', ',')}%)</span>
+                          <span style={{ color: '#3fb950' }} className="font-medium">{formatVal(valorBase * (1 + idx.pct / 100))}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button onClick={aplicarReajuste} disabled={aplicando || pct === 0}
+                        className="btn btn-primary flex-1">
+                        <Check size={14} />{aplicando ? 'Aplicando...' : 'Aplicar reajuste ao contrato'}
+                      </button>
+                    </div>
+                    <p style={{ color: '#5b5e6b' }} className="text-[10px] mt-2">O reajuste será salvo no histórico e o contrato atualizado automaticamente.</p>
+                  </div>
+
+                  {historico.length > 0 && (
+                    <div className="card">
+                      <button
+                        onClick={() => setShowHistorico(!showHistorico)}
+                        style={{ color: '#f4f4f3' }}
+                        className="flex items-center gap-2 text-sm font-semibold w-full text-left">
+                        <History size={14} style={{ color: '#8b8d98' }} />
+                        Histórico de reajustes ({historico.length})
+                        <span style={{ color: '#8b8d98' }} className="ml-auto text-xs">{showHistorico ? '▲' : '▼'}</span>
+                      </button>
+
+                      {showHistorico && (
+                        <div className="mt-3 space-y-2">
+                          {historico.map(r => (
+                            <div key={r.id} style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="flex items-center justify-between p-3 rounded-lg">
+                              <div>
+                                <div style={{ color: '#c3c2b7' }} className="text-xs font-medium">
+                                  {new Date(r.data_aplicacao + 'T12:00:00').toLocaleDateString('pt-BR')} — {r.indice} +{r.percentual.toFixed(2).replace('.', ',')}%
+                                </div>
+                                <div style={{ color: '#8b8d98' }} className="text-xs mt-0.5">
+                                  {formatVal(r.valor_anterior)} → <span style={{ color: '#3fb950' }} className="font-medium">{formatVal(r.valor_novo)}</span>
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => desfazerReajuste(r)}
+                                disabled={desfazendo === r.id}
+                                style={{ color: '#f59e0b', border: '0.5px solid #4a3a1f' }}
+                                className="btn btn-sm hover:bg-[#2e2515]"
+                                title="Desfazer este reajuste">
+                                <Undo2 size={12} />{desfazendo === r.id ? '...' : 'Desfazer'}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>

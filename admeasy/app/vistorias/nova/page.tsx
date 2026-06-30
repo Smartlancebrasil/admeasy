@@ -3,40 +3,22 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import AppLayout from '@/components/layout/AppLayout'
-import Topbar from '@/components/layout/Topbar'
 import { supabase } from '@/lib/supabase'
 import { Save, Plus, X, Camera, ChevronDown, ChevronUp } from 'lucide-react'
 
 const ORG_ID = '00000000-0000-0000-0000-000000000001'
 
 const AMBIENTES_PADRAO = [
-  'Sala',
-  'Sala de estar',
-  'Sala de jantar',
-  'Cozinha',
-  'Quarto 1',
-  'Quarto 2',
-  'Quarto 3',
-  'Quarto 4',
-  'Suíte 1',
-  'Suíte 2',
-  'Suíte 3',
-  'Banheiro 1',
-  'Banheiro 2',
-  'Lavabo 1',
-  'Lavabo 2',
-  'Área de serviço',
-  'Lavanderia',
-  'Varanda',
-  'Garagem',
+  'Sala', 'Sala de estar', 'Sala de jantar', 'Cozinha',
+  'Quarto 1', 'Quarto 2', 'Quarto 3', 'Quarto 4',
+  'Suíte 1', 'Suíte 2', 'Suíte 3',
+  'Banheiro 1', 'Banheiro 2', 'Lavabo 1', 'Lavabo 2',
+  'Área de serviço', 'Lavanderia', 'Varanda', 'Garagem',
 ]
 
 const ITENS_EXTRA = [
-  'Pintura',
-  'Armários - Quarto 1',
-  'Armários - Quarto 2',
-  'Armários - Suíte',
-  'Armários - Cozinha',
+  'Pintura', 'Armários - Quarto 1', 'Armários - Quarto 2',
+  'Armários - Suíte', 'Armários - Cozinha',
 ]
 
 type Foto = { url: string }
@@ -64,7 +46,6 @@ export default function NovaVistoriaPage() {
   const [ambientes, setAmbientes] = useState<Ambiente[]>([])
   const [novoAmbiente, setNovoAmbiente] = useState('')
 
-  // Partes
   const [locadores, setLocadores] = useState<string[]>([''])
   const [locatarios, setLocatarios] = useState<string[]>([''])
   const [testemunha1Nome, setTestemunha1Nome] = useState('')
@@ -84,7 +65,6 @@ export default function NovaVistoriaPage() {
   async function aoSelecionarImovel(id: string) {
     setImovelId(id)
     if (!id) return
-    // Busca contrato ativo do imóvel e preenche locador/locatário
     const { data: contrato } = await supabase
       .from('contratos')
       .select('locador_id, locatario_id, locador:clientes!locador_id(nome), locatario:clientes!locatario_id(nome)')
@@ -178,17 +158,18 @@ export default function NovaVistoriaPage() {
     router.push(`/vistorias/${saved.id}`)
   }
 
-  const estadoCor = (e: string) => e === 'bom' ? 'bg-green-500 text-white' : e === 'regular' ? 'bg-yellow-500 text-white' : e === 'ruim' ? 'bg-red-500 text-white' : 'bg-gray-100 text-gray-400'
+  const estadoCor = (e: string) => e === 'bom' ? { background: '#3fb950', color: '#fff' } : e === 'regular' ? { background: '#f59e0b', color: '#fff' } : e === 'ruim' ? { background: '#ef4444', color: '#fff' } : { background: '#1f2430', color: '#8b8d98' }
 
   return (
     <AppLayout>
-      <Topbar titulo="Nova Vistoria" />
-      <div className="flex-1 overflow-y-auto p-6">
+      <div style={{ background: '#0d1117', minHeight: '100vh' }} className="flex-1 overflow-y-auto p-6">
         <div className="max-w-3xl mx-auto space-y-5">
+
+          <h1 style={{ color: '#f4f4f3' }} className="text-lg font-medium">Nova Vistoria</h1>
 
           {/* Dados gerais */}
           <div className="card">
-            <h3 className="text-sm font-semibold mb-4">Dados gerais</h3>
+            <h3 style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-4">Dados gerais</h3>
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">
                 <label className="label">Imóvel *</label>
@@ -204,7 +185,8 @@ export default function NovaVistoriaPage() {
                 <div className="flex gap-2">
                   {(['entrada', 'saida'] as const).map(t => (
                     <button key={t} type="button" onClick={() => setTipo(t)}
-                      className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all border ${tipo === t ? t === 'entrada' ? 'bg-green-500 text-white border-green-500' : 'bg-orange-500 text-white border-orange-500' : 'bg-white text-gray-600 border-gray-200'}`}>
+                      style={tipo === t ? (t === 'entrada' ? { background: '#3fb950', color: '#fff', border: '0.5px solid #3fb950' } : { background: '#f59e0b', color: '#fff', border: '0.5px solid #f59e0b' }) : { background: '#161b22', color: '#a8aab5', border: '0.5px solid #2a2f3a' }}
+                      className="flex-1 py-2 rounded-lg text-sm font-medium transition-all">
                       {t === 'entrada' ? '↓ Entrada' : '↑ Saída'}
                     </button>
                   ))}
@@ -232,9 +214,8 @@ export default function NovaVistoriaPage() {
 
           {/* Partes */}
           <div className="card">
-            <h3 className="text-sm font-semibold mb-4">Partes</h3>
+            <h3 style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-4">Partes</h3>
             <div className="space-y-4">
-              {/* Locadores */}
               <div>
                 <label className="label">Locador(es)</label>
                 {locadores.map((l, i) => (
@@ -243,17 +224,16 @@ export default function NovaVistoriaPage() {
                       onChange={e => setLocadores(prev => prev.map((v, vi) => vi === i ? e.target.value : v))} />
                     {locadores.length > 1 && (
                       <button type="button" onClick={() => setLocadores(prev => prev.filter((_, vi) => vi !== i))}
-                        className="text-gray-300 hover:text-red-500"><X size={14} /></button>
+                        style={{ color: '#5b5e6b' }} className="hover:text-red-400"><X size={14} /></button>
                     )}
                   </div>
                 ))}
                 <button type="button" onClick={() => setLocadores(prev => [...prev, ''])}
-                  className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                  style={{ color: '#5b9bf5' }} className="text-xs hover:underline flex items-center gap-1">
                   <Plus size={11} />Adicionar locador
                 </button>
               </div>
 
-              {/* Locatários */}
               <div>
                 <label className="label">Locatário(s)</label>
                 {locatarios.map((l, i) => (
@@ -262,17 +242,16 @@ export default function NovaVistoriaPage() {
                       onChange={e => setLocatarios(prev => prev.map((v, vi) => vi === i ? e.target.value : v))} />
                     {locatarios.length > 1 && (
                       <button type="button" onClick={() => setLocatarios(prev => prev.filter((_, vi) => vi !== i))}
-                        className="text-gray-300 hover:text-red-500"><X size={14} /></button>
+                        style={{ color: '#5b5e6b' }} className="hover:text-red-400"><X size={14} /></button>
                     )}
                   </div>
                 ))}
                 <button type="button" onClick={() => setLocatarios(prev => [...prev, ''])}
-                  className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                  style={{ color: '#5b9bf5' }} className="text-xs hover:underline flex items-center gap-1">
                   <Plus size={11} />Adicionar locatário
                 </button>
               </div>
 
-              {/* Testemunhas */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="label">Testemunha 1 — Nome</label>
@@ -296,17 +275,21 @@ export default function NovaVistoriaPage() {
 
           {/* Seleção de ambientes */}
           <div className="card">
-            <h3 className="text-sm font-semibold mb-3">Ambientes</h3>
+            <h3 style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-3">Ambientes</h3>
             <div className="mb-3">
-              <p className="text-xs text-gray-400 mb-2">Clique para adicionar ou remover</p>
+              <p style={{ color: '#8b8d98' }} className="text-xs mb-2">Clique para adicionar ou remover</p>
               <div className="flex flex-wrap gap-2">
-                {[...AMBIENTES_PADRAO, ...ITENS_EXTRA].map(nome => (
-                  <button key={nome} type="button"
-                    onClick={() => adicionarAmbientePadrao(nome)}
-                    className={`px-2.5 py-1 rounded-lg text-xs border transition-all ${ambientes.find(a => a.nome === nome) ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'}`}>
-                    {ambientes.find(a => a.nome === nome) ? '✓ ' : '+ '}{nome}
-                  </button>
-                ))}
+                {[...AMBIENTES_PADRAO, ...ITENS_EXTRA].map(nome => {
+                  const selecionado = !!ambientes.find(a => a.nome === nome)
+                  return (
+                    <button key={nome} type="button"
+                      onClick={() => adicionarAmbientePadrao(nome)}
+                      style={selecionado ? { background: '#16243a', border: '0.5px solid #2563eb', color: '#5b9bf5' } : { background: '#161b22', border: '0.5px solid #2a2f3a', color: '#a8aab5' }}
+                      className="px-2.5 py-1 rounded-lg text-xs transition-all">
+                      {selecionado ? '✓ ' : '+ '}{nome}
+                    </button>
+                  )
+                })}
               </div>
             </div>
             <div className="flex gap-2">
@@ -322,25 +305,25 @@ export default function NovaVistoriaPage() {
           {/* Ambientes selecionados */}
           {ambientes.map((amb, idx) => (
             <div key={idx} className="card p-0 overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-100 cursor-pointer"
+              <div style={{ background: '#161b22', borderBottom: '0.5px solid #2a2f3a' }} className="flex items-center justify-between px-4 py-3 cursor-pointer"
                 onClick={() => toggleAmbiente(idx)}>
                 <div className="flex items-center gap-3">
-                  <span className="text-sm font-medium">{amb.nome}</span>
+                  <span style={{ color: '#f4f4f3' }} className="text-sm font-medium">{amb.nome}</span>
                   {amb.estado && (
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${estadoCor(amb.estado)}`}>
+                    <span style={estadoCor(amb.estado)} className="text-[10px] px-2 py-0.5 rounded-full font-medium">
                       {amb.estado.charAt(0).toUpperCase() + amb.estado.slice(1)}
                     </span>
                   )}
                   {amb.fotos.length > 0 && (
-                    <span className="text-[10px] text-gray-400">{amb.fotos.length} foto{amb.fotos.length > 1 ? 's' : ''}</span>
+                    <span style={{ color: '#8b8d98' }} className="text-[10px]">{amb.fotos.length} foto{amb.fotos.length > 1 ? 's' : ''}</span>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
                   <button type="button" onClick={e => { e.stopPropagation(); removerAmbiente(idx) }}
-                    className="text-gray-300 hover:text-red-500 transition-colors">
+                    style={{ color: '#5b5e6b' }} className="hover:text-red-400 transition-colors">
                     <X size={13} />
                   </button>
-                  {amb.aberto ? <ChevronUp size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-400" />}
+                  {amb.aberto ? <ChevronUp size={14} style={{ color: '#8b8d98' }} /> : <ChevronDown size={14} style={{ color: '#8b8d98' }} />}
                 </div>
               </div>
 
@@ -351,7 +334,8 @@ export default function NovaVistoriaPage() {
                     <div className="flex gap-2">
                       {(['bom', 'regular', 'ruim'] as const).map(e => (
                         <button key={e} type="button" onClick={() => setEstado(idx, e)}
-                          className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all border ${amb.estado === e ? estadoCor(e) : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}>
+                          style={amb.estado === e ? estadoCor(e) : { background: '#161b22', color: '#a8aab5', border: '0.5px solid #2a2f3a' }}
+                          className="flex-1 py-2 rounded-lg text-sm font-medium transition-all">
                           {e.charAt(0).toUpperCase() + e.slice(1)}
                         </button>
                       ))}
@@ -367,7 +351,7 @@ export default function NovaVistoriaPage() {
                     <label className="label">Fotos ({amb.fotos.length}/5)</label>
                     <div className="flex gap-2 flex-wrap">
                       {amb.fotos.map((foto, fi) => (
-                        <div key={fi} className="relative w-24 rounded-lg overflow-hidden border border-gray-200" style={{ height: '80px' }}>
+                        <div key={fi} style={{ border: '0.5px solid #2a2f3a' }} className="relative w-24 rounded-lg overflow-hidden" style={{ height: '80px' }}>
                           <img src={foto.url} alt="" className="w-full h-full object-cover" />
                           <button type="button" onClick={() => removerFoto(idx, fi)}
                             className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center">
@@ -376,9 +360,9 @@ export default function NovaVistoriaPage() {
                         </div>
                       ))}
                       {amb.fotos.length < 5 && (
-                        <label className="rounded-lg border-2 border-dashed border-gray-200 flex flex-col items-center justify-center cursor-pointer hover:border-blue-300 hover:bg-blue-50 transition-all" style={{ width: '96px', height: '80px' }}>
-                          <Camera size={16} className="text-gray-300" />
-                          <span className="text-[10px] text-gray-300 mt-1">Foto</span>
+                        <label style={{ border: '1.5px dashed #2a2f3a' }} className="rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 transition-all" style={{ width: '96px', height: '80px' }}>
+                          <Camera size={16} style={{ color: '#5b5e6b' }} />
+                          <span style={{ color: '#5b5e6b' }} className="text-[10px] mt-1">Foto</span>
                           <input type="file" accept="image/*" className="hidden"
                             onChange={e => { const f = e.target.files?.[0]; if (f) adicionarFoto(idx, f); e.target.value = '' }} />
                         </label>
@@ -393,7 +377,7 @@ export default function NovaVistoriaPage() {
           {/* Botões */}
           <div className="flex gap-3 pb-6">
             <button type="button" disabled={salvando} onClick={() => salvar('rascunho')}
-              className="btn border border-gray-200 text-gray-600 hover:bg-gray-50">
+              className="btn">
               {salvando ? 'Salvando...' : 'Salvar rascunho'}
             </button>
             <button type="button" disabled={salvando} onClick={() => salvar('concluida')}

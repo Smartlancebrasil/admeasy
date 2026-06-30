@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import AppLayout from '@/components/layout/AppLayout'
-import Topbar from '@/components/layout/Topbar'
 import { supabase } from '@/lib/supabase'
 import { Calculator, Edit2, X } from 'lucide-react'
 
@@ -62,20 +61,17 @@ export default function RescisaoPage() {
   const [avisoPrevio, setAvisoPrevio] = useState(true)
   const [gerandoPdf, setGerandoPdf] = useState(false)
 
-  // Caução editável
   const [editandoCaucao, setEditandoCaucao] = useState(false)
   const [caucaoEditado, setCaucaoEditado] = useState('')
   const caucaoValor = editandoCaucao && caucaoEditado !== ''
     ? parseFloat(caucaoEditado.replace(',', '.')) || 0
     : (contratoSel?.valor_caucao || 0)
 
-  // Encargos extras
   const [danosFisicos, setDanosFisicos] = useState('')
   const [danosFisicosDesc, setDanosFisicosDesc] = useState('')
   const [outros, setOutros] = useState('')
   const [outrosDesc, setOutrosDesc] = useState('')
 
-  // Assinaturas
   const [testemunha1Nome, setTestemunha1Nome] = useState('')
   const [testemunha1Cpf, setTestemunha1Cpf] = useState('')
   const [testemunha2Nome, setTestemunha2Nome] = useState('')
@@ -141,7 +137,6 @@ export default function RescisaoPage() {
     const MR = W - 15
     let y = 15
 
-    // CABEÇALHO
     if (org.logo_url) {
       try { doc.addImage(org.logo_url, 'JPEG', ML, y, 28, 14) } catch {}
     }
@@ -156,7 +151,6 @@ export default function RescisaoPage() {
     doc.setDrawColor(200).line(ML, y, MR, y)
     y += 6
 
-    // DADOS DO CONTRATO
     doc.setFillColor(230, 230, 230)
     doc.rect(ML, y, MR - ML, 6, 'F')
     doc.setFontSize(9).setFont('helvetica', 'bold')
@@ -194,7 +188,6 @@ export default function RescisaoPage() {
     }
     y += 3
 
-    // RESULTADO
     doc.setFillColor(230, 230, 230)
     doc.rect(ML, y, MR - ML, 6, 'F')
     doc.setFontSize(9).setFont('helvetica', 'bold')
@@ -242,7 +235,6 @@ export default function RescisaoPage() {
     doc.setTextColor(0)
     y += 10
 
-    // ASSINATURAS
     if (y > 220) { doc.addPage(); y = 15 }
     doc.setDrawColor(200).line(ML, y, MR, y)
     y += 8
@@ -283,231 +275,232 @@ export default function RescisaoPage() {
 
   return (
     <AppLayout>
-      <Topbar titulo="Calculadora de rescisão" />
-      <div className="flex-1 overflow-y-auto p-6">
-        <div className="grid grid-cols-2 gap-6">
-          {/* Seleção */}
-          <div className="card">
-            <h2 className="text-sm font-semibold mb-4 flex items-center gap-2">
-              <Calculator size={15} className="text-blue-500" />Selecione o contrato
-            </h2>
-            {loading ? (
-              <div className="text-sm text-gray-400">Carregando...</div>
-            ) : contratos.length === 0 ? (
-              <div className="text-sm text-gray-400">Nenhum contrato ativo</div>
-            ) : (
-              <div className="space-y-2">
-                {contratos.map(c => {
-                  const dias = diasRestantes(c.data_fim)
-                  return (
-                    <div key={c.id} onClick={() => { setContratoSel(c); setEditandoCaucao(false); setCaucaoEditado('') }}
-                      className={`p-3 rounded-lg border cursor-pointer transition-all ${contratoSel?.id === c.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="text-sm font-medium">#{c.numero} — {getTitulo(c.imovel)}</div>
-                          <div className="text-xs text-gray-400">{getNome(c.locatario)}</div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-sm font-semibold">{formatVal(c.valor_atual || c.valor_mensal)}</div>
-                          <div className={`text-xs ${dias < 0 ? 'text-red-500' : dias < 30 ? 'text-yellow-500' : 'text-gray-400'}`}>
-                            {dias < 0 ? `${Math.abs(dias)}d vencido` : `${dias}d restantes`}
+      <div style={{ background: '#0d1117', minHeight: '100vh' }} className="flex-1 overflow-y-auto p-6">
+        <div className="max-w-[1600px] mx-auto">
+
+          <h1 style={{ color: '#f4f4f3' }} className="text-lg font-medium mb-5">Calculadora de rescisão</h1>
+
+          <div className="grid grid-cols-2 gap-6">
+            <div className="card">
+              <h2 style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-4 flex items-center gap-2">
+                <Calculator size={15} style={{ color: '#5b9bf5' }} />Selecione o contrato
+              </h2>
+              {loading ? (
+                <div style={{ color: '#8b8d98' }} className="text-sm">Carregando...</div>
+              ) : contratos.length === 0 ? (
+                <div style={{ color: '#8b8d98' }} className="text-sm">Nenhum contrato ativo</div>
+              ) : (
+                <div className="space-y-2">
+                  {contratos.map(c => {
+                    const dias = diasRestantes(c.data_fim)
+                    const sel = contratoSel?.id === c.id
+                    return (
+                      <div key={c.id} onClick={() => { setContratoSel(c); setEditandoCaucao(false); setCaucaoEditado('') }}
+                        style={sel ? { border: '0.5px solid #2563eb', background: '#16243a' } : { border: '0.5px solid #2a2f3a' }}
+                        className="p-3 rounded-lg cursor-pointer transition-all hover:border-gray-500">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div style={{ color: '#f4f4f3' }} className="text-sm font-medium">#{c.numero} — {getTitulo(c.imovel)}</div>
+                            <div style={{ color: '#8b8d98' }} className="text-xs">{getNome(c.locatario)}</div>
+                          </div>
+                          <div className="text-right">
+                            <div style={{ color: '#f4f4f3' }} className="text-sm font-semibold">{formatVal(c.valor_atual || c.valor_mensal)}</div>
+                            <div style={{ color: dias < 0 ? '#ef4444' : dias < 30 ? '#f59e0b' : '#8b8d98' }} className="text-xs">
+                              {dias < 0 ? `${Math.abs(dias)}d vencido` : `${dias}d restantes`}
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Calculadora */}
-          <div>
-            {!contratoSel ? (
-              <div className="card text-center py-16 text-gray-400">
-                <Calculator size={36} className="mx-auto mb-3 opacity-30" />
-                <div className="font-medium text-gray-500">Selecione um contrato</div>
-              </div>
-            ) : (
-              <>
-                <div className="card mb-4">
-                  <h2 className="text-sm font-semibold mb-3">Parâmetros da rescisão</h2>
-                  <div className="space-y-3">
-                    <div>
-                      <label className="label">Quem está rescindindo?</label>
-                      <div className="flex gap-2">
-                        {[
-                          { val: 'locatario', label: 'Locatário' },
-                          { val: 'locador', label: 'Locador' },
-                          { val: 'mutuo', label: 'Mútuo acordo' },
-                        ].map(p => (
-                          <button key={p.val} onClick={() => setParte(p.val as any)}
-                            className={`flex-1 py-2 rounded-lg border text-xs font-medium transition-all ${parte === p.val ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
-                            {p.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <label className="label">Data da rescisão</label>
-                      <input className="input" type="date" value={dataRescisao} onChange={e => setDataRescisao(e.target.value)} />
-                    </div>
-
-                    {/* Caução editável */}
-                    <div>
-                      <label className="label">Caução depositada</label>
-                      <div className="flex items-center gap-2">
-                        {editandoCaucao ? (
-                          <>
-                            <span className="text-sm text-gray-400">R$</span>
-                            <input className="input flex-1" value={caucaoEditado}
-                              onChange={e => setCaucaoEditado(e.target.value)}
-                              placeholder={(contratoSel.valor_caucao || 0).toFixed(2)} autoFocus />
-                            <button onClick={() => { setEditandoCaucao(false); setCaucaoEditado('') }}
-                              className="text-gray-400 hover:text-gray-600"><X size={14} /></button>
-                          </>
-                        ) : (
-                          <>
-                            <span className="input flex-1 bg-gray-50 text-gray-700">{formatVal(caucaoValor)}</span>
-                            <button onClick={() => { setEditandoCaucao(true); setCaucaoEditado((contratoSel.valor_caucao || 0).toFixed(2)) }}
-                              className="text-gray-300 hover:text-blue-500 transition-colors" title="Editar caução">
-                              <Edit2 size={14} />
-                            </button>
-                          </>
-                        )}
-                      </div>
-                      {editandoCaucao && <p className="text-[10px] text-orange-500 mt-1">⚠ Valor editado manualmente para este cálculo</p>}
-                    </div>
-
-                    {/* Danos físicos */}
-                    <div>
-                      <label className="label">Danos físicos (R$)</label>
-                      <div className="grid grid-cols-2 gap-2">
-                        <input className="input" type="number" step="0.01" min="0"
-                          value={danosFisicos} onChange={e => setDanosFisicos(e.target.value)}
-                          placeholder="0,00" />
-                        <input className="input" value={danosFisicosDesc}
-                          onChange={e => setDanosFisicosDesc(e.target.value)}
-                          placeholder="Descrição (ex: pintura, vidro...)" />
-                      </div>
-                    </div>
-
-                    {/* Outros */}
-                    <div>
-                      <label className="label">Outros (R$)</label>
-                      <div className="grid grid-cols-2 gap-2">
-                        <input className="input" type="number" step="0.01" min="0"
-                          value={outros} onChange={e => setOutros(e.target.value)}
-                          placeholder="0,00" />
-                        <input className="input" value={outrosDesc}
-                          onChange={e => setOutrosDesc(e.target.value)}
-                          placeholder="Descrição..." />
-                      </div>
-                    </div>
-
-                    {parte === 'locatario' && (
-                      <label className="flex items-center gap-2 text-sm cursor-pointer">
-                        <input type="checkbox" checked={!avisoPrevio} onChange={e => setAvisoPrevio(!e.target.checked)} />
-                        Aviso prévio não cumprido ({contratoSel.aviso_previo_dias} dias)
-                      </label>
-                    )}
-                  </div>
+                    )
+                  })}
                 </div>
+              )}
+            </div>
 
-                {resultado && (
+            <div>
+              {!contratoSel ? (
+                <div className="card text-center py-16" style={{ color: '#8b8d98' }}>
+                  <Calculator size={36} className="mx-auto mb-3 opacity-30" />
+                  <div style={{ color: '#c3c2b7' }} className="font-medium">Selecione um contrato</div>
+                </div>
+              ) : (
+                <>
                   <div className="card mb-4">
-                    <h2 className="text-sm font-semibold mb-3">Resultado da rescisão</h2>
-
-                    <div className="bg-gray-50 rounded-lg p-3 mb-4 text-xs text-gray-600 space-y-1">
-                      <div className="flex justify-between"><span>Valor mensal atual</span><span className="font-medium">{formatVal(contratoSel.valor_atual || contratoSel.valor_mensal)}</span></div>
-                      <div className="flex justify-between"><span>Caução depositada</span><span className="font-medium">{formatVal(caucaoValor)}</span></div>
-                      <div className="flex justify-between"><span>Multa contratual</span><span className="font-medium">{parte === 'locatario' ? contratoSel.multa_rescisao_locatario : contratoSel.multa_rescisao_locador} aluguéis</span></div>
-                      <div className="flex justify-between"><span>Dias restantes no contrato</span><span className="font-medium">{Math.max(0, diasRestantes(contratoSel.data_fim))} dias</span></div>
-                    </div>
-
-                    <div className="space-y-1 mb-4">
-                      {resultado.proporcional > 0 && (
-                        <div className="flex justify-between py-2 border-b border-gray-100 text-sm">
-                          <span className="text-gray-500">Aluguel proporcional</span>
-                          <span className="text-red-500 font-medium">+ {formatVal(resultado.proporcional)}</span>
-                        </div>
-                      )}
-                      {resultado.multaValor > 0 && (
-                        <div className="flex justify-between py-2 border-b border-gray-100 text-sm">
-                          <span className="text-gray-500">Multa rescisória</span>
-                          <span className="text-red-500 font-medium">+ {formatVal(resultado.multaValor)}</span>
-                        </div>
-                      )}
-                      {resultado.avisoPrevioValor > 0 && (
-                        <div className="flex justify-between py-2 border-b border-gray-100 text-sm">
-                          <span className="text-gray-500">Aviso prévio não cumprido</span>
-                          <span className="text-red-500 font-medium">+ {formatVal(resultado.avisoPrevioValor)}</span>
-                        </div>
-                      )}
-                      {resultado.danosFisicosVal > 0 && (
-                        <div className="flex justify-between py-2 border-b border-gray-100 text-sm">
-                          <span className="text-gray-500">Danos físicos{danosFisicosDesc ? `: ${danosFisicosDesc}` : ''}</span>
-                          <span className="text-red-500 font-medium">+ {formatVal(resultado.danosFisicosVal)}</span>
-                        </div>
-                      )}
-                      {resultado.outrosVal > 0 && (
-                        <div className="flex justify-between py-2 border-b border-gray-100 text-sm">
-                          <span className="text-gray-500">Outros{outrosDesc ? `: ${outrosDesc}` : ''}</span>
-                          <span className="text-red-500 font-medium">+ {formatVal(resultado.outrosVal)}</span>
-                        </div>
-                      )}
-                      {resultado.caucaoValor > 0 && (
-                        <div className="flex justify-between py-2 border-b border-gray-100 text-sm">
-                          <span className="text-gray-500">Caução a devolver</span>
-                          <span className="text-green-600 font-medium">− {formatVal(resultado.caucaoValor)}</span>
-                        </div>
-                      )}
-                      <div className="flex justify-between py-3 border-t-2 border-gray-200">
-                        <span className="font-semibold text-sm">
-                          {resultado.total > 0 ? `Total a pagar pelo ${resultado.quemPaga}` : `Total a receber pelo locatário`}
-                        </span>
-                        <span className={`font-bold text-lg ${resultado.total > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                          {resultado.total < 0 ? '− ' : ''}{formatVal(Math.abs(resultado.total))}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-xs text-blue-700 mb-4">
-                      <strong>Base legal:</strong> Lei 8.245/91 — Art. 4º (rescisão antecipada) e Art. 6º (aviso prévio de 30 dias). Este cálculo é uma estimativa. Confirme com assessoria jurídica.
-                    </div>
-
-                    {/* Testemunhas */}
-                    <div className="border-t border-gray-100 pt-4">
-                      <p className="text-xs font-semibold text-gray-500 mb-3">Testemunhas (para o PDF)</p>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="label">Testemunha 1 — Nome</label>
-                          <input className="input" value={testemunha1Nome} onChange={e => setTestemunha1Nome(e.target.value)} />
-                        </div>
-                        <div>
-                          <label className="label">Testemunha 1 — CPF</label>
-                          <input className="input" value={testemunha1Cpf} onChange={e => setTestemunha1Cpf(e.target.value)} />
-                        </div>
-                        <div>
-                          <label className="label">Testemunha 2 — Nome</label>
-                          <input className="input" value={testemunha2Nome} onChange={e => setTestemunha2Nome(e.target.value)} />
-                        </div>
-                        <div>
-                          <label className="label">Testemunha 2 — CPF</label>
-                          <input className="input" value={testemunha2Cpf} onChange={e => setTestemunha2Cpf(e.target.value)} />
+                    <h2 style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-3">Parâmetros da rescisão</h2>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="label">Quem está rescindindo?</label>
+                        <div className="flex gap-2">
+                          {[
+                            { val: 'locatario', label: 'Locatário' },
+                            { val: 'locador', label: 'Locador' },
+                            { val: 'mutuo', label: 'Mútuo acordo' },
+                          ].map(p => (
+                            <button key={p.val} onClick={() => setParte(p.val as any)}
+                              style={parte === p.val ? { background: '#2563eb', color: '#fff', border: '0.5px solid #2563eb' } : { border: '0.5px solid #2a2f3a', color: '#a8aab5' }}
+                              className="flex-1 py-2 rounded-lg text-xs font-medium transition-all">
+                              {p.label}
+                            </button>
+                          ))}
                         </div>
                       </div>
-                    </div>
+                      <div>
+                        <label className="label">Data da rescisão</label>
+                        <input className="input" type="date" value={dataRescisao} onChange={e => setDataRescisao(e.target.value)} />
+                      </div>
 
-                    <div className="flex gap-2 mt-4">
-                      <button onClick={gerarPdf} disabled={gerandoPdf} className="btn btn-primary flex-1">
-                        📄 {gerandoPdf ? 'Gerando PDF...' : 'Gerar cálculo PDF'}
-                      </button>
+                      <div>
+                        <label className="label">Caução depositada</label>
+                        <div className="flex items-center gap-2">
+                          {editandoCaucao ? (
+                            <>
+                              <span style={{ color: '#8b8d98' }} className="text-sm">R$</span>
+                              <input className="input flex-1" value={caucaoEditado}
+                                onChange={e => setCaucaoEditado(e.target.value)}
+                                placeholder={(contratoSel.valor_caucao || 0).toFixed(2)} autoFocus />
+                              <button onClick={() => { setEditandoCaucao(false); setCaucaoEditado('') }}
+                                style={{ color: '#5b5e6b' }} className="hover:text-gray-300"><X size={14} /></button>
+                            </>
+                          ) : (
+                            <>
+                              <span className="input flex-1" style={{ background: '#0d1117', color: '#c3c2b7' }}>{formatVal(caucaoValor)}</span>
+                              <button onClick={() => { setEditandoCaucao(true); setCaucaoEditado((contratoSel.valor_caucao || 0).toFixed(2)) }}
+                                style={{ color: '#5b5e6b' }} className="hover:text-blue-400 transition-colors" title="Editar caução">
+                                <Edit2 size={14} />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                        {editandoCaucao && <p style={{ color: '#f59e0b' }} className="text-[10px] mt-1">⚠ Valor editado manualmente para este cálculo</p>}
+                      </div>
+
+                      <div>
+                        <label className="label">Danos físicos (R$)</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <input className="input" type="number" step="0.01" min="0"
+                            value={danosFisicos} onChange={e => setDanosFisicos(e.target.value)}
+                            placeholder="0,00" />
+                          <input className="input" value={danosFisicosDesc}
+                            onChange={e => setDanosFisicosDesc(e.target.value)}
+                            placeholder="Descrição (ex: pintura, vidro...)" />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="label">Outros (R$)</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <input className="input" type="number" step="0.01" min="0"
+                            value={outros} onChange={e => setOutros(e.target.value)}
+                            placeholder="0,00" />
+                          <input className="input" value={outrosDesc}
+                            onChange={e => setOutrosDesc(e.target.value)}
+                            placeholder="Descrição..." />
+                        </div>
+                      </div>
+
+                      {parte === 'locatario' && (
+                        <label style={{ color: '#c3c2b7' }} className="flex items-center gap-2 text-sm cursor-pointer">
+                          <input type="checkbox" checked={!avisoPrevio} onChange={e => setAvisoPrevio(!e.target.checked)} />
+                          Aviso prévio não cumprido ({contratoSel.aviso_previo_dias} dias)
+                        </label>
+                      )}
                     </div>
                   </div>
-                )}
-              </>
-            )}
+
+                  {resultado && (
+                    <div className="card mb-4">
+                      <h2 style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-3">Resultado da rescisão</h2>
+
+                      <div style={{ background: '#0d1117', border: '0.5px solid #2a2f3a' }} className="rounded-lg p-3 mb-4 text-xs space-y-1">
+                        <div className="flex justify-between" style={{ color: '#8b8d98' }}><span>Valor mensal atual</span><span style={{ color: '#f4f4f3' }} className="font-medium">{formatVal(contratoSel.valor_atual || contratoSel.valor_mensal)}</span></div>
+                        <div className="flex justify-between" style={{ color: '#8b8d98' }}><span>Caução depositada</span><span style={{ color: '#f4f4f3' }} className="font-medium">{formatVal(caucaoValor)}</span></div>
+                        <div className="flex justify-between" style={{ color: '#8b8d98' }}><span>Multa contratual</span><span style={{ color: '#f4f4f3' }} className="font-medium">{parte === 'locatario' ? contratoSel.multa_rescisao_locatario : contratoSel.multa_rescisao_locador} aluguéis</span></div>
+                        <div className="flex justify-between" style={{ color: '#8b8d98' }}><span>Dias restantes no contrato</span><span style={{ color: '#f4f4f3' }} className="font-medium">{Math.max(0, diasRestantes(contratoSel.data_fim))} dias</span></div>
+                      </div>
+
+                      <div className="space-y-1 mb-4">
+                        {resultado.proporcional > 0 && (
+                          <div style={{ borderBottom: '0.5px solid #1c2128' }} className="flex justify-between py-2 text-sm">
+                            <span style={{ color: '#8b8d98' }}>Aluguel proporcional</span>
+                            <span style={{ color: '#ef4444' }} className="font-medium">+ {formatVal(resultado.proporcional)}</span>
+                          </div>
+                        )}
+                        {resultado.multaValor > 0 && (
+                          <div style={{ borderBottom: '0.5px solid #1c2128' }} className="flex justify-between py-2 text-sm">
+                            <span style={{ color: '#8b8d98' }}>Multa rescisória</span>
+                            <span style={{ color: '#ef4444' }} className="font-medium">+ {formatVal(resultado.multaValor)}</span>
+                          </div>
+                        )}
+                        {resultado.avisoPrevioValor > 0 && (
+                          <div style={{ borderBottom: '0.5px solid #1c2128' }} className="flex justify-between py-2 text-sm">
+                            <span style={{ color: '#8b8d98' }}>Aviso prévio não cumprido</span>
+                            <span style={{ color: '#ef4444' }} className="font-medium">+ {formatVal(resultado.avisoPrevioValor)}</span>
+                          </div>
+                        )}
+                        {resultado.danosFisicosVal > 0 && (
+                          <div style={{ borderBottom: '0.5px solid #1c2128' }} className="flex justify-between py-2 text-sm">
+                            <span style={{ color: '#8b8d98' }}>Danos físicos{danosFisicosDesc ? `: ${danosFisicosDesc}` : ''}</span>
+                            <span style={{ color: '#ef4444' }} className="font-medium">+ {formatVal(resultado.danosFisicosVal)}</span>
+                          </div>
+                        )}
+                        {resultado.outrosVal > 0 && (
+                          <div style={{ borderBottom: '0.5px solid #1c2128' }} className="flex justify-between py-2 text-sm">
+                            <span style={{ color: '#8b8d98' }}>Outros{outrosDesc ? `: ${outrosDesc}` : ''}</span>
+                            <span style={{ color: '#ef4444' }} className="font-medium">+ {formatVal(resultado.outrosVal)}</span>
+                          </div>
+                        )}
+                        {resultado.caucaoValor > 0 && (
+                          <div style={{ borderBottom: '0.5px solid #1c2128' }} className="flex justify-between py-2 text-sm">
+                            <span style={{ color: '#8b8d98' }}>Caução a devolver</span>
+                            <span style={{ color: '#3fb950' }} className="font-medium">− {formatVal(resultado.caucaoValor)}</span>
+                          </div>
+                        )}
+                        <div style={{ borderTop: '2px solid #2a2f3a' }} className="flex justify-between py-3">
+                          <span style={{ color: '#f4f4f3' }} className="font-semibold text-sm">
+                            {resultado.total > 0 ? `Total a pagar pelo ${resultado.quemPaga}` : `Total a receber pelo locatário`}
+                          </span>
+                          <span style={{ color: resultado.total > 0 ? '#ef4444' : '#3fb950' }} className="font-bold text-lg">
+                            {resultado.total < 0 ? '− ' : ''}{formatVal(Math.abs(resultado.total))}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div style={{ background: '#16243a', border: '0.5px solid #1e3a5f', color: '#7daee8' }} className="rounded-lg p-3 text-xs mb-4">
+                        <strong>Base legal:</strong> Lei 8.245/91 — Art. 4º (rescisão antecipada) e Art. 6º (aviso prévio de 30 dias). Este cálculo é uma estimativa. Confirme com assessoria jurídica.
+                      </div>
+
+                      <div style={{ borderTop: '0.5px solid #2a2f3a' }} className="pt-4">
+                        <p style={{ color: '#8b8d98' }} className="text-xs font-semibold mb-3">Testemunhas (para o PDF)</p>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="label">Testemunha 1 — Nome</label>
+                            <input className="input" value={testemunha1Nome} onChange={e => setTestemunha1Nome(e.target.value)} />
+                          </div>
+                          <div>
+                            <label className="label">Testemunha 1 — CPF</label>
+                            <input className="input" value={testemunha1Cpf} onChange={e => setTestemunha1Cpf(e.target.value)} />
+                          </div>
+                          <div>
+                            <label className="label">Testemunha 2 — Nome</label>
+                            <input className="input" value={testemunha2Nome} onChange={e => setTestemunha2Nome(e.target.value)} />
+                          </div>
+                          <div>
+                            <label className="label">Testemunha 2 — CPF</label>
+                            <input className="input" value={testemunha2Cpf} onChange={e => setTestemunha2Cpf(e.target.value)} />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2 mt-4">
+                        <button onClick={gerarPdf} disabled={gerandoPdf} className="btn btn-primary flex-1">
+                          📄 {gerandoPdf ? 'Gerando PDF...' : 'Gerar cálculo PDF'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>

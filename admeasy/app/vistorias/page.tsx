@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import AppLayout from '@/components/layout/AppLayout'
-import Topbar from '@/components/layout/Topbar'
 import { supabase } from '@/lib/supabase'
 import { Plus, ClipboardList, ArrowDownToLine, ArrowUpFromLine, FileText } from 'lucide-react'
 
@@ -38,75 +37,81 @@ export default function VistoriasPage() {
 
   return (
     <AppLayout>
-      <Topbar titulo="Vistorias" />
-      <div className="flex-1 overflow-y-auto p-6">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex gap-2">
-            {(['todos', 'entrada', 'saida'] as const).map(f => (
-              <button key={f} onClick={() => setFiltro(f)}
-                className={`px-3 py-1.5 rounded-lg text-sm transition-all ${filtro === f ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
-                {f === 'todos' ? 'Todas' : f === 'entrada' ? 'Entrada' : 'Saída'}
-              </button>
-            ))}
-          </div>
-          <Link href="/vistorias/nova" className="btn btn-primary">
-            <Plus size={14} />Nova vistoria
-          </Link>
-        </div>
+      <div style={{ background: '#0d1117', minHeight: '100vh' }} className="flex-1 overflow-y-auto p-6">
+        <div className="max-w-[1600px] mx-auto">
 
-        {loading ? (
-          <div className="text-center py-12 text-gray-400">Carregando...</div>
-        ) : filtradas.length === 0 ? (
-          <div className="text-center py-16">
-            <ClipboardList size={40} className="mx-auto text-gray-300 mb-3" />
-            <p className="text-gray-400 text-sm">Nenhuma vistoria encontrada</p>
-            <Link href="/vistorias/nova" className="btn btn-primary mt-4 inline-flex">
+          <h1 style={{ color: '#f4f4f3' }} className="text-lg font-medium mb-5">Vistorias</h1>
+
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex gap-2">
+              {(['todos', 'entrada', 'saida'] as const).map(f => (
+                <button key={f} onClick={() => setFiltro(f)}
+                  style={filtro === f ? { background: '#2563eb', color: '#fff' } : { background: '#161b22', border: '0.5px solid #2a2f3a', color: '#a8aab5' }}
+                  className="px-3 py-1.5 rounded-lg text-sm transition-all">
+                  {f === 'todos' ? 'Todas' : f === 'entrada' ? 'Entrada' : 'Saída'}
+                </button>
+              ))}
+            </div>
+            <Link href="/vistorias/nova" className="btn btn-primary">
               <Plus size={14} />Nova vistoria
             </Link>
           </div>
-        ) : (
-          <div className="card p-0 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100">
-                  {['Tipo', 'Imóvel', 'Data', 'Vistoriador', 'Status', ''].map(h => (
-                    <th key={h} className="text-left px-4 py-3 text-xs font-medium text-gray-400">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtradas.map(v => (
-                  <tr key={v.id} className="border-b border-gray-50 hover:bg-gray-50">
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium ${v.tipo === 'entrada' ? 'bg-green-50 text-green-700' : 'bg-orange-50 text-orange-700'}`}>
-                        {v.tipo === 'entrada' ? <ArrowDownToLine size={11} /> : <ArrowUpFromLine size={11} />}
-                        {v.tipo === 'entrada' ? 'Entrada' : 'Saída'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-gray-900">{v.imovel?.endereco}, {v.imovel?.numero}</div>
-                      <div className="text-xs text-gray-400">{v.imovel?.bairro}</div>
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">
-                      {new Date(v.data_vistoria + 'T12:00:00').toLocaleDateString('pt-BR')}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">{v.vistoriador?.nome || '—'}</td>
-                    <td className="px-4 py-3">
-                      <span className={`badge ${v.status === 'concluida' ? 'badge-green' : 'badge-yellow'}`}>
-                        {v.status === 'concluida' ? 'Concluída' : 'Rascunho'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <Link href={`/vistorias/${v.id}`} className="btn btn-sm">
-                        <FileText size={12} />Abrir
-                      </Link>
-                    </td>
+
+          {loading ? (
+            <div style={{ color: '#8b8d98' }} className="text-center py-12">Carregando...</div>
+          ) : filtradas.length === 0 ? (
+            <div className="text-center py-16">
+              <ClipboardList size={40} className="mx-auto mb-3 opacity-30" style={{ color: '#8b8d98' }} />
+              <p style={{ color: '#8b8d98' }} className="text-sm">Nenhuma vistoria encontrada</p>
+              <Link href="/vistorias/nova" className="btn btn-primary mt-4 inline-flex">
+                <Plus size={14} />Nova vistoria
+              </Link>
+            </div>
+          ) : (
+            <div className="card p-0 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr style={{ borderBottom: '0.5px solid #2a2f3a' }}>
+                    {['Tipo', 'Imóvel', 'Data', 'Vistoriador', 'Status', ''].map(h => (
+                      <th key={h} style={{ color: '#8b8d98' }} className="text-left px-4 py-3 text-xs font-medium">{h}</th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                </thead>
+                <tbody>
+                  {filtradas.map(v => (
+                    <tr key={v.id} style={{ borderBottom: '0.5px solid #1c2128' }} className="hover:bg-[#161b22]">
+                      <td className="px-4 py-3">
+                        <span style={v.tipo === 'entrada' ? { background: '#1a2e1f', color: '#3fb950' } : { background: '#2e2515', color: '#f59e0b' }}
+                          className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium">
+                          {v.tipo === 'entrada' ? <ArrowDownToLine size={11} /> : <ArrowUpFromLine size={11} />}
+                          {v.tipo === 'entrada' ? 'Entrada' : 'Saída'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div style={{ color: '#f4f4f3' }} className="font-medium">{v.imovel?.endereco}, {v.imovel?.numero}</div>
+                        <div style={{ color: '#8b8d98' }} className="text-xs">{v.imovel?.bairro}</div>
+                      </td>
+                      <td style={{ color: '#c3c2b7' }} className="px-4 py-3">
+                        {new Date(v.data_vistoria + 'T12:00:00').toLocaleDateString('pt-BR')}
+                      </td>
+                      <td style={{ color: '#c3c2b7' }} className="px-4 py-3">{v.vistoriador?.nome || '—'}</td>
+                      <td className="px-4 py-3">
+                        <span className={`badge ${v.status === 'concluida' ? 'badge-green' : 'badge-yellow'}`}>
+                          {v.status === 'concluida' ? 'Concluída' : 'Rascunho'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Link href={`/vistorias/${v.id}`} className="btn btn-sm">
+                          <FileText size={12} />Abrir
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
     </AppLayout>
   )
