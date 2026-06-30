@@ -209,11 +209,18 @@ export default function ReajustePage() {
                             <div style={{ color: '#8b8d98' }} className="text-xs">valor atual</div>
                           </div>
                         </div>
-                        {c.proximo_reajuste && (
-                          <div style={{ color: '#5b5e6b' }} className="text-[10px] mt-1">
-                            Próximo reajuste: {new Intl.DateTimeFormat('pt-BR').format(new Date(c.proximo_reajuste + 'T00:00:00'))}
-                          </div>
-                        )}
+                        {c.proximo_reajuste && (() => {
+                          const hoje = new Date(); hoje.setHours(0,0,0,0)
+                          const dataReaj = new Date(c.proximo_reajuste + 'T00:00:00')
+                          const dias = Math.ceil((dataReaj.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24))
+                          const cor = dias <= 5 ? '#ef4444' : dias <= 30 ? '#f59e0b' : '#3fb950'
+                          const label = dias <= 5 ? `⚠ Reajuste em ${dias} dia${dias !== 1 ? 's' : ''}` : `Próximo reajuste em ${dias} dias`
+                          return (
+                            <div style={{ color: cor, fontWeight: dias <= 5 ? 600 : 400 }} className="text-[10px] mt-1">
+                              {label}
+                            </div>
+                          )
+                        })()}
                       </div>
                     )
                   })}
