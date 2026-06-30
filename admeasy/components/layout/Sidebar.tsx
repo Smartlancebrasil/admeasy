@@ -8,7 +8,8 @@ import { supabase } from '@/lib/supabase'
 import {
   LayoutDashboard, Building2, Users, FileText, TrendingUp,
   Calculator, Wrench, Truck, Calendar, DollarSign,
-  UserCircle, BuildingIcon, Settings, ChevronRight, LogOut, FileSearch, ShieldCheck, Scale
+  UserCircle, BuildingIcon, Settings, LogOut, FileSearch,
+  ShieldCheck, Scale
 } from 'lucide-react'
 
 const navItems = [
@@ -61,13 +62,13 @@ export default function Sidebar() {
   }, [])
 
   return (
-    <aside className="w-56 min-w-[224px] bg-white border-r border-gray-200 flex flex-col h-screen sticky top-0">
-      <div className="p-4 border-b border-gray-100">
+    <aside style={{ background: '#0d1117', borderRight: '0.5px solid #2a2f3a' }} className="w-56 min-w-[224px] flex flex-col h-screen sticky top-0">
+      <div style={{ borderBottom: '0.5px solid #2a2f3a' }} className="p-4">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white text-sm">🏢</div>
+          <div style={{ background: '#2563eb' }} className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm">🏢</div>
           <div>
-            <div className="text-sm font-semibold text-gray-900">AdmEasy</div>
-            <div className="text-[10px] text-gray-400">Gestão imobiliária</div>
+            <div style={{ color: '#f4f4f3' }} className="text-sm font-semibold">AdmEasy</div>
+            <div style={{ color: '#8b8d98' }} className="text-[10px]">Gestão imobiliária</div>
           </div>
         </div>
       </div>
@@ -76,7 +77,7 @@ export default function Sidebar() {
         {navItems.map((item, i) => {
           if ('section' in item) {
             return (
-              <div key={i} className="text-[10px] font-medium text-gray-400 uppercase tracking-wider px-2 pt-4 pb-1">
+              <div key={i} style={{ color: '#5b5e6b' }} className="text-[10px] font-medium uppercase tracking-wider px-2 pt-4 pb-1">
                 {item.section}
               </div>
             )
@@ -85,29 +86,29 @@ export default function Sidebar() {
           const active = pathname === item.href || pathname.startsWith(item.href + '/')
           return (
             <Link key={item.href} href={item.href}
-              className={cn('flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm mb-0.5 transition-all',
-                active ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900')}>
+              style={active ? { background: '#1c2530', color: '#5b9bf5' } : { color: '#a8aab5' }}
+              className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm mb-0.5 transition-all hover:bg-[#161b22]">
               <Icon size={15} className="flex-shrink-0" />
               <span className="flex-1">{item.label}</span>
               {item.badge && (
-                <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-medium">{item.badge}</span>
+                <span style={{ background: '#ef4444' }} className="text-white text-[10px] px-1.5 py-0.5 rounded-full font-medium">{item.badge}</span>
               )}
             </Link>
           )
         })}
       </nav>
 
-      <div className="p-3 border-t border-gray-100">
-        <div className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-gray-50">
-          <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-medium">
+      <div style={{ borderTop: '0.5px solid #2a2f3a' }} className="p-3">
+        <div className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-[#161b22]">
+          <div style={{ background: '#1c2530', color: '#5b9bf5' }} className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium">
             {iniciaisUsuario}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-xs font-medium text-gray-900 truncate">{nomeUsuario}</div>
-            <div className="text-[10px] text-gray-400 capitalize">{perfilUsuario}</div>
+            <div style={{ color: '#f4f4f3' }} className="text-xs font-medium truncate">{nomeUsuario}</div>
+            <div style={{ color: '#8b8d98' }} className="text-[10px] capitalize">{perfilUsuario}</div>
           </div>
           <button onClick={async () => { await supabase.auth.signOut(); window.location.href = '/login' }}
-            title="Sair" className="text-gray-300 hover:text-red-500 transition-colors">
+            title="Sair" style={{ color: '#5b5e6b' }} className="hover:text-red-400 transition-colors">
             <LogOut size={13} />
           </button>
         </div>

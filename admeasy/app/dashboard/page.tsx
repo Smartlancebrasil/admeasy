@@ -62,6 +62,10 @@ export default function DashboardPage() {
   const [processosValorTotal, setProcessosValorTotal] = useState(0)
 
   const [evolucaoCarteira, setEvolucaoCarteira] = useState<{ mes: string; imoveis: number; receita: number }[]>([])
+  const [faturamentoTotal, setFaturamentoTotal] = useState(0)
+  const [ticketMedioLocacoes, setTicketMedioLocacoes] = useState(0)
+  const [ticketMedioAdm, setTicketMedioAdm] = useState(0)
+  const [rankingBairros, setRankingBairros] = useState<{ bairro: string; qtd: number }[]>([])
 
   const evoChartRef = useRef<HTMLCanvasElement>(null)
   const statusChartRef = useRef<HTMLCanvasElement>(null)
@@ -128,7 +132,7 @@ export default function DashboardPage() {
 
     const { data: contratos } = await supabase
       .from('contratos')
-      .select('id, numero, data_fim, data_inicio, status, valor_atual, valor_mensal, taxa_administracao, imovel:imoveis(titulo), locatario:clientes!contratos_locatario_id_fkey(nome)')
+      .select('id, numero, data_fim, data_inicio, status, valor_atual, valor_mensal, taxa_administracao, imovel:imoveis(titulo, bairro), locatario:clientes!contratos_locatario_id_fkey(nome)')
       .eq('organization_id', ORG_ID)
 
     if (contratos) {
@@ -141,6 +145,29 @@ export default function DashboardPage() {
         return acc + (valor * taxaPct / 100)
       }, 0)
       setTaxaAdmTicketMedio(ativos.length > 0 ? somaTaxas / ativos.length : 0)
+
+      // Faturamento total (soma de toda a taxa de administracao dos contratos ativos)
+      setFaturamentoTotal(somaTaxas)
+
+      // Ticket medio de administracao = faturamento / qtd contratos
+      setTicketMedioAdm(ativos.length > 0 ? somaTaxas / ativos.length : 0)
+
+      // Ticket medio das locacoes = soma dos alugueis / qtd contratos
+      const somaAlugueis = ativos.reduce((acc, c) => acc + (c.valor_atual || c.valor_mensal || 0), 0)
+      setTicketMedioLocacoes(ativos.length > 0 ? somaAlugueis / ativos.length : 0)
+
+      // Ranking de bairros (contratos ativos)
+      const bairrosMap: Record<string, number> = {}
+      ativos.forEach(c => {
+        const im = Array.isArray(c.imovel) ? c.imovel[0] : c.imovel
+        const bairro = im?.bairro || 'Não informado'
+        bairrosMap[bairro] = (bairrosMap[bairro] || 0) + 1
+      })
+      const ranking = Object.entries(bairrosMap)
+        .map(([bairro, qtd]) => ({ bairro, qtd }))
+        .sort((a, b) => b.qtd - a.qtd)
+        .slice(0, 6)
+      setRankingBairros(ranking)
 
       const vencidos = contratos.filter(c => c.status === 'ativo' && diasEntre(c.data_fim) < 0)
       setContratosVencidos(vencidos)
@@ -288,6 +315,25 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          {/* Faturamento e tickets médios */}
+          <div className="grid grid-cols-3 gap-3 mb-3">
+            <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-xl p-3.5">
+              <div style={{ color: '#8b8d98' }} className="flex items-center gap-1.5 text-[11px] mb-1.5"><Wallet size={12} />Faturamento (taxa adm.)</div>
+              <div style={{ color: '#3fb950' }} className="text-xl font-medium">{formatVal(faturamentoTotal)}</div>
+              <div style={{ color: '#8b8d98' }} className="text-[10px] mt-1.5">{contratosAtivos} contratos ativos</div>
+            </div>
+            <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-xl p-3.5">
+              <div style={{ color: '#8b8d98' }} className="flex items-center gap-1.5 text-[11px] mb-1.5"><TrendingUp size={12} />Ticket médio adm.</div>
+              <div style={{ color: '#f4f4f3' }} className="text-xl font-medium">{formatVal(ticketMedioAdm)}</div>
+              <div style={{ color: '#8b8d98' }} className="text-[10px] mt-1.5">Faturamento ÷ contratos</div>
+            </div>
+            <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-xl p-3.5">
+              <div style={{ color: '#8b8d98' }} className="flex items-center gap-1.5 text-[11px] mb-1.5"><Building2 size={12} />Ticket médio das locações</div>
+              <div style={{ color: '#f4f4f3' }} className="text-xl font-medium">{formatVal(ticketMedioLocacoes)}</div>
+              <div style={{ color: '#8b8d98' }} className="text-[10px] mt-1.5">Valor médio dos aluguéis</div>
+            </div>
+          </div>
+
           {/* Gráficos */}
           <div className="grid grid-cols-[1.4fr_1fr] gap-3 mb-3">
             <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-xl p-4">
@@ -313,11 +359,11 @@ export default function DashboardPage() {
           </div>
 
           {/* Painéis inferiores */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-xl p-4">
               <div className="flex items-center justify-between mb-2.5">
                 <p style={{ color: '#f4f4f3' }} className="text-xs font-medium">Cobranças do mês</p>
-                <Link href="/financeiro" style={{ color: '#3987e5' }} className="text-[11px] hover:underline">Ver financeiro →</Link>
+                <Link href="/financeiro" style={{ color: '#3987e5' }} className="text-[11px] hover:underline">Ver →</Link>
               </div>
 
               {/* Totais resumidos */}
@@ -383,6 +429,34 @@ export default function DashboardPage() {
                   <p style={{ color: '#8b8d98' }} className="text-[11px] text-center py-4">Nenhum contrato vencendo nos próximos 30 dias</p>
                 )}
               </div>
+            </div>
+
+            <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-xl p-4">
+              <div className="flex items-center justify-between mb-2.5">
+                <p style={{ color: '#f4f4f3' }} className="text-xs font-medium">Ranking de bairros</p>
+                <span style={{ color: '#8b8d98' }} className="text-[11px]">por contratos</span>
+              </div>
+              {rankingBairros.length === 0 ? (
+                <p style={{ color: '#8b8d98' }} className="text-[11px] text-center py-4">Nenhum contrato ativo</p>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {rankingBairros.map((b, i) => {
+                    const maxQtd = rankingBairros[0]?.qtd || 1
+                    const largura = (b.qtd / maxQtd) * 100
+                    return (
+                      <div key={i}>
+                        <div className="flex items-center justify-between mb-1">
+                          <span style={{ color: '#c3c2b7' }} className="text-[11px]">{b.bairro}</span>
+                          <span style={{ color: '#f4f4f3' }} className="text-[11px] font-medium">{b.qtd}</span>
+                        </div>
+                        <div style={{ background: '#0d1117', height: 5, borderRadius: 3 }}>
+                          <div style={{ background: '#2a78d6', width: `${largura}%`, height: 5, borderRadius: 3 }} />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           </div>
 
