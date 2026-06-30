@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import AppLayout from '@/components/layout/AppLayout'
-import Topbar from '@/components/layout/Topbar'
 import { supabase } from '@/lib/supabase'
 import { Plus, X, Edit2, Save, Wrench, ChevronDown, ChevronUp } from 'lucide-react'
 import { registrarLog } from '@/lib/logs'
@@ -43,10 +42,10 @@ const statusCor: Record<string,string> = {
   aberta: 'badge-blue', recebida: 'badge-purple', aguardando_locador: 'badge-yellow',
   autorizada: 'badge-green', em_execucao: 'badge-purple', concluida: 'badge-green', recusada: 'badge-red',
 }
-const urgenciaCor: Record<string,string> = {
-  alta: 'text-red-600 bg-red-50 border-red-200',
-  media: 'text-yellow-600 bg-yellow-50 border-yellow-200',
-  baixa: 'text-green-600 bg-green-50 border-green-200',
+const urgenciaCor: Record<string, { color: string; bg: string; border: string }> = {
+  alta: { color: '#ef4444', bg: '#2e1717', border: '#4a2424' },
+  media: { color: '#f59e0b', bg: '#2e2515', border: '#4a3a1f' },
+  baixa: { color: '#3fb950', bg: '#1a2e1f', border: '#2d4a35' },
 }
 
 const tipos = ['vazamento','eletrica','hidraulica','esquadria','pintura','eletrodomestico','outro']
@@ -60,15 +59,14 @@ function ProgressBar({ status }: { status: string }) {
     <div className="mt-2">
       <div className="flex gap-1">
         {progSteps.map((s,i) => (
-          <div key={s} className={`flex-1 h-1.5 rounded-full ${
-            status === 'recusada' ? 'bg-red-300' :
-            i < idx ? 'bg-blue-500' : i === idx ? 'bg-blue-400' : 'bg-gray-200'
-          }`} />
+          <div key={s} style={{
+            background: status === 'recusada' ? '#5c2424' : i < idx ? '#2563eb' : i === idx ? '#3987e5' : '#2a2f3a'
+          }} className="flex-1 h-1.5 rounded-full" />
         ))}
       </div>
       <div className="flex justify-between mt-0.5">
         {progSteps.map(s => (
-          <div key={s} className="text-[8px] text-gray-400 flex-1 text-center">{statusLabel[s].split(' ')[0]}</div>
+          <div key={s} style={{ color: '#5b5e6b' }} className="text-[8px] flex-1 text-center">{statusLabel[s].split(' ')[0]}</div>
         ))}
       </div>
     </div>
@@ -98,7 +96,7 @@ function FormDemanda({ inicial, imoveis, clientes, fornecedores, contratos, onSa
   return (
     <div className="card mb-6">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-semibold">{inicial.id ? 'Editar demanda' : 'Nova demanda'}</h2>
+        <h2 style={{ color: '#f4f4f3' }} className="text-sm font-semibold">{inicial.id ? 'Editar demanda' : 'Nova demanda'}</h2>
         <button onClick={onCancelar} className="btn btn-sm"><X size={13} /></button>
       </div>
       <form onSubmit={handleSubmit}>
@@ -125,7 +123,6 @@ function FormDemanda({ inicial, imoveis, clientes, fornecedores, contratos, onSa
             <label className="label">Locatário</label>
             <select className="input" value={form.locatario_id} onChange={set('locatario_id')}>
               <option value="">Selecionar</option>
-              {clientes.filter(c=>['locatario','comprador','lead'].includes((c as any).tipo)).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
               {clientes.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
             </select>
           </div>
@@ -204,7 +201,7 @@ function FormDemanda({ inicial, imoveis, clientes, fornecedores, contratos, onSa
             <textarea className="input" rows={2} value={form.observacoes} onChange={set('observacoes')} />
           </div>
         </div>
-        {erro && <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-3 py-2 rounded-lg mt-3">{erro}</div>}
+        {erro && <div style={{ background: '#2e1717', border: '0.5px solid #4a2424', color: '#ef4444' }} className="text-sm px-3 py-2 rounded-lg mt-3">{erro}</div>}
         <div className="flex gap-2 mt-4">
           <button type="submit" disabled={salvando} className="btn btn-primary">
             <Save size={13} />{salvando ? 'Salvando...' : inicial.id ? 'Salvar' : 'Abrir demanda'}
@@ -337,11 +334,6 @@ export default function DemandasPage() {
     if (Array.isArray(val)) return val[0]?.titulo || '—'
     return val.titulo || '—'
   }
-  function getNumero(val: any): string {
-    if (!val) return '—'
-    if (Array.isArray(val)) return val[0]?.numero || '—'
-    return val.numero || '—'
-  }
 
   const filtradas = filtroStatus === 'todos' ? demandas : demandas.filter(d => d.status === filtroStatus)
   const contadores: Record<string,number> = {}
@@ -349,94 +341,101 @@ export default function DemandasPage() {
 
   return (
     <AppLayout>
-      <Topbar titulo="Demandas de reparo">
-        <button className="btn btn-primary" onClick={abrirNovo}><Plus size={14} />Nova demanda</button>
-      </Topbar>
-      <div className="flex-1 overflow-y-auto p-6">
-        {sucesso && <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-4 text-sm">{sucesso}</div>}
+      <div style={{ background: '#0d1117', minHeight: '100vh' }} className="flex-1 overflow-y-auto p-6">
+        <div className="max-w-[1600px] mx-auto">
 
-        {formInicial !== null && (
-          <FormDemanda key={formInicial.id||'novo'} inicial={formInicial}
-            imoveis={imoveis} clientes={clientes} fornecedores={fornecedores} contratos={contratos}
-            onSalvar={salvar} onCancelar={() => setFormInicial(null)} />
-        )}
-
-        {/* Filtros */}
-        <div className="flex gap-2 mb-4 flex-wrap">
-          <button onClick={() => setFiltroStatus('todos')} className={`btn btn-sm ${filtroStatus==='todos'?'btn-primary':''}`}>
-            Todas ({demandas.length})
-          </button>
-          {statusFlow.map(s => {
-            const c = contadores[s]||0
-            if (!c) return null
-            return (
-              <button key={s} onClick={() => setFiltroStatus(s)} className={`btn btn-sm ${filtroStatus===s?'btn-primary':''}`}>
-                {statusLabel[s]} ({c})
-              </button>
-            )
-          })}
-        </div>
-
-        {loading ? (
-          <div className="text-center py-12 text-gray-400 text-sm">Carregando...</div>
-        ) : filtradas.length === 0 ? (
-          <div className="card text-center py-12 text-gray-400">
-            <Wrench size={36} className="mx-auto mb-2 opacity-30" />
-            <div className="font-medium text-gray-500">Nenhuma demanda</div>
-            <div className="text-sm mt-1">Clique em "Nova demanda" para registrar</div>
+          <div className="flex items-center justify-between mb-5">
+            <h1 style={{ color: '#f4f4f3' }} className="text-lg font-medium">Demandas de reparo</h1>
+            <button className="btn btn-primary" onClick={abrirNovo}><Plus size={14} />Nova demanda</button>
           </div>
-        ) : (
-          <div className="space-y-3">
-            {filtradas.map(d => (
-              <div key={d.id} className={`card border ${d.urgencia==='alta'?'border-red-200':d.urgencia==='media'?'border-yellow-200':'border-gray-200'}`}>
-                <div className="flex items-start gap-3">
-                  <div className={`px-2 py-0.5 rounded text-[10px] font-medium border flex-shrink-0 mt-0.5 ${urgenciaCor[d.urgencia]}`}>
-                    {d.urgencia.toUpperCase()}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-medium text-sm text-gray-900">{d.titulo}</span>
-                      <span className={`badge badge-${statusCor[d.status]||'gray'} text-[10px]`}>{statusLabel[d.status]}</span>
+
+          {sucesso && <div style={{ background: '#1a2e1f', border: '0.5px solid #2d4a35', color: '#3fb950' }} className="px-4 py-3 rounded-lg mb-4 text-sm">{sucesso}</div>}
+
+          {formInicial !== null && (
+            <FormDemanda key={formInicial.id||'novo'} inicial={formInicial}
+              imoveis={imoveis} clientes={clientes} fornecedores={fornecedores} contratos={contratos}
+              onSalvar={salvar} onCancelar={() => setFormInicial(null)} />
+          )}
+
+          <div className="flex gap-2 mb-4 flex-wrap">
+            <button onClick={() => setFiltroStatus('todos')} className={`btn btn-sm ${filtroStatus==='todos'?'btn-primary':''}`}>
+              Todas ({demandas.length})
+            </button>
+            {statusFlow.map(s => {
+              const c = contadores[s]||0
+              if (!c) return null
+              return (
+                <button key={s} onClick={() => setFiltroStatus(s)} className={`btn btn-sm ${filtroStatus===s?'btn-primary':''}`}>
+                  {statusLabel[s]} ({c})
+                </button>
+              )
+            })}
+          </div>
+
+          {loading ? (
+            <div style={{ color: '#8b8d98' }} className="text-center py-12 text-sm">Carregando...</div>
+          ) : filtradas.length === 0 ? (
+            <div className="card text-center py-12" style={{ color: '#8b8d98' }}>
+              <Wrench size={36} className="mx-auto mb-2 opacity-30" />
+              <div style={{ color: '#c3c2b7' }} className="font-medium">Nenhuma demanda</div>
+              <div className="text-sm mt-1">Clique em "Nova demanda" para registrar</div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filtradas.map(d => {
+                const urg = urgenciaCor[d.urgencia] || urgenciaCor.media
+                return (
+                  <div key={d.id} className="card" style={{ border: `0.5px solid ${urg.border}` }}>
+                    <div className="flex items-start gap-3">
+                      <div style={{ color: urg.color, background: urg.bg, border: `0.5px solid ${urg.border}` }} className="px-2 py-0.5 rounded text-[10px] font-medium flex-shrink-0 mt-0.5">
+                        {d.urgencia.toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span style={{ color: '#f4f4f3' }} className="font-medium text-sm">{d.titulo}</span>
+                          <span className={`badge ${statusCor[d.status]||'badge-gray'} text-[10px]`}>{statusLabel[d.status]}</span>
+                        </div>
+                        <div style={{ color: '#8b8d98' }} className="text-xs mt-0.5 flex gap-3 flex-wrap">
+                          <span>🏠 {getTitulo(d.imovel)}</span>
+                          <span>👤 {getNome(d.locatario)}</span>
+                          {d.fornecedor && <span>🔧 {getNome(d.fornecedor)}</span>}
+                          {d.orcamento && <span>💰 R$ {d.orcamento.toLocaleString('pt-BR', {minimumFractionDigits:2})}</span>}
+                        </div>
+                        <ProgressBar status={d.status} />
+                      </div>
+                      <div className="flex gap-2 flex-shrink-0">
+                        {d.status !== 'concluida' && d.status !== 'recusada' && (
+                          <button className="btn btn-sm btn-primary text-[11px]" onClick={() => avancarStatus(d)}>
+                            Avançar →
+                          </button>
+                        )}
+                        <button className="btn btn-sm" onClick={() => abrirEdicao(d)}><Edit2 size={12} /></button>
+                        <button className="btn btn-sm" onClick={() => setExpandido(expandido===d.id?null:d.id)}>
+                          {expandido===d.id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                        </button>
+                      </div>
                     </div>
-                    <div className="text-xs text-gray-400 mt-0.5 flex gap-3 flex-wrap">
-                      <span>🏠 {getTitulo(d.imovel)}</span>
-                      <span>👤 {getNome(d.locatario)}</span>
-                      {d.fornecedor && <span>🔧 {getNome(d.fornecedor)}</span>}
-                      {d.orcamento && <span>💰 R$ {d.orcamento.toLocaleString('pt-BR', {minimumFractionDigits:2})}</span>}
-                    </div>
-                    <ProgressBar status={d.status} />
-                  </div>
-                  <div className="flex gap-2 flex-shrink-0">
-                    {d.status !== 'concluida' && d.status !== 'recusada' && (
-                      <button className="btn btn-sm btn-primary text-[11px]" onClick={() => avancarStatus(d)}>
-                        Avançar →
-                      </button>
+
+                    {expandido === d.id && (
+                      <div style={{ borderTop: '0.5px solid #2a2f3a', color: '#c3c2b7' }} className="mt-3 pt-3 text-xs space-y-1">
+                        {d.descricao && <div><strong style={{ color: '#f4f4f3' }}>Descrição:</strong> {d.descricao}</div>}
+                        {d.tipo && <div><strong style={{ color: '#f4f4f3' }}>Tipo:</strong> {d.tipo} {d.local_imovel && `· ${d.local_imovel}`}</div>}
+                        <div><strong style={{ color: '#f4f4f3' }}>Locador:</strong> {getNome(d.locador)}</div>
+                        {d.quem_paga && <div><strong style={{ color: '#f4f4f3' }}>Quem paga:</strong> {d.quem_paga}</div>}
+                        {d.observacoes && <div><strong style={{ color: '#f4f4f3' }}>Obs:</strong> {d.observacoes}</div>}
+                        <div className="flex gap-2 pt-2">
+                          <button className="btn btn-sm" style={{ color: '#ef4444', fontSize: '11px' }} onClick={() => excluir(d.id, d.titulo)}>
+                            <X size={11} />Excluir
+                          </button>
+                        </div>
+                      </div>
                     )}
-                    <button className="btn btn-sm" onClick={() => abrirEdicao(d)}><Edit2 size={12} /></button>
-                    <button className="btn btn-sm" onClick={() => setExpandido(expandido===d.id?null:d.id)}>
-                      {expandido===d.id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                    </button>
                   </div>
-                </div>
-
-                {expandido === d.id && (
-                  <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-600 space-y-1">
-                    {d.descricao && <div><strong>Descrição:</strong> {d.descricao}</div>}
-                    {d.tipo && <div><strong>Tipo:</strong> {d.tipo} {d.local_imovel && `· ${d.local_imovel}`}</div>}
-                    <div><strong>Locador:</strong> {getNome(d.locador)}</div>
-                    {d.quem_paga && <div><strong>Quem paga:</strong> {d.quem_paga}</div>}
-                    {d.observacoes && <div><strong>Obs:</strong> {d.observacoes}</div>}
-                    <div className="flex gap-2 pt-2">
-                      <button className="btn btn-sm" style={{color:'var(--text-danger)',fontSize:'11px'}} onClick={() => excluir(d.id, d.titulo)}>
-                        <X size={11} />Excluir
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+                )
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </AppLayout>
   )

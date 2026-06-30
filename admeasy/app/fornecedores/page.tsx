@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import AppLayout from '@/components/layout/AppLayout'
-import Topbar from '@/components/layout/Topbar'
 import { supabase } from '@/lib/supabase'
 import { Plus, X, Edit2, Save, Truck, Star, Phone, Mail } from 'lucide-react'
 import { registrarLog } from '@/lib/logs'
@@ -34,15 +33,15 @@ const especialidades = [
   { value: 'outro', label: 'Outro' },
 ]
 
-const espCor: Record<string, string> = {
-  hidraulica: 'bg-blue-100 text-blue-700',
-  eletrica: 'bg-yellow-100 text-yellow-700',
-  pintura: 'bg-green-100 text-green-700',
-  serralheria: 'bg-gray-100 text-gray-700',
-  ar_condicionado: 'bg-cyan-100 text-cyan-700',
-  limpeza: 'bg-purple-100 text-purple-700',
-  geral: 'bg-orange-100 text-orange-700',
-  outro: 'bg-gray-100 text-gray-600',
+const espCor: Record<string, { bg: string; color: string }> = {
+  hidraulica: { bg: '#16243a', color: '#5b9bf5' },
+  eletrica: { bg: '#2e2515', color: '#f59e0b' },
+  pintura: { bg: '#1a2e1f', color: '#3fb950' },
+  serralheria: { bg: '#1f2430', color: '#a8aab5' },
+  ar_condicionado: { bg: '#142e36', color: '#4dd0e1' },
+  limpeza: { bg: '#251f3a', color: '#a78bfa' },
+  geral: { bg: '#2e2215', color: '#f0975a' },
+  outro: { bg: '#1f2430', color: '#8b8d98' },
 }
 
 const formVazio = {
@@ -55,7 +54,7 @@ function Estrelas({ val }: { val: number }) {
   return (
     <div className="flex gap-0.5">
       {[1,2,3,4,5].map(i => (
-        <Star key={i} size={12} className={i <= val ? 'text-yellow-400 fill-yellow-400' : 'text-gray-200 fill-gray-200'} />
+        <Star key={i} size={12} style={i <= val ? { color: '#fbbf24', fill: '#fbbf24' } : { color: '#2a2f3a', fill: '#2a2f3a' }} />
       ))}
     </div>
   )
@@ -84,7 +83,7 @@ function FormFornecedor({ inicial, onSalvar, onCancelar }: {
   return (
     <div className="card mb-6">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-semibold">{inicial.id ? `Editando: ${inicial.nome}` : 'Cadastrar fornecedor'}</h2>
+        <h2 style={{ color: '#f4f4f3' }} className="text-sm font-semibold">{inicial.id ? `Editando: ${inicial.nome}` : 'Cadastrar fornecedor'}</h2>
         <button onClick={onCancelar} className="btn btn-sm"><X size={13} /></button>
       </div>
       <form onSubmit={handleSubmit}>
@@ -134,7 +133,7 @@ function FormFornecedor({ inicial, onSalvar, onCancelar }: {
             <textarea className="input" rows={2} value={form.observacoes} onChange={set('observacoes')} placeholder="Condições, horários, referências..." />
           </div>
         </div>
-        {erro && <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-3 py-2 rounded-lg mt-3">{erro}</div>}
+        {erro && <div style={{ background: '#2e1717', border: '0.5px solid #4a2424', color: '#ef4444' }} className="text-sm px-3 py-2 rounded-lg mt-3">{erro}</div>}
         <div className="flex gap-2 mt-4">
           <button type="submit" disabled={salvando} className="btn btn-primary">
             <Save size={13} />{salvando ? 'Salvando...' : inicial.id ? 'Salvar alterações' : 'Cadastrar'}
@@ -220,76 +219,83 @@ export default function FornecedoresPage() {
 
   return (
     <AppLayout>
-      <Topbar titulo="Fornecedores">
-        <button className="btn btn-primary" onClick={abrirNovo}><Plus size={14} />Cadastrar fornecedor</button>
-      </Topbar>
-      <div className="flex-1 overflow-y-auto p-6">
-        {sucesso && <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-4 text-sm">{sucesso}</div>}
+      <div style={{ background: '#0d1117', minHeight: '100vh' }} className="flex-1 overflow-y-auto p-6">
+        <div className="max-w-[1600px] mx-auto">
 
-        {formInicial !== null && (
-          <FormFornecedor key={formInicial.id||'novo'} inicial={formInicial} onSalvar={salvar} onCancelar={() => setFormInicial(null)} />
-        )}
+          <div className="flex items-center justify-between mb-5">
+            <h1 style={{ color: '#f4f4f3' }} className="text-lg font-medium">Fornecedores</h1>
+            <button className="btn btn-primary" onClick={abrirNovo}><Plus size={14} />Cadastrar fornecedor</button>
+          </div>
 
-        {/* Filtro por especialidade */}
-        <div className="flex gap-2 mb-4 flex-wrap">
-          <button onClick={() => setFiltroEsp('todos')} className={`btn btn-sm ${filtroEsp==='todos' ? 'btn-primary' : ''}`}>Todos ({fornecedores.length})</button>
-          {especialidades.map(e => {
-            const count = fornecedores.filter(f => f.especialidade === e.value).length
-            if (count === 0) return null
-            return (
-              <button key={e.value} onClick={() => setFiltroEsp(e.value)}
-                className={`btn btn-sm ${filtroEsp===e.value ? 'btn-primary' : ''}`}>
-                {e.label} ({count})
-              </button>
-            )
-          })}
+          {sucesso && <div style={{ background: '#1a2e1f', border: '0.5px solid #2d4a35', color: '#3fb950' }} className="px-4 py-3 rounded-lg mb-4 text-sm">{sucesso}</div>}
+
+          {formInicial !== null && (
+            <FormFornecedor key={formInicial.id||'novo'} inicial={formInicial} onSalvar={salvar} onCancelar={() => setFormInicial(null)} />
+          )}
+
+          <div className="flex gap-2 mb-4 flex-wrap">
+            <button onClick={() => setFiltroEsp('todos')} className={`btn btn-sm ${filtroEsp==='todos' ? 'btn-primary' : ''}`}>Todos ({fornecedores.length})</button>
+            {especialidades.map(e => {
+              const count = fornecedores.filter(f => f.especialidade === e.value).length
+              if (count === 0) return null
+              return (
+                <button key={e.value} onClick={() => setFiltroEsp(e.value)}
+                  className={`btn btn-sm ${filtroEsp===e.value ? 'btn-primary' : ''}`}>
+                  {e.label} ({count})
+                </button>
+              )
+            })}
+          </div>
+
+          {loading ? (
+            <div style={{ color: '#8b8d98' }} className="text-center py-12 text-sm">Carregando...</div>
+          ) : filtrados.length === 0 ? (
+            <div className="card text-center py-12" style={{ color: '#8b8d98' }}>
+              <Truck size={36} className="mx-auto mb-2 opacity-30" />
+              <div style={{ color: '#c3c2b7' }} className="font-medium">Nenhum fornecedor cadastrado</div>
+              <div className="text-sm mt-1">Clique em "Cadastrar fornecedor" para começar</div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-3">
+              {filtrados.map(f => {
+                const cor = espCor[f.especialidade || 'outro']
+                return (
+                  <div key={f.id} className="card flex items-center gap-4">
+                    <div style={{ background: cor.bg }} className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-lg">
+                      {f.especialidade === 'hidraulica' ? '🔧' :
+                       f.especialidade === 'eletrica' ? '⚡' :
+                       f.especialidade === 'pintura' ? '🎨' :
+                       f.especialidade === 'limpeza' ? '🧹' :
+                       f.especialidade === 'ar_condicionado' ? '❄️' : '🔨'}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span style={{ color: '#f4f4f3' }} className="font-medium">{f.nome}</span>
+                        <span style={{ background: cor.bg, color: cor.color }} className="badge text-[10px]">
+                          {especialidades.find(e => e.value === f.especialidade)?.label || f.especialidade}
+                        </span>
+                        {!f.ativo && <span className="badge badge-gray text-[10px]">Inativo</span>}
+                      </div>
+                      <div className="flex items-center gap-4 mt-1 flex-wrap">
+                        {f.telefone && <span style={{ color: '#8b8d98' }} className="text-xs flex items-center gap-1"><Phone size={10} />{f.telefone}</span>}
+                        {f.email && <span style={{ color: '#8b8d98' }} className="text-xs flex items-center gap-1"><Mail size={10} />{f.email}</span>}
+                        {f.area_atendimento && <span style={{ color: '#8b8d98' }} className="text-xs">{f.area_atendimento}</span>}
+                      </div>
+                      <div className="flex items-center gap-3 mt-1">
+                        <Estrelas val={f.avaliacao||5} />
+                        <span style={{ color: '#8b8d98' }} className="text-xs">{f.total_servicos} serviço(s)</span>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 flex-shrink-0">
+                      <button className="btn btn-sm" onClick={() => abrirEdicao(f)}><Edit2 size={12} />Editar</button>
+                      <button className="btn btn-sm" style={{ color: '#ef4444' }} onClick={() => excluir(f.id, f.nome)}><X size={12} /></button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
-
-        {loading ? (
-          <div className="text-center py-12 text-gray-400 text-sm">Carregando...</div>
-        ) : filtrados.length === 0 ? (
-          <div className="card text-center py-12 text-gray-400">
-            <Truck size={36} className="mx-auto mb-2 opacity-30" />
-            <div className="font-medium text-gray-500">Nenhum fornecedor cadastrado</div>
-            <div className="text-sm mt-1">Clique em "Cadastrar fornecedor" para começar</div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-3">
-            {filtrados.map(f => (
-              <div key={f.id} className="card flex items-center gap-4">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-lg ${espCor[f.especialidade||'outro']}`}>
-                  {f.especialidade === 'hidraulica' ? '🔧' :
-                   f.especialidade === 'eletrica' ? '⚡' :
-                   f.especialidade === 'pintura' ? '🎨' :
-                   f.especialidade === 'limpeza' ? '🧹' :
-                   f.especialidade === 'ar_condicionado' ? '❄️' : '🔨'}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium text-gray-900">{f.nome}</span>
-                    <span className={`badge text-[10px] ${espCor[f.especialidade||'outro']}`}>
-                      {especialidades.find(e => e.value === f.especialidade)?.label || f.especialidade}
-                    </span>
-                    {!f.ativo && <span className="badge badge-gray text-[10px]">Inativo</span>}
-                  </div>
-                  <div className="flex items-center gap-4 mt-1 flex-wrap">
-                    {f.telefone && <span className="text-xs text-gray-400 flex items-center gap-1"><Phone size={10} />{f.telefone}</span>}
-                    {f.email && <span className="text-xs text-gray-400 flex items-center gap-1"><Mail size={10} />{f.email}</span>}
-                    {f.area_atendimento && <span className="text-xs text-gray-400">{f.area_atendimento}</span>}
-                  </div>
-                  <div className="flex items-center gap-3 mt-1">
-                    <Estrelas val={f.avaliacao||5} />
-                    <span className="text-xs text-gray-400">{f.total_servicos} serviço(s)</span>
-                  </div>
-                </div>
-                <div className="flex gap-2 flex-shrink-0">
-                  <button className="btn btn-sm" onClick={() => abrirEdicao(f)}><Edit2 size={12} />Editar</button>
-                  <button className="btn btn-sm" style={{color:'var(--text-danger)'}} onClick={() => excluir(f.id, f.nome)}><X size={12} /></button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
     </AppLayout>
   )
