@@ -255,7 +255,7 @@ export default function DashboardPage() {
   return (
     <AppLayout>
       <div style={{ background: '#0d1117', minHeight: '100vh' }} className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-[1600px] mx-auto">
 
           <h1 style={{ color: '#f4f4f3' }} className="text-lg font-medium mb-5">Dashboard</h1>
 
