@@ -254,14 +254,14 @@ export default function DashboardPage() {
 
   return (
     <AppLayout>
-      <div style={{ background: '#0d1117', minHeight: '100vh' }} className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-[1600px] mx-auto">
+      <div style={{ background: '#0d1117', minHeight: '100vh' }} className="flex-1 overflow-y-auto p-4 lg:p-6">
+        <div className="max-w-6xl mx-auto">
 
           <h1 style={{ color: '#f4f4f3' }} className="text-lg font-medium mb-5">Dashboard</h1>
 
           {/* Alertas */}
           {(cobrancasAtrasadas.length > 0 || contratosVencidos.length > 0 || processosAtivos > 0) && (
-            <div className="grid grid-cols-3 gap-3 mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
               {cobrancasAtrasadas.length > 0 && (
                 <div style={{ background: '#2e1717', border: '0.5px solid #4a2424' }} className="rounded-xl p-3.5">
                   <div className="flex items-center gap-2 mb-1.5"><AlertTriangle size={13} style={{ color: '#ef4444' }} /><span style={{ color: '#fca5a5' }} className="text-xs font-medium">{cobrancasAtrasadas.length} aluguel(éis) em atraso</span></div>
@@ -289,7 +289,7 @@ export default function DashboardPage() {
           )}
 
           {/* Cards principais */}
-          <div className="grid grid-cols-4 gap-3 mb-3">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
             <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-xl p-3.5">
               <div style={{ color: '#8b8d98' }} className="flex items-center gap-1.5 text-[11px] mb-1.5"><Wallet size={12} />Saldo em conta</div>
               <div style={{ color: fluxoCaixa.saldo >= 0 ? '#3fb950' : '#ef4444' }} className="text-xl font-medium">{formatVal(fluxoCaixa.saldo)}</div>
@@ -316,7 +316,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Faturamento e tickets médios */}
-          <div className="grid grid-cols-3 gap-3 mb-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
             <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-xl p-3.5">
               <div style={{ color: '#8b8d98' }} className="flex items-center gap-1.5 text-[11px] mb-1.5"><Wallet size={12} />Faturamento (taxa adm.)</div>
               <div style={{ color: '#3fb950' }} className="text-xl font-medium">{formatVal(faturamentoTotal)}</div>
@@ -335,7 +335,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Gráficos */}
-          <div className="grid grid-cols-[1.4fr_1fr] gap-3 mb-3">
+          <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-3 mb-3">
             <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-xl p-4">
               <div className="flex items-center justify-between mb-2.5">
                 <p style={{ color: '#f4f4f3' }} className="text-xs font-medium">Evolução da carteira</p>
@@ -359,7 +359,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Painéis inferiores */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
             <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-xl p-4">
               <div className="flex items-center justify-between mb-2.5">
                 <p style={{ color: '#f4f4f3' }} className="text-xs font-medium">Cobranças do mês</p>
@@ -367,7 +367,7 @@ export default function DashboardPage() {
               </div>
 
               {/* Totais resumidos */}
-              <div className="grid grid-cols-3 gap-2 mb-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
                 <div style={{ background: '#1a2e1f' }} className="rounded-lg p-2 text-center">
                   <div style={{ color: '#3fb950' }} className="text-sm font-medium">{formatValCompact(totalPago)}</div>
                   <div style={{ color: '#8b8d98' }} className="text-[10px] mt-0.5">Pago</div>

@@ -9,7 +9,7 @@ import {
   LayoutDashboard, Building2, Users, FileText, TrendingUp,
   Calculator, Wrench, Truck, Calendar, DollarSign,
   UserCircle, BuildingIcon, Settings, LogOut, FileSearch,
-  ShieldCheck, Scale
+  ShieldCheck, Scale, X
 } from 'lucide-react'
 
 const ORG_ID = '00000000-0000-0000-0000-000000000001'
@@ -37,7 +37,7 @@ const navItems = [
   { href: '/configuracoes', label: 'Configurações', icon: Settings },
 ]
 
-export default function Sidebar() {
+export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname()
   const [nomeUsuario, setNomeUsuario] = useState('')
   const [perfilUsuario, setPerfilUsuario] = useState('Admin')
@@ -74,19 +74,30 @@ export default function Sidebar() {
   }, [])
 
   return (
-    <aside style={{ background: '#0d1117', borderRight: '0.5px solid #2a2f3a' }} className="w-56 min-w-[224px] flex flex-col h-screen sticky top-0">
-      <div style={{ borderBottom: '0.5px solid #2a2f3a' }} className="p-4">
-        <div className="flex items-center gap-2.5">
+    <aside
+      style={{ background: '#0d1117', borderRight: '0.5px solid #2a2f3a' }}
+      className="w-64 lg:w-56 min-w-[224px] flex flex-col h-screen sticky top-0"
+    >
+      <div style={{ borderBottom: '0.5px solid #2a2f3a' }} className="p-4 flex items-center justify-between">
+        <div className="flex items-center gap-2.5 min-w-0">
           {logoUrl ? (
             <img src={logoUrl} alt="Logo" className="w-8 h-8 rounded-lg object-contain flex-shrink-0" style={{ background: '#fff' }} />
           ) : (
-            <div style={{ background: '#2563eb' }} className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm">🏢</div>
+            <div style={{ background: '#2563eb' }} className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm flex-shrink-0">🏢</div>
           )}
           <div className="min-w-0">
             <div style={{ color: '#f4f4f3' }} className="text-sm font-semibold truncate">{nomeOrg}</div>
             <div style={{ color: '#8b8d98' }} className="text-[10px]">Gestão imobiliária</div>
           </div>
         </div>
+        <button
+          onClick={onNavigate}
+          style={{ color: '#5b5e6b' }}
+          className="lg:hidden p-1 flex-shrink-0"
+          aria-label="Fechar menu"
+        >
+          <X size={18} />
+        </button>
       </div>
 
       <nav className="flex-1 overflow-y-auto p-2">
@@ -101,7 +112,7 @@ export default function Sidebar() {
           const Icon = item.icon
           const active = pathname === item.href || pathname.startsWith(item.href + '/')
           return (
-            <Link key={item.href} href={item.href}
+            <Link key={item.href} href={item.href} onClick={onNavigate}
               style={active ? { background: '#1c2530', color: '#5b9bf5' } : { color: '#a8aab5' }}
               className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm mb-0.5 transition-all hover:bg-[#161b22]">
               <Icon size={15} className="flex-shrink-0" />
@@ -116,7 +127,7 @@ export default function Sidebar() {
 
       <div style={{ borderTop: '0.5px solid #2a2f3a' }} className="p-3">
         <div className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-[#161b22]">
-          <div style={{ background: '#1c2530', color: '#5b9bf5' }} className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium">
+          <div style={{ background: '#1c2530', color: '#5b9bf5' }} className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0">
             {iniciaisUsuario}
           </div>
           <div className="flex-1 min-w-0">
@@ -124,7 +135,7 @@ export default function Sidebar() {
             <div style={{ color: '#8b8d98' }} className="text-[10px] capitalize">{perfilUsuario}</div>
           </div>
           <button onClick={async () => { await supabase.auth.signOut(); window.location.href = '/login' }}
-            title="Sair" style={{ color: '#5b5e6b' }} className="hover:text-red-400 transition-colors">
+            title="Sair" style={{ color: '#5b5e6b' }} className="hover:text-red-400 transition-colors flex-shrink-0">
             <LogOut size={13} />
           </button>
         </div>
