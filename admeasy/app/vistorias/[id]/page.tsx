@@ -309,8 +309,7 @@ export default function VistoriaDetalhePage() {
               {amb.fotos?.length > 0 && (
                 <div className="flex gap-2 flex-wrap">
                   {amb.fotos.map((url, fi) => (
-                    <img key={fi} src={url} alt="" style={{ border: '0.5px solid #2a2f3a' }} className="object-cover rounded-lg"
-                      style={{ width: '90px', height: '70px' }} />
+                    <img key={fi} src={url} alt="" style={{ border: '0.5px solid #2a2f3a', width: '90px', height: '70px' }} className="object-cover rounded-lg" />
                   ))}
                 </div>
               )}
