@@ -167,7 +167,6 @@ export default function NovaVistoriaPage() {
 
           <h1 style={{ color: '#f4f4f3' }} className="text-lg font-medium">Nova Vistoria</h1>
 
-          {/* Dados gerais */}
           <div className="card">
             <h3 style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-4">Dados gerais</h3>
             <div className="grid grid-cols-2 gap-4">
@@ -212,7 +211,6 @@ export default function NovaVistoriaPage() {
             </div>
           </div>
 
-          {/* Partes */}
           <div className="card">
             <h3 style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-4">Partes</h3>
             <div className="space-y-4">
@@ -273,7 +271,6 @@ export default function NovaVistoriaPage() {
             </div>
           </div>
 
-          {/* Seleção de ambientes */}
           <div className="card">
             <h3 style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-3">Ambientes</h3>
             <div className="mb-3">
@@ -302,7 +299,6 @@ export default function NovaVistoriaPage() {
             </div>
           </div>
 
-          {/* Ambientes selecionados */}
           {ambientes.map((amb, idx) => (
             <div key={idx} className="card p-0 overflow-hidden">
               <div style={{ background: '#161b22', borderBottom: '0.5px solid #2a2f3a' }} className="flex items-center justify-between px-4 py-3 cursor-pointer"
@@ -351,7 +347,7 @@ export default function NovaVistoriaPage() {
                     <label className="label">Fotos ({amb.fotos.length}/5)</label>
                     <div className="flex gap-2 flex-wrap">
                       {amb.fotos.map((foto, fi) => (
-                        <div key={fi} style={{ border: '0.5px solid #2a2f3a' }} className="relative w-24 rounded-lg overflow-hidden" style={{ height: '80px' }}>
+                        <div key={fi} style={{ border: '0.5px solid #2a2f3a', height: '80px' }} className="relative w-24 rounded-lg overflow-hidden">
                           <img src={foto.url} alt="" className="w-full h-full object-cover" />
                           <button type="button" onClick={() => removerFoto(idx, fi)}
                             className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center">
@@ -360,7 +356,7 @@ export default function NovaVistoriaPage() {
                         </div>
                       ))}
                       {amb.fotos.length < 5 && (
-                        <label style={{ border: '1.5px dashed #2a2f3a' }} className="rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 transition-all" style={{ width: '96px', height: '80px' }}>
+                        <label style={{ border: '1.5px dashed #2a2f3a', width: '96px', height: '80px' }} className="rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 transition-all">
                           <Camera size={16} style={{ color: '#5b5e6b' }} />
                           <span style={{ color: '#5b5e6b' }} className="text-[10px] mt-1">Foto</span>
                           <input type="file" accept="image/*" className="hidden"
@@ -374,7 +370,6 @@ export default function NovaVistoriaPage() {
             </div>
           ))}
 
-          {/* Botões */}
           <div className="flex gap-3 pb-6">
             <button type="button" disabled={salvando} onClick={() => salvar('rascunho')}
               className="btn">
