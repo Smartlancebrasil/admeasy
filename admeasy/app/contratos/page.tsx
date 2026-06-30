@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import AppLayout from '@/components/layout/AppLayout'
-import Topbar from '@/components/layout/Topbar'
 import { supabase } from '@/lib/supabase'
-import { FileText, Plus, X, AlertTriangle, Edit2 } from 'lucide-react'
+import { FileText, Plus, X, AlertTriangle, Edit2, FileDown } from 'lucide-react'
 import { registrarLog } from '@/lib/logs'
+import Link from 'next/link'
 
 type Contrato = {
   id: string
@@ -111,10 +111,10 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar }: {
   return (
     <div className="card mb-6">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-semibold">{inicial.id ? `Editando contrato #${inicial.numero}` : 'Novo contrato'}</h2>
+        <h2 style={{ color: '#f4f4f3' }} className="text-sm font-semibold">{inicial.id ? `Editando contrato #${inicial.numero}` : 'Novo contrato'}</h2>
         <button onClick={onCancelar} className="btn btn-sm"><X size={13} /></button>
       </div>
-      {erro && <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg mb-3 text-sm">{erro}</div>}
+      {erro && <div style={{ background: '#2e1717', border: '0.5px solid #4a2424', color: '#ef4444' }} className="px-3 py-2 rounded-lg mb-3 text-sm">{erro}</div>}
       <form onSubmit={handleSubmit}>
         <div className="grid grid-cols-2 gap-3">
           <div><label className="label">Número *</label>
@@ -147,7 +147,6 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar }: {
           <div><label className="label">Valor mensal (R$) *</label>
             <input className="input" type="number" required value={form.valor_mensal} onChange={set('valor_mensal')} /></div>
 
-          {/* Caução + Parcelamento */}
           <div>
             <label className="label">Caução (R$)</label>
             <input className="input" type="number" step="0.01" value={form.valor_caucao} onChange={set('valor_caucao')} placeholder="0,00" />
@@ -160,17 +159,18 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar }: {
                 {[1,2,3,4,5].map(p => (
                   <button key={p} type="button"
                     onClick={() => setForm(f => ({...f, parcelas_caucao: String(p)}))}
-                    className={`px-3 py-1.5 rounded-lg border text-sm font-medium transition-all ${parcelasNum === p ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+                    style={parcelasNum === p ? { background: '#2563eb', color: '#fff', border: '0.5px solid #2563eb' } : { border: '0.5px solid #2a2f3a', color: '#a8aab5' }}
+                    className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all">
                     {p === 1 ? 'À vista' : `${p}x`}
                   </button>
                 ))}
               </div>
               {parcelasNum > 1 && caucaoVal > 0 && (
-                <div className="mt-2 bg-blue-50 border border-blue-100 rounded-lg p-3">
-                  <p className="text-xs text-blue-700 font-medium">
+                <div style={{ background: '#16243a', border: '0.5px solid #1e3a5f' }} className="mt-2 rounded-lg p-3">
+                  <p style={{ color: '#5b9bf5' }} className="text-xs font-medium">
                     {parcelasNum}x de {formatVal(valorParcela)} — Total: {formatVal(caucaoVal)}
                   </p>
-                  <p className="text-[10px] text-blue-500 mt-1">
+                  <p style={{ color: '#7daee8' }} className="text-[10px] mt-1">
                     As parcelas serão lançadas automaticamente no financeiro a partir da data de início do contrato.
                   </p>
                 </div>
@@ -300,7 +300,6 @@ export default function ContratosPage() {
 
     if (error) throw new Error(error.message)
 
-    // Gerar parcelas do caução no financeiro (apenas em novo contrato)
     const caucaoVal = parseFloat(dados.valor_caucao) || 0
     const parcelasNum = parseInt(dados.parcelas_caucao) || 1
 
@@ -352,84 +351,90 @@ export default function ContratosPage() {
 
   return (
     <AppLayout>
-      <Topbar titulo="Contratos">
-        <button className="btn btn-primary" onClick={abrirNovo}><Plus size={14} />Novo contrato</button>
-      </Topbar>
-      <div className="flex-1 overflow-y-auto p-6">
-        {sucesso && <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-4 text-sm">{sucesso}</div>}
+      <div style={{ background: '#0d1117', minHeight: '100vh' }} className="flex-1 overflow-y-auto p-6">
+        <div className="max-w-[1600px] mx-auto">
 
-        {formInicial !== null && (
-          <FormContrato key={formInicial.id||'novo'} inicial={formInicial}
-            imoveis={imoveis} clientes={clientes}
-            onSalvar={salvar} onCancelar={() => setFormInicial(null)} />
-        )}
-
-        {vencendo.length > 0 && !formInicial && (
-          <div className="card mb-4 border-yellow-200 bg-yellow-50">
-            <div className="flex items-center gap-2 mb-2">
-              <AlertTriangle size={14} className="text-yellow-600" />
-              <span className="text-sm font-medium text-yellow-800">{vencendo.length} contrato(s) vencendo em breve</span>
-            </div>
-            {vencendo.map(c => {
-              const dias = diasRestantes(c.data_fim)
-              return (
-                <div key={c.id} className="text-xs text-yellow-700 py-1 border-t border-yellow-200 first:border-0">
-                  #{c.numero} — {getTitulo(c.imovel)} · {getNome(c.locatario)} · vence em {dias} dias ({formatDate(c.data_fim)})
-                </div>
-              )
-            })}
+          <div className="flex items-center justify-between mb-5">
+            <h1 style={{ color: '#f4f4f3' }} className="text-lg font-medium">Contratos</h1>
+            <button className="btn btn-primary" onClick={abrirNovo}><Plus size={14} />Novo contrato</button>
           </div>
-        )}
 
-        <div className="card p-0 overflow-hidden">
-          {loading ? (
-            <div className="text-center py-12 text-gray-400 text-sm">Carregando...</div>
-          ) : contratos.length === 0 ? (
-            <div className="text-center py-12 text-gray-400">
-              <FileText size={36} className="mx-auto mb-2 opacity-30" />
-              <div className="font-medium text-gray-500">Nenhum contrato cadastrado</div>
-            </div>
-          ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100">
-                  {['#','Imóvel','Locatário','Locador','Início','Vencimento','Valor','Índice','Status',''].map(h => (
-                    <th key={h} className="text-left px-4 py-3 text-xs font-medium text-gray-400">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {contratos.map(c => {
-                  const st = statusContrato(c.data_fim, c.status)
-                  const dias = diasRestantes(c.data_fim)
-                  return (
-                    <tr key={c.id} className="border-b border-gray-50 hover:bg-gray-50">
-                      <td className="px-4 py-3 text-gray-400 text-xs font-mono">#{c.numero}</td>
-                      <td className="px-4 py-3 font-medium text-gray-900 text-sm">{getTitulo(c.imovel)}</td>
-                      <td className="px-4 py-3 text-gray-600 text-sm">{getNome(c.locatario)}</td>
-                      <td className="px-4 py-3 text-gray-600 text-sm">{getNome(c.locador)}</td>
-                      <td className="px-4 py-3 text-gray-500 text-xs">{formatDate(c.data_inicio)}</td>
-                      <td className="px-4 py-3 text-xs">
-                        <div className={st==='vencendo'?'text-red-600 font-semibold':st==='atencao'?'text-yellow-600 font-medium':'text-gray-500'}>
-                          {formatDate(c.data_fim)}
-                        </div>
-                        {dias > 0 && dias <= 60 && <div className="text-[10px] text-gray-400">{dias} dias</div>}
-                      </td>
-                      <td className="px-4 py-3 font-medium text-sm">{formatVal(c.valor_atual || c.valor_mensal)}</td>
-                      <td className="px-4 py-3 text-xs text-gray-500 uppercase">{c.indice_reajuste}</td>
-                      <td className="px-4 py-3"><span className={statusBadge[st]||'badge badge-gray'}>{statusLabel[st]||st}</span></td>
-                      <td className="px-4 py-3">
-                        <div className="flex gap-1.5">
-                          <button className="btn btn-sm" onClick={() => abrirEdicao(c)}><Edit2 size={12} />Editar</button>
-                          <button className="btn btn-sm" style={{color:'var(--text-danger)'}} onClick={() => excluir(c.id, c.numero)}><X size={12} /></button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+          {sucesso && <div style={{ background: '#1a2e1f', border: '0.5px solid #2d4a35', color: '#3fb950' }} className="px-4 py-3 rounded-lg mb-4 text-sm">{sucesso}</div>}
+
+          {formInicial !== null && (
+            <FormContrato key={formInicial.id||'novo'} inicial={formInicial}
+              imoveis={imoveis} clientes={clientes}
+              onSalvar={salvar} onCancelar={() => setFormInicial(null)} />
           )}
+
+          {vencendo.length > 0 && !formInicial && (
+            <div style={{ background: '#2e2515', border: '0.5px solid #4a3a1f' }} className="rounded-xl p-4 mb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <AlertTriangle size={14} style={{ color: '#f59e0b' }} />
+                <span style={{ color: '#fcd34d' }} className="text-sm font-medium">{vencendo.length} contrato(s) vencendo em breve</span>
+              </div>
+              {vencendo.map(c => {
+                const dias = diasRestantes(c.data_fim)
+                return (
+                  <div key={c.id} style={{ color: '#c3a76b', borderTop: '0.5px solid #4a3a1f' }} className="text-xs py-1 first:border-0">
+                    #{c.numero} — {getTitulo(c.imovel)} · {getNome(c.locatario)} · vence em {dias} dias ({formatDate(c.data_fim)})
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          <div className="card p-0 overflow-hidden">
+            {loading ? (
+              <div style={{ color: '#8b8d98' }} className="text-center py-12 text-sm">Carregando...</div>
+            ) : contratos.length === 0 ? (
+              <div style={{ color: '#8b8d98' }} className="text-center py-12">
+                <FileText size={36} className="mx-auto mb-2 opacity-30" />
+                <div style={{ color: '#c3c2b7' }} className="font-medium">Nenhum contrato cadastrado</div>
+              </div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr style={{ borderBottom: '0.5px solid #2a2f3a' }}>
+                    {['#','Imóvel','Locatário','Locador','Início','Vencimento','Valor','Índice','Status',''].map(h => (
+                      <th key={h} style={{ color: '#8b8d98' }} className="text-left px-4 py-3 text-xs font-medium">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {contratos.map(c => {
+                    const st = statusContrato(c.data_fim, c.status)
+                    const dias = diasRestantes(c.data_fim)
+                    return (
+                      <tr key={c.id} style={{ borderBottom: '0.5px solid #1c2128' }} className="hover:bg-[#161b22]">
+                        <td style={{ color: '#8b8d98' }} className="px-4 py-3 text-xs font-mono">#{c.numero}</td>
+                        <td style={{ color: '#f4f4f3' }} className="px-4 py-3 font-medium text-sm">{getTitulo(c.imovel)}</td>
+                        <td style={{ color: '#c3c2b7' }} className="px-4 py-3 text-sm">{getNome(c.locatario)}</td>
+                        <td style={{ color: '#c3c2b7' }} className="px-4 py-3 text-sm">{getNome(c.locador)}</td>
+                        <td style={{ color: '#8b8d98' }} className="px-4 py-3 text-xs">{formatDate(c.data_inicio)}</td>
+                        <td className="px-4 py-3 text-xs">
+                          <div style={{ color: st==='vencendo' ? '#ef4444' : st==='atencao' ? '#f59e0b' : '#8b8d98' }} className={st==='vencendo'||st==='atencao' ? 'font-semibold' : ''}>
+                            {formatDate(c.data_fim)}
+                          </div>
+                          {dias > 0 && dias <= 60 && <div style={{ color: '#5b5e6b' }} className="text-[10px]">{dias} dias</div>}
+                        </td>
+                        <td style={{ color: '#f4f4f3' }} className="px-4 py-3 font-medium text-sm">{formatVal(c.valor_atual || c.valor_mensal)}</td>
+                        <td style={{ color: '#8b8d98' }} className="px-4 py-3 text-xs uppercase">{c.indice_reajuste}</td>
+                        <td className="px-4 py-3"><span className={statusBadge[st]||'badge badge-gray'}>{statusLabel[st]||st}</span></td>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-1.5">
+                            <button className="btn btn-sm" onClick={() => abrirEdicao(c)}><Edit2 size={12} />Editar</button>
+                            <Link href={`/contratos/${c.id}/pdf`} className="btn btn-sm" style={{ color: '#5b9bf5' }}><FileDown size={12} />PDF</Link>
+                            <button className="btn btn-sm" style={{ color: '#ef4444' }} onClick={() => excluir(c.id, c.numero)}><X size={12} /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
       </div>
     </AppLayout>
