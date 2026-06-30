@@ -88,91 +88,149 @@ const formVazio = {
   status:'ativo', observacoes:'',
 }
 
-const clienteRapidoVazio = { nome: '', cpf: '', telefone: '', email: '' }
+const clienteFormVazio: Record<string, string> = {
+  nome: '', tipo: 'locatario', cpf: '', rg: '',
+  estado_civil: '', profissao: '',
+  email: '', telefone: '',
+  endereco: '', bairro: '', cidade: '', estado: '', cep: '',
+  status: 'ativo',
+}
+
+const conjugeFormVazio: Record<string, string> = {
+  nome: '', cpf: '', rg: '', profissao: '',
+}
+
+const UFs_MODAL = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
 
 /**
- * Mini-modal de cadastro rápido de cliente (locador ou locatário).
- * Fica fora do FormContrato para não ser recriado a cada digitação.
+ * Modal de cadastro de cliente para qualificacao do contrato.
+ * Campos: nome, CPF, RG, estado civil, profissao, endereco completo, email, celular.
+ * Se "casado(a)", habilita o cadastro do conjuge como registro separado em clientes,
+ * reaproveitando o mesmo endereco do titular (sem duplicidade).
  */
-function ModalClienteRapido({ tipo, onSalvar, onFechar }: {
-  tipo: 'locatario' | 'locador'
+function ModalClienteCompleto({ tipoParte, onSalvar, onFechar }: {
+  tipoParte: 'locatario' | 'locador'
   onSalvar: (cliente: { id: string; nome: string }) => void
   onFechar: () => void
 }) {
-  const [dados, setDados] = useState(clienteRapidoVazio)
+  const [form, setForm] = useState<Record<string, string>>({ ...clienteFormVazio, tipo: tipoParte })
+  const [cadastrarConjuge, setCadastrarConjuge] = useState(false)
+  const [conjuge, setConjuge] = useState<Record<string, string>>({ ...conjugeFormVazio })
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
 
-  const set = (campo: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setDados(d => ({ ...d, [campo]: e.target.value }))
+  const set = (campo: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+    setForm(f => ({ ...f, [campo]: e.target.value }))
+
+  const setConj = (campo: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setConjuge(c => ({ ...c, [campo]: e.target.value }))
+
+  const ehCasado = form.estado_civil === 'casado'
 
   async function salvar(e: React.FormEvent) {
     e.preventDefault()
-    if (!dados.nome.trim()) return
     setSalvando(true)
     setErro('')
 
-    const { data, error } = await supabase
-      .from('clientes')
-      .insert([{
-        nome: dados.nome,
-        cpf: dados.cpf || null,
-        telefone: dados.telefone || null,
-        email: dados.email || null,
-        tipo,
-        status: 'ativo',
-        tem_portal: false,
+    const payloadTitular = { ...form, organization_id: ORG_ID, tem_portal: false }
+    const { data: titular, error: erroTitular } = await supabase
+      .from('clientes').insert([payloadTitular]).select('id, nome').single()
+
+    if (erroTitular) { setSalvando(false); setErro('Erro: ' + erroTitular.message); return }
+
+    if (ehCasado && cadastrarConjuge && conjuge.nome.trim()) {
+      const payloadConjuge = {
+        nome: conjuge.nome, cpf: conjuge.cpf || null, rg: conjuge.rg || null,
+        profissao: conjuge.profissao || null,
+        estado_civil: 'casado', tipo: form.tipo, status: 'ativo', tem_portal: false,
+        // mesmo endereco do titular, para evitar duplicidade de cadastro
+        endereco: form.endereco || null, bairro: form.bairro || null,
+        cidade: form.cidade || null, estado: form.estado || null, cep: form.cep || null,
         organization_id: ORG_ID,
-      }])
-      .select('id, nome')
-      .single()
+      }
+      const { error: erroConjuge } = await supabase.from('clientes').insert([payloadConjuge])
+      if (erroConjuge) { setSalvando(false); setErro('Titular salvo, mas erro ao salvar cônjuge: ' + erroConjuge.message); return }
+    }
 
     setSalvando(false)
-    if (error) { setErro('Erro: ' + error.message); return }
-    onSalvar(data)
+    onSalvar(titular)
   }
 
   return (
     <div
       style={{ background: 'rgba(0,0,0,0.6)' }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-4 overflow-y-auto"
       onClick={onFechar}
     >
       <div
-        className="card w-full max-w-md"
+        className="card w-full max-w-2xl my-6"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
           <h3 style={{ color: '#f4f4f3' }} className="text-sm font-semibold">
-            Cadastro rápido — {tipo === 'locatario' ? 'Locatário' : 'Locador'}
+            Cadastrar {tipoParte === 'locatario' ? 'locatário' : 'locador'} — qualificação para o contrato
           </h3>
           <button onClick={onFechar} className="btn btn-sm"><X size={13} /></button>
         </div>
         <form onSubmit={salvar}>
-          <div className="space-y-3">
-            <div>
-              <label className="label">Nome completo *</label>
-              <input className="input" required autoFocus value={dados.nome} onChange={set('nome')} placeholder="Nome completo" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="label">CPF</label>
-                <input className="input" value={dados.cpf} onChange={set('cpf')} placeholder="000.000.000-00" />
-              </div>
-              <div>
-                <label className="label">Telefone</label>
-                <input className="input" value={dados.telefone} onChange={set('telefone')} placeholder="(11) 99999-9999" />
-              </div>
-            </div>
-            <div>
-              <label className="label">E-mail</label>
-              <input className="input" type="email" value={dados.email} onChange={set('email')} />
-            </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="sm:col-span-2"><label className="label">Nome completo *</label>
+              <input className="input" required autoFocus value={form.nome} onChange={set('nome')} placeholder="Nome completo" /></div>
+            <div><label className="label">CPF *</label>
+              <input className="input" required value={form.cpf} onChange={set('cpf')} placeholder="000.000.000-00" /></div>
+            <div><label className="label">RG *</label>
+              <input className="input" required value={form.rg} onChange={set('rg')} /></div>
+            <div><label className="label">Estado civil *</label>
+              <select className="input" required value={form.estado_civil} onChange={e => { set('estado_civil')(e); if (e.target.value !== 'casado') setCadastrarConjuge(false) }}>
+                <option value="">Selecionar</option><option value="solteiro">Solteiro(a)</option>
+                <option value="casado">Casado(a)</option><option value="divorciado">Divorciado(a)</option>
+                <option value="viuvo">Viúvo(a)</option><option value="uniao_estavel">União estável</option>
+              </select></div>
+            <div><label className="label">Profissão *</label>
+              <input className="input" required value={form.profissao} onChange={set('profissao')} /></div>
+            <div><label className="label">E-mail</label>
+              <input className="input" type="email" value={form.email} onChange={set('email')} /></div>
+            <div><label className="label">Celular *</label>
+              <input className="input" required value={form.telefone} onChange={set('telefone')} placeholder="(11) 99999-9999" /></div>
+            <div className="sm:col-span-2"><label className="label">Endereço completo *</label>
+              <input className="input" required value={form.endereco} onChange={set('endereco')} placeholder="Rua, número, complemento" /></div>
+            <div><label className="label">Bairro *</label>
+              <input className="input" required value={form.bairro} onChange={set('bairro')} /></div>
+            <div><label className="label">Cidade *</label>
+              <input className="input" required value={form.cidade} onChange={set('cidade')} /></div>
+            <div><label className="label">Estado *</label>
+              <select className="input" required value={form.estado} onChange={set('estado')}>
+                <option value="">UF</option>{UFs_MODAL.map(uf => <option key={uf} value={uf}>{uf}</option>)}
+              </select></div>
+            <div><label className="label">CEP</label>
+              <input className="input" value={form.cep} onChange={set('cep')} placeholder="00000-000" /></div>
           </div>
+
+          {ehCasado && (
+            <div style={{ background: '#16243a', border: '0.5px solid #1e3a5f' }} className="rounded-lg p-3 mt-4">
+              <label style={{ color: '#5b9bf5' }} className="flex items-center gap-2 text-sm cursor-pointer mb-2">
+                <input type="checkbox" checked={cadastrarConjuge} onChange={e => setCadastrarConjuge(e.target.checked)} />
+                Cadastrar cônjuge para constar no contrato
+              </label>
+              {cadastrarConjuge && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                  <div className="sm:col-span-2"><label className="label">Nome completo do cônjuge *</label>
+                    <input className="input" required={cadastrarConjuge} value={conjuge.nome} onChange={setConj('nome')} placeholder="Nome completo" /></div>
+                  <div><label className="label">CPF *</label>
+                    <input className="input" required={cadastrarConjuge} value={conjuge.cpf} onChange={setConj('cpf')} placeholder="000.000.000-00" /></div>
+                  <div><label className="label">RG *</label>
+                    <input className="input" required={cadastrarConjuge} value={conjuge.rg} onChange={setConj('rg')} /></div>
+                  <div className="sm:col-span-2"><label className="label">Profissão *</label>
+                    <input className="input" required={cadastrarConjuge} value={conjuge.profissao} onChange={setConj('profissao')} /></div>
+                </div>
+              )}
+              <p style={{ color: '#7daee8' }} className="text-[10px] mt-2">
+                O cônjuge usará o mesmo endereço informado acima, evitando duplicidade de cadastro.
+              </p>
+            </div>
+          )}
+
           {erro && <div style={{ background: '#2e1717', border: '0.5px solid #4a2424', color: '#ef4444' }} className="text-sm px-3 py-2 rounded-lg mt-3">{erro}</div>}
-          <p style={{ color: '#5b5e6b' }} className="text-[10px] mt-3">
-            Dados completos (RG, endereço, profissão...) podem ser preenchidos depois na área de Clientes.
-          </p>
           <div className="flex gap-2 mt-4">
             <button type="submit" disabled={salvando} className="btn btn-primary flex-1">
               {salvando ? 'Salvando...' : 'Cadastrar e selecionar'}
@@ -345,8 +403,8 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
       </form>
 
       {modalCadastro && (
-        <ModalClienteRapido
-          tipo={modalCadastro}
+        <ModalClienteCompleto
+          tipoParte={modalCadastro}
           onFechar={() => setModalCadastro(null)}
           onSalvar={(cliente) => aoCriarCliente(modalCadastro === 'locatario' ? 'locatario_id' : 'locador_id', cliente)}
         />
