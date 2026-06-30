@@ -428,7 +428,8 @@ export default function ContratosPage() {
                       </td>
                     </tr>
                   )
-                })}
+    
+    })}
               </tbody>
             </table>
           )}
