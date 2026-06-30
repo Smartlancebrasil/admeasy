@@ -12,6 +12,8 @@ import {
   ShieldCheck, Scale
 } from 'lucide-react'
 
+const ORG_ID = '00000000-0000-0000-0000-000000000001'
+
 const navItems = [
   { section: 'Principal' },
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -40,6 +42,8 @@ export default function Sidebar() {
   const [nomeUsuario, setNomeUsuario] = useState('')
   const [perfilUsuario, setPerfilUsuario] = useState('Admin')
   const [iniciaisUsuario, setIniciaisUsuario] = useState('??')
+  const [logoUrl, setLogoUrl] = useState('')
+  const [nomeOrg, setNomeOrg] = useState('AdmEasy')
 
   useEffect(() => {
     async function carregarUsuario() {
@@ -58,16 +62,28 @@ export default function Sidebar() {
         setIniciaisUsuario(nome.slice(0, 2).toUpperCase())
       }
     }
+    async function carregarOrg() {
+      const { data } = await supabase.from('organizations').select('logo_url, nome').eq('id', ORG_ID).single()
+      if (data) {
+        if (data.logo_url) setLogoUrl(data.logo_url)
+        if (data.nome) setNomeOrg(data.nome)
+      }
+    }
     carregarUsuario()
+    carregarOrg()
   }, [])
 
   return (
     <aside style={{ background: '#0d1117', borderRight: '0.5px solid #2a2f3a' }} className="w-56 min-w-[224px] flex flex-col h-screen sticky top-0">
       <div style={{ borderBottom: '0.5px solid #2a2f3a' }} className="p-4">
         <div className="flex items-center gap-2.5">
-          <div style={{ background: '#2563eb' }} className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm">🏢</div>
-          <div>
-            <div style={{ color: '#f4f4f3' }} className="text-sm font-semibold">AdmEasy</div>
+          {logoUrl ? (
+            <img src={logoUrl} alt="Logo" className="w-8 h-8 rounded-lg object-contain flex-shrink-0" style={{ background: '#fff' }} />
+          ) : (
+            <div style={{ background: '#2563eb' }} className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm">🏢</div>
+          )}
+          <div className="min-w-0">
+            <div style={{ color: '#f4f4f3' }} className="text-sm font-semibold truncate">{nomeOrg}</div>
             <div style={{ color: '#8b8d98' }} className="text-[10px]">Gestão imobiliária</div>
           </div>
         </div>
