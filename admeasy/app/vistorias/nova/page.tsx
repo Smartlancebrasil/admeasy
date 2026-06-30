@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import AppLayout from '@/components/layout/AppLayout'
 import { supabase } from '@/lib/supabase'
@@ -32,7 +32,7 @@ type Ambiente = {
 type Imovel = { id: string; endereco: string; numero?: string; bairro?: string; cidade?: string; estado?: string }
 type Vistoriador = { id: string; nome: string }
 
-export default function NovaVistoriaPage() {
+function NovaVistoriaConteudo() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const editId = searchParams.get('id')
@@ -433,5 +433,19 @@ export default function NovaVistoriaPage() {
         </div>
       </div>
     </AppLayout>
+  )
+}
+
+export default function NovaVistoriaPage() {
+  return (
+    <Suspense fallback={
+      <AppLayout>
+        <div style={{ background: '#0d1117', minHeight: '100vh', color: '#8b8d98' }} className="flex-1 p-6">
+          Carregando...
+        </div>
+      </AppLayout>
+    }>
+      <NovaVistoriaConteudo />
+    </Suspense>
   )
 }
