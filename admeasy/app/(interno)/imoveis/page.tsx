@@ -9,6 +9,7 @@ const ORG_ID = '00000000-0000-0000-0000-000000000001'
 
 type Imovel = {
   id: string
+  codigo?: string
   titulo: string
   tipo?: string
   finalidade?: string
@@ -69,7 +70,36 @@ const conjugeFormVazio: Record<string, string> = {
   nome: '', cpf: '', rg: '', profissao: '',
 }
 
+function tipoLabel(tipo: string): string {
+  const labels: Record<string, string> = {
+    apartamento: 'Apartamento', casa: 'Casa', sala_comercial: 'Sala comercial', salao_comercial: 'Salão comercial',
+    loja: 'Loja', galpao: 'Galpão', terreno: 'Terreno', rural: 'Imóvel rural',
+  }
+  return labels[tipo] || 'Imóvel'
+}
+
 const UFs_MODAL = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
+
+function InputMoeda({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+  const display = value && !isNaN(Number(value))
+    ? Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+    : ''
+  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const digits = e.target.value.replace(/\D/g, '')
+    if (!digits) { onChange(''); return }
+    onChange(String(parseInt(digits, 10) / 100))
+  }
+  return (
+    <input
+      className="input"
+      type="text"
+      inputMode="numeric"
+      value={display}
+      onChange={handleChange}
+      placeholder={placeholder || 'R$ 0,00'}
+    />
+  )
+}
 
 /**
  * Modal de cadastro de proprietário (locador) para qualificação do contrato,
@@ -221,14 +251,17 @@ export default function ImoveisPage() {
   const [sucesso, setSucesso] = useState('')
   const [modalProprietario, setModalProprietario] = useState(false)
   const [editandoId, setEditandoId] = useState<string | null>(null)
+  const [buscandoCep, setBuscandoCep] = useState(false)
 
   const [form, setForm] = useState({
-    titulo: '', tipo: 'apartamento', finalidade: 'aluguel',
+    codigo: '', titulo: '', tipo: 'apartamento', categoria: 'residencial', finalidade: 'aluguel',
     proprietario_id: '',
     endereco: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '', cep: '',
     area_total: '', area_util: '', quartos: '0', suites: '0', banheiros: '0', vagas: '0',
     andar: '', mobiliado: false, pet: false,
     valor_aluguel: '', valor_venda: '', valor_condominio: '', valor_iptu: '',
+    numero_instalacao_agua: '', numero_instalacao_energia: '',
+    taxa_administracao: '10',
     status: 'disponivel', publicado_portal: false, descricao: '',
   })
 
@@ -262,10 +295,43 @@ export default function ImoveisPage() {
     setModalProprietario(false)
   }
 
+  function abrirNovoImovel() {
+    const codigosExistentes = imoveis
+      .map(i => i.codigo)
+      .filter(c => c && /^IM-\d+$/.test(c))
+      .map(c => parseInt(c!.replace('IM-', ''), 10))
+    const proximo = codigosExistentes.length > 0 ? Math.max(...codigosExistentes) + 1 : 1
+    const codigoGerado = `IM-${String(proximo).padStart(3, '0')}`
+    setForm(f => ({ ...f, codigo: codigoGerado }))
+    setShowForm(true)
+  }
+
+  async function buscarCep(cepDigitado: string) {    const cepLimpo = cepDigitado.replace(/\D/g, '')
+    if (cepLimpo.length !== 8) return
+    setBuscandoCep(true)
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`)
+      const data = await res.json()
+      if (!data.erro) {
+        setForm(f => ({
+          ...f,
+          endereco: data.logradouro || f.endereco,
+          bairro: data.bairro || f.bairro,
+          cidade: data.localidade || f.cidade,
+          estado: data.uf || f.estado,
+          titulo: f.titulo || `${tipoLabel(f.tipo)} - ${data.bairro || data.localidade || ''}`,
+        }))
+      }
+    } catch {
+      // Falha silenciosa — usuário pode preencher manualmente
+    }
+    setBuscandoCep(false)
+  }
+
   function abrirEdicao(i: Imovel) {
     setEditandoId(i.id)
     setForm({
-      titulo: i.titulo || '', tipo: i.tipo || 'apartamento', finalidade: i.finalidade || 'aluguel',
+      codigo: i.codigo || '', titulo: i.titulo || '', tipo: i.tipo || 'apartamento', categoria: i.categoria || 'residencial', finalidade: i.finalidade || 'aluguel',
       proprietario_id: i.proprietario_id || '',
       endereco: i.endereco || '', numero: i.numero || '', complemento: i.complemento || '',
       bairro: i.bairro || '', cidade: i.cidade || '', estado: i.estado || '', cep: i.cep || '',
@@ -275,6 +341,8 @@ export default function ImoveisPage() {
       andar: i.andar?.toString() || '', mobiliado: !!i.mobiliado, pet: !!i.pet,
       valor_aluguel: i.valor_aluguel?.toString() || '', valor_venda: i.valor_venda?.toString() || '',
       valor_condominio: i.valor_condominio?.toString() || '', valor_iptu: i.valor_iptu?.toString() || '',
+      numero_instalacao_agua: i.numero_instalacao_agua || '', numero_instalacao_energia: i.numero_instalacao_energia || '',
+      taxa_administracao: i.taxa_administracao?.toString() || '10',
       status: i.status || 'disponivel', publicado_portal: !!i.publicado_portal, descricao: i.descricao || '',
     })
     setErro('')
@@ -286,12 +354,14 @@ export default function ImoveisPage() {
     setEditandoId(null)
     setErro('')
     setForm({
-      titulo: '', tipo: 'apartamento', finalidade: 'aluguel',
+      codigo: '', titulo: '', tipo: 'apartamento', categoria: 'residencial', finalidade: 'aluguel',
       proprietario_id: '',
       endereco: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '', cep: '',
       area_total: '', area_util: '', quartos: '0', suites: '0', banheiros: '0', vagas: '0',
       andar: '', mobiliado: false, pet: false,
       valor_aluguel: '', valor_venda: '', valor_condominio: '', valor_iptu: '',
+      numero_instalacao_agua: '', numero_instalacao_energia: '',
+      taxa_administracao: '10',
       status: 'disponivel', publicado_portal: false, descricao: '',
     })
   }
@@ -311,9 +381,11 @@ export default function ImoveisPage() {
     setErro('')
 
     const payload = {
-      titulo: form.titulo,
+      codigo: form.codigo || null,
+      titulo: form.titulo || form.codigo || `${tipoLabel(form.tipo)} ${form.bairro || ''}`.trim(),
       tipo: form.tipo,
       finalidade: form.finalidade,
+      categoria: form.categoria || 'residencial',
       proprietario_id: form.proprietario_id || null,
       endereco: form.endereco,
       numero: form.numero,
@@ -335,6 +407,9 @@ export default function ImoveisPage() {
       valor_venda: form.valor_venda ? parseFloat(form.valor_venda) : null,
       valor_condominio: form.valor_condominio ? parseFloat(form.valor_condominio) : null,
       valor_iptu: form.valor_iptu ? parseFloat(form.valor_iptu) : null,
+      numero_instalacao_agua: form.numero_instalacao_agua || null,
+      numero_instalacao_energia: form.numero_instalacao_energia || null,
+      taxa_administracao: form.taxa_administracao ? parseFloat(form.taxa_administracao) : 10,
       status: form.status,
       publicado_portal: form.publicado_portal,
       descricao: form.descricao,
@@ -375,7 +450,7 @@ export default function ImoveisPage() {
 
           <div className="flex items-center justify-between mb-5">
             <h1 style={{ color: '#f4f4f3' }} className="text-lg font-medium">Imóveis</h1>
-            <button className="btn btn-primary" onClick={() => showForm ? fecharForm() : setShowForm(true)}>
+            <button className="btn btn-primary" onClick={() => showForm ? fecharForm() : abrirNovoImovel()}>
               {showForm ? <X size={14} /> : <Plus size={14} />}
               {showForm ? 'Cancelar' : 'Cadastrar imóvel'}
             </button>
@@ -392,19 +467,46 @@ export default function ImoveisPage() {
               <h2 style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-4">{editandoId ? 'Editar imóvel' : 'Cadastrar novo imóvel'}</h2>
               <form onSubmit={salvarImovel}>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="sm:col-span-2">
-                    <label className="label">Título do anúncio *</label>
-                    <input className="input" required value={form.titulo} onChange={e => setForm({...form, titulo: e.target.value})} placeholder="Ex: Apartamento 2 dorms - Vila Mariana" />
+                  <div>
+                    <label className="label">Código</label>
+                    <input className="input" style={{ background: '#16243a', color: '#5b9bf5' }} value={form.codigo} disabled />
+                    <p className="text-[10px] mt-1" style={{ color: '#5b5e6b' }}>Gerado automaticamente.</p>
+                  </div>
+                  <div>
+                    <label className="label">Título do anúncio</label>
+                    <input className="input" value={form.titulo} onChange={e => setForm({...form, titulo: e.target.value})} placeholder="Sugerido automaticamente após o CEP — pode editar" />
                   </div>
                   <div>
                     <label className="label">Tipo</label>
-                    <select className="input" value={form.tipo} onChange={e => setForm({...form, tipo: e.target.value})}>
+                    <select className="input" value={form.tipo} onChange={e => {
+                      const novoTipo = e.target.value
+                      const categoriasComerciais = ['sala_comercial', 'salao_comercial', 'loja', 'galpao']
+                      const categoriasResidenciais = ['apartamento', 'casa']
+                      setForm(f => ({
+                        ...f,
+                        tipo: novoTipo,
+                        categoria: categoriasComerciais.includes(novoTipo) ? 'comercial'
+                          : categoriasResidenciais.includes(novoTipo) ? 'residencial'
+                          : f.categoria,
+                      }))
+                    }}>
                       <option value="apartamento">Apartamento</option>
                       <option value="casa">Casa</option>
-                      <option value="comercial">Comercial</option>
+                      <option value="sala_comercial">Sala comercial</option>
+                      <option value="salao_comercial">Salão comercial</option>
+                      <option value="loja">Loja</option>
+                      <option value="galpao">Galpão</option>
                       <option value="terreno">Terreno</option>
                       <option value="rural">Rural</option>
                     </select>
+                  </div>
+                  <div>
+                    <label className="label">Categoria</label>
+                    <select className="input" value={form.categoria} onChange={e => setForm({...form, categoria: e.target.value})}>
+                      <option value="residencial">Residencial</option>
+                      <option value="comercial">Comercial</option>
+                    </select>
+                    <p className="text-[10px] mt-1" style={{ color: '#5b5e6b' }}>Define se o contrato gerado será de locação residencial ou comercial.</p>
                   </div>
                   <div>
                     <label className="label">Finalidade</label>
@@ -427,9 +529,17 @@ export default function ImoveisPage() {
                       {clientes.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
                     </select>
                   </div>
-                  <div className="sm:col-span-2">
-                    <label className="label">Endereço</label>
-                    <input className="input" value={form.endereco} onChange={e => setForm({...form, endereco: e.target.value})} />
+                  <div>
+                    <label className="label">CEP</label>
+                    <input
+                      className="input"
+                      value={form.cep}
+                      onChange={e => setForm({ ...form, cep: e.target.value })}
+                      onBlur={() => buscarCep(form.cep)}
+                      placeholder="00000-000"
+                      maxLength={9}
+                    />
+                    {buscandoCep && <p className="text-[10px] mt-1" style={{ color: '#5b9bf5' }}>Buscando endereço...</p>}
                   </div>
                   <div>
                     <label className="label">Número</label>
@@ -438,6 +548,10 @@ export default function ImoveisPage() {
                   <div>
                     <label className="label">Complemento</label>
                     <input className="input" value={form.complemento} onChange={e => setForm({...form, complemento: e.target.value})} />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="label">Endereço</label>
+                    <input className="input" value={form.endereco} onChange={e => setForm({...form, endereco: e.target.value})} />
                   </div>
                   <div>
                     <label className="label">Bairro</label>
@@ -455,10 +569,6 @@ export default function ImoveisPage() {
                         <option key={uf} value={uf}>{uf}</option>
                       ))}
                     </select>
-                  </div>
-                  <div>
-                    <label className="label">CEP</label>
-                    <input className="input" value={form.cep} onChange={e => setForm({...form, cep: e.target.value})} placeholder="00000-000" />
                   </div>
                   <div>
                     <label className="label">Área total (m²)</label>
@@ -494,19 +604,31 @@ export default function ImoveisPage() {
                   </div>
                   <div>
                     <label className="label">Valor aluguel (R$)</label>
-                    <input className="input" type="number" value={form.valor_aluguel} onChange={e => setForm({...form, valor_aluguel: e.target.value})} placeholder="0,00" />
+                    <InputMoeda value={form.valor_aluguel} onChange={v => setForm({...form, valor_aluguel: v})} />
+                  </div>
+                  <div>
+                    <label className="label">Taxa de administração (%)</label>
+                    <input className="input" type="number" step="0.1" value={form.taxa_administracao} onChange={e => setForm({...form, taxa_administracao: e.target.value})} placeholder="10" />
                   </div>
                   <div>
                     <label className="label">Valor venda (R$)</label>
-                    <input className="input" type="number" value={form.valor_venda} onChange={e => setForm({...form, valor_venda: e.target.value})} placeholder="0,00" />
+                    <InputMoeda value={form.valor_venda} onChange={v => setForm({...form, valor_venda: v})} />
                   </div>
                   <div>
-                    <label className="label">Condomínio (R$)</label>
-                    <input className="input" type="number" value={form.valor_condominio} onChange={e => setForm({...form, valor_condominio: e.target.value})} placeholder="0,00" />
+                    <label className="label">Condomínio (mensal) (R$)</label>
+                    <InputMoeda value={form.valor_condominio} onChange={v => setForm({...form, valor_condominio: v})} />
                   </div>
                   <div>
-                    <label className="label">IPTU anual (R$)</label>
-                    <input className="input" type="number" value={form.valor_iptu} onChange={e => setForm({...form, valor_iptu: e.target.value})} placeholder="0,00" />
+                    <label className="label">IPTU (mensal) (R$)</label>
+                    <InputMoeda value={form.valor_iptu} onChange={v => setForm({...form, valor_iptu: v})} />
+                  </div>
+                  <div>
+                    <label className="label">Nº instalação água</label>
+                    <input className="input" value={form.numero_instalacao_agua} onChange={e => setForm({...form, numero_instalacao_agua: e.target.value})} placeholder="Nº da matrícula/instalação (concessionária)" />
+                  </div>
+                  <div>
+                    <label className="label">Nº instalação energia</label>
+                    <input className="input" value={form.numero_instalacao_energia} onChange={e => setForm({...form, numero_instalacao_energia: e.target.value})} placeholder="Nº da instalação/UC (concessionária)" />
                   </div>
                   <div>
                     <label className="label">Status</label>
@@ -595,7 +717,10 @@ export default function ImoveisPage() {
                             <Building2 size={16} />
                           </div>
                           <div>
-                            <div style={{ color: '#f4f4f3' }} className="font-medium text-sm whitespace-nowrap">{i.titulo}</div>
+                            <div style={{ color: '#f4f4f3' }} className="font-medium text-sm whitespace-nowrap flex items-center gap-1.5">
+                              {i.codigo && <span style={{ background: '#16243a', color: '#5b9bf5', border: '0.5px solid #1e3a5f' }} className="text-[10px] font-semibold px-1.5 py-0.5 rounded">{i.codigo}</span>}
+                              {i.titulo}
+                            </div>
                             <div style={{ color: '#8b8d98' }} className="text-xs whitespace-nowrap">{[i.bairro, i.cidade, i.estado].filter(Boolean).join(' · ')}</div>
                           </div>
                         </div>

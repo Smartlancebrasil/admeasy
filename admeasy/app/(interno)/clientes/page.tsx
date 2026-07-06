@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react'
 import AppLayout from '@/components/layout/AppLayout'
 import { supabase } from '@/lib/supabase'
-import { UserPlus, Search, X, Edit2, Save } from 'lucide-react'
+import { useOrganization } from '@/lib/OrganizationContext'
+import { UserPlus, Search, X, Edit2, Save, KeyRound } from 'lucide-react'
 
 type Cliente = {
   id: string
@@ -27,6 +28,7 @@ type Cliente = {
   observacoes?: string
   status: string
   tem_portal: boolean
+  usuario_portal_id?: string | null
   created_at: string
 }
 
@@ -43,6 +45,13 @@ const statusBadge: Record<string, string> = {
 
 function iniciais(nome: string) {
   return nome.split(' ').slice(0,2).map(n => n[0]).join('').toUpperCase()
+}
+
+function gerarSenhaAleatoria() {
+  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789'
+  let senha = ''
+  for (let i = 0; i < 10; i++) senha += chars[Math.floor(Math.random() * chars.length)]
+  return senha
 }
 
 const UFs = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
@@ -145,7 +154,96 @@ function FormCliente({
   )
 }
 
+/**
+ * Também fica FORA do componente da página, pelo mesmo motivo do
+ * FormCliente (evitar recriação e perda de foco a cada tecla digitada).
+ */
+function ModalAcessoPortal({ cliente, organizationId, onFechar, onSucesso }: {
+  cliente: Cliente
+  organizationId?: string
+  onFechar: () => void
+  onSucesso: () => void
+}) {
+  const [email, setEmail] = useState(cliente.email || '')
+  const [senha, setSenha] = useState(gerarSenhaAleatoria())
+  const [salvando, setSalvando] = useState(false)
+  const [erro, setErro] = useState('')
+  const [sucesso, setSucesso] = useState(false)
+
+  async function confirmar() {
+    setSalvando(true)
+    setErro('')
+    try {
+      const res = await fetch('/api/portal/gerenciar-acesso', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clienteId: cliente.id, email, senha, organizationId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Erro ao processar.')
+      setSucesso(true)
+      onSucesso()
+    } catch (e: any) {
+      setErro(e.message)
+    }
+    setSalvando(false)
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 50 }} className="flex items-center justify-center p-4">
+      <div className="card" style={{ maxWidth: 420, width: '100%' }}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 style={{ color: '#f4f4f3' }} className="text-sm font-semibold">
+            {cliente.tem_portal ? 'Redefinir senha' : 'Criar acesso ao portal'} — {cliente.nome}
+          </h2>
+          <button onClick={onFechar} className="btn btn-sm"><X size={13} /></button>
+        </div>
+
+        {sucesso ? (
+          <div>
+            <div style={{ background: '#1a2e1f', border: '0.5px solid #2d4a35', color: '#3fb950' }} className="px-4 py-3 rounded-lg mb-3 text-sm">
+              {cliente.tem_portal ? 'Senha redefinida com sucesso!' : 'Acesso criado com sucesso!'}
+            </div>
+            <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-lg p-3 mb-4">
+              <div style={{ color: '#8b8d98' }} className="text-xs mb-1">E-mail de acesso</div>
+              <div style={{ color: '#f4f4f3' }} className="text-sm font-medium mb-2">{email}</div>
+              <div style={{ color: '#8b8d98' }} className="text-xs mb-1">Senha</div>
+              <div style={{ color: '#f4f4f3' }} className="text-sm font-medium">{senha}</div>
+            </div>
+            <div style={{ color: '#8b8d98' }} className="text-xs mb-4">
+              Anote ou copie esses dados agora — a senha não fica visível em nenhum outro lugar depois que você fechar esta janela. Envie ao locatário por WhatsApp ou e-mail.
+            </div>
+            <button className="btn btn-primary" onClick={onFechar}>Fechar</button>
+          </div>
+        ) : (
+          <>
+            <div className="mb-3">
+              <label className="label">E-mail do locatário</label>
+              <input className="input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="email@exemplo.com" />
+            </div>
+            <div className="mb-3">
+              <label className="label">Senha</label>
+              <div className="flex gap-2">
+                <input className="input" value={senha} onChange={e => setSenha(e.target.value)} />
+                <button type="button" className="btn btn-sm" onClick={() => setSenha(gerarSenhaAleatoria())}>Gerar nova</button>
+              </div>
+            </div>
+            {erro && <div style={{ background: '#2e1717', border: '0.5px solid #4a2424', color: '#ef4444' }} className="text-sm px-3 py-2 rounded-lg mb-3">{erro}</div>}
+            <div className="flex gap-2">
+              <button className="btn btn-primary" disabled={salvando || !email || senha.length < 6} onClick={confirmar}>
+                {salvando ? 'Salvando...' : cliente.tem_portal ? 'Redefinir senha' : 'Criar acesso'}
+              </button>
+              <button className="btn" onClick={onFechar}>Cancelar</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function ClientesPage() {
+  const { organizacao } = useOrganization()
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [loading, setLoading] = useState(true)
   const [busca, setBusca] = useState('')
@@ -155,6 +253,7 @@ export default function ClientesPage() {
   const [erro, setErro] = useState('')
   const [sucesso, setSucesso] = useState('')
   const [form, setForm] = useState<Record<string,string>>(formVazio)
+  const [clienteAcesso, setClienteAcesso] = useState<Cliente | null>(null)
 
   useEffect(() => { buscarClientes() }, [])
 
@@ -260,6 +359,15 @@ export default function ClientesPage() {
             />
           )}
 
+          {clienteAcesso && (
+            <ModalAcessoPortal
+              cliente={clienteAcesso}
+              organizationId={organizacao?.id}
+              onFechar={() => setClienteAcesso(null)}
+              onSucesso={() => { buscarClientes() }}
+            />
+          )}
+
           <div className="card mb-4 py-3">
             <div className="flex items-center gap-2">
               <Search size={15} style={{ color: '#8b8d98' }} />
@@ -284,7 +392,7 @@ export default function ClientesPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{ borderBottom: '0.5px solid #2a2f3a' }}>
-                    {['Cliente','Tipo','CPF','Telefone','E-mail','Status',''].map(h => (
+                    {['Cliente','Tipo','CPF','Telefone','E-mail','Status','Portal',''].map(h => (
                       <th key={h} style={{ color: '#8b8d98' }} className="text-left px-4 py-3 text-xs font-medium whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -306,7 +414,21 @@ export default function ClientesPage() {
                       <td style={{ color: '#8b8d98' }} className="px-4 py-3">{c.email || '—'}</td>
                       <td className="px-4 py-3"><span className={statusBadge[c.status] || 'badge badge-gray'}>{c.status}</span></td>
                       <td className="px-4 py-3">
+                        {c.tipo === 'locatario' ? (
+                          <span className={c.tem_portal ? 'badge badge-green' : 'badge badge-gray'}>
+                            {c.tem_portal ? 'Ativo' : 'Sem acesso'}
+                          </span>
+                        ) : (
+                          <span style={{ color: '#5b5e6b' }}>—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
                         <div className="flex gap-2">
+                          {c.tipo === 'locatario' && (
+                            <button className="btn btn-sm" onClick={() => setClienteAcesso(c)} title="Gerenciar acesso ao portal">
+                              <KeyRound size={12} />{c.tem_portal ? 'Redefinir' : 'Gerenciar acesso'}
+                            </button>
+                          )}
                           <button className="btn btn-sm" onClick={() => abrirEdicao(c)}><Edit2 size={12} />Editar</button>
                           <button className="btn btn-sm" style={{ color: '#ef4444' }} onClick={() => excluir(c.id)}><X size={12} /></button>
                         </div>

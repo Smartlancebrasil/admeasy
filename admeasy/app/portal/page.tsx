@@ -4,9 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getPortalUser, logoutPortal, alterarSenhaPortal, PortalUser } from '@/lib/portal-auth'
 import { supabase } from '@/lib/supabase'
-import { LogOut, Key, Plus, X, Upload, ChevronDown, ChevronUp, FileDown, Copy, Check, AlertCircle, QrCode } from 'lucide-react'
-
-const ORG_ID = '00000000-0000-0000-0000-000000000001'
+import { LogOut, Key, Plus, X, Upload, ChevronDown, ChevronUp, FileDown, Copy, Check, AlertCircle, QrCode, Edit2 } from 'lucide-react'
 
 function formatVal(v: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0)
@@ -19,6 +17,18 @@ function diasAte(d: string) {
   const hoje = new Date(); hoje.setHours(0,0,0,0)
   return Math.ceil((new Date(d + 'T00:00:00').getTime() - hoje.getTime()) / 86400000)
 }
+function mesJaChegou(dataVencimento: string) {
+  const hoje = new Date()
+  const venc = new Date(dataVencimento + 'T00:00:00')
+  if (venc.getFullYear() < hoje.getFullYear()) return true
+  if (venc.getFullYear() > hoje.getFullYear()) return false
+  return venc.getMonth() <= hoje.getMonth()
+}
+const mesesLabel = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro']
+function proximoMesDisponivel(dataVencimento: string) {
+  const venc = new Date(dataVencimento + 'T00:00:00')
+  return `${mesesLabel[venc.getMonth()]}/${venc.getFullYear()}`
+}
 function calcularValorAtualizado(valorOriginal: number, dataVencimento: string) {
   const hoje = new Date(); hoje.setHours(0,0,0,0)
   const venc = new Date(dataVencimento + 'T00:00:00')
@@ -27,6 +37,20 @@ function calcularValorAtualizado(valorOriginal: number, dataVencimento: string) 
   const multa = valorOriginal * 0.10
   const juros = valorOriginal * 0.00033 * diasAtraso
   return { valorAtualizado: valorOriginal + multa + juros, multa, juros, diasAtraso }
+}
+function valorCobranca(c: any) {
+  return c.valor_total > 0 ? c.valor_total : (c.valor_aluguel || 0)
+}
+function infoMeses(dataInicio: string, dataFim: string) {
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0)
+  const ini = new Date(dataInicio + 'T00:00:00')
+  const fim = new Date(dataFim + 'T00:00:00')
+  const totalMeses = Math.max(1, (fim.getFullYear() - ini.getFullYear()) * 12 + (fim.getMonth() - ini.getMonth()) + (fim.getDate() >= ini.getDate() ? 1 : 0))
+  let cumpridos = (hoje.getFullYear() - ini.getFullYear()) * 12 + (hoje.getMonth() - ini.getMonth())
+  if (hoje.getDate() < ini.getDate()) cumpridos -= 1
+  cumpridos = Math.max(0, Math.min(totalMeses, cumpridos))
+  const faltantes = Math.max(0, totalMeses - cumpridos)
+  return { totalMeses, cumpridos, faltantes }
 }
 
 const statusDemanda: Record<string, { label: string; cor: string; bg: string; border: string }> = {
@@ -129,8 +153,7 @@ function ModalBoleto({ boleto, onFechar }: {
 }
 
 // ── MODAL TROCAR SENHA ────────────────────────────────────────────────
-function ModalTrocarSenha({ userId, onFechar }: { userId: string; onFechar: () => void }) {
-  const [atual, setAtual] = useState('')
+function ModalTrocarSenha({ onFechar }: { onFechar: () => void }) {
   const [nova, setNova] = useState('')
   const [confirma, setConfirma] = useState('')
   const [salvando, setSalvando] = useState(false)
@@ -142,7 +165,7 @@ function ModalTrocarSenha({ userId, onFechar }: { userId: string; onFechar: () =
     if (nova !== confirma) { setErro('As senhas não coincidem.'); return }
     if (nova.length < 6) { setErro('Mínimo 6 caracteres.'); return }
     setSalvando(true); setErro('')
-    const { sucesso, erro: e_ } = await alterarSenhaPortal(userId, atual, nova)
+    const { sucesso, erro: e_ } = await alterarSenhaPortal(nova)
     setSalvando(false)
     if (!sucesso) { setErro(e_ || 'Erro.'); return }
     setMsg('Senha alterada!')
@@ -158,7 +181,7 @@ function ModalTrocarSenha({ userId, onFechar }: { userId: string; onFechar: () =
         </div>
         {msg ? <p style={{ color: '#3fb950' }} className="text-sm text-center py-4">{msg}</p> : (
           <form onSubmit={salvar} className="space-y-3">
-            {([['Senha atual', atual, setAtual], ['Nova senha', nova, setNova], ['Confirmar nova senha', confirma, setConfirma]] as const).map(([label, val, setter]: any) => (
+            {([['Nova senha', nova, setNova], ['Confirmar nova senha', confirma, setConfirma]] as const).map(([label, val, setter]: any) => (
               <div key={label}>
                 <label style={{ color: '#8b9ab4' }} className="block text-xs mb-1">{label}</label>
                 <input type="password" required value={val} onChange={e => setter(e.target.value)}
@@ -177,22 +200,68 @@ function ModalTrocarSenha({ userId, onFechar }: { userId: string; onFechar: () =
   )
 }
 
-// ── FORMULÁRIO DE DEMANDA ─────────────────────────────────────────────
-function FormularioDemanda({ clienteId, contratoId, onSalvar, onFechar }: {
-  clienteId: string; contratoId: string; onSalvar: () => void; onFechar: () => void
+// ── MODAL SIMULAR RESCISÃO ────────────────────────────────────────────
+function ModalRescisao({ contrato, onFechar }: { contrato: any; onFechar: () => void }) {
+  const valorMensalAtual = contrato.valor_atual || contrato.valor_mensal || 0
+  const { totalMeses, cumpridos, faltantes } = infoMeses(contrato.data_inicio, contrato.data_fim)
+  const multaAlugueis = contrato.multa_rescisao_locatario || 0
+  const multaCheia = multaAlugueis * valorMensalAtual
+  const multaProporcional = totalMeses > 0 ? multaCheia * (faltantes / totalMeses) : 0
+
+  return (
+    <div style={{ background: 'rgba(0,0,0,0.7)' }} className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto" onClick={onFechar}>
+      <div style={{ background: '#0d1b2e', border: '0.5px solid #1e3a5f' }} className="rounded-2xl p-6 w-full max-w-md my-6" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-white font-semibold text-sm">Simular rescisão antecipada</h3>
+          <button onClick={onFechar} style={{ color: '#8b9ab4' }}><X size={16} /></button>
+        </div>
+
+        <div style={{ background: '#16243a', border: '0.5px solid #1e3a5f' }} className="rounded-xl p-4 mb-4 text-center">
+          <p style={{ color: '#8b9ab4' }} className="text-xs mb-1">Estimativa de multa proporcional</p>
+          <p className="text-white font-bold text-2xl">{formatVal(multaProporcional)}</p>
+        </div>
+
+        <div className="space-y-2 text-sm">
+          <div className="flex justify-between"><span style={{ color: '#8b9ab4' }}>Duração total do contrato</span><span className="text-white">{totalMeses} meses</span></div>
+          <div className="flex justify-between"><span style={{ color: '#8b9ab4' }}>Meses cumpridos</span><span className="text-white">{cumpridos}</span></div>
+          <div className="flex justify-between"><span style={{ color: '#8b9ab4' }}>Meses faltantes</span><span className="text-white">{faltantes}</span></div>
+          <div style={{ borderTop: '0.5px solid #1e3a5f' }} className="pt-2 flex justify-between">
+            <span style={{ color: '#8b9ab4' }}>Multa contratual cheia</span>
+            <span className="text-white">{multaAlugueis}x aluguel = {formatVal(multaCheia)}</span>
+          </div>
+        </div>
+
+        <p style={{ color: '#5b5e6b' }} className="text-[10px] mt-4">
+          Valor estimado com base na multa contratual ({multaAlugueis} aluguéis) aplicada proporcionalmente
+          ao tempo restante do contrato, conforme art. 4º da Lei 8.245/91. O valor final pode variar e será
+          confirmado pela imobiliária.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+// ── FORMULÁRIO DE DEMANDA (abrir nova ou editar uma "aberta") ─────────
+function FormularioDemanda({ clienteId, contratoId, organizationId, editando, onSalvar, onFechar }: {
+  clienteId: string; contratoId: string; organizationId: string
+  editando?: { id: string; titulo: string; descricao?: string; urgencia: string; fotos?: string[] } | null
+  onSalvar: () => void; onFechar: () => void
 }) {
-  const [titulo, setTitulo] = useState('')
-  const [descricao, setDescricao] = useState('')
-  const [urgencia, setUrgencia] = useState('media')
-  const [anexos, setAnexos] = useState<{ url: string; nome: string; isImagem: boolean }[]>([])
+  const [titulo, setTitulo] = useState(editando?.titulo || '')
+  const [descricao, setDescricao] = useState(editando?.descricao || '')
+  const [urgencia, setUrgencia] = useState(editando?.urgencia || 'media')
+  const [anexos, setAnexos] = useState<{ url: string; nome: string; isImagem: boolean }[]>(
+    (editando?.fotos || []).map(url => ({ url, nome: '', isImagem: true }))
+  )
   const [uploadando, setUploadando] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
+  const [protocoloGerado, setProtocoloGerado] = useState<string | null>(null)
 
   async function uploadAnexo(file: File) {
     if (anexos.length >= 5) return
     setUploadando(true)
-    const path = `chamados/${ORG_ID}/${Date.now()}_${file.name}`
+    const path = `chamados/${organizationId}/${Date.now()}_${file.name}`
     const { data } = await supabase.storage.from('documentos').upload(path, file, { upsert: true })
     if (data) {
       const { data: url } = supabase.storage.from('documentos').getPublicUrl(path)
@@ -205,22 +274,65 @@ function FormularioDemanda({ clienteId, contratoId, onSalvar, onFechar }: {
     e.preventDefault()
     if (!titulo.trim()) { setErro('Informe o assunto.'); return }
     setSalvando(true)
-    const { error } = await supabase.from('demandas').insert([{
-      organization_id: ORG_ID, titulo, descricao: descricao || null, urgencia,
+    setErro('')
+
+    if (editando) {
+      // Edição só é permitida enquanto a demanda ainda está "aberta" (a tela
+      // que chama este formulário já garante isso, mas a query abaixo não
+      // sobrescreve status/decisão de forma alguma).
+      const { error } = await supabase.from('demandas').update({
+        titulo, descricao: descricao || null, urgencia,
+        fotos: anexos.map(a => a.url),
+      }).eq('id', editando.id)
+      setSalvando(false)
+      if (error) { setErro('Erro: ' + error.message); return }
+      onSalvar(); onFechar()
+      return
+    }
+
+    // Nova demanda: "numero" (protocolo) não é enviado — o gatilho no banco
+    // preenche sozinho. Usamos .select() para ler de volta o protocolo
+    // gerado e mostrar ao locatário.
+    const { data, error } = await supabase.from('demandas').insert([{
+      organization_id: organizationId, titulo, descricao: descricao || null, urgencia,
       origem: 'locatario', status: 'aberta', contrato_id: contratoId || null,
       locatario_id: clienteId, data_abertura: new Date().toISOString(),
-      fotos_chamado: anexos.map(a => a.url),
-    }])
+      fotos: anexos.map(a => a.url),
+    }]).select('numero').single()
+
     setSalvando(false)
     if (error) { setErro('Erro: ' + error.message); return }
-    onSalvar(); onFechar()
+    setProtocoloGerado(data?.numero || null)
+  }
+
+  if (protocoloGerado !== null) {
+    return (
+      <div style={{ background: 'rgba(0,0,0,0.7)' }} className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div style={{ background: '#0d1b2e', border: '0.5px solid #1e3a5f' }} className="rounded-2xl p-6 w-full max-w-sm text-center">
+          <div className="text-4xl mb-3">✅</div>
+          <h3 className="text-white font-semibold mb-2">Solicitação aberta com sucesso!</h3>
+          <p style={{ color: '#8b9ab4' }} className="text-sm mb-1">Protocolo nº</p>
+          <p style={{ color: '#5b9bf5' }} className="text-lg font-bold mb-3">{protocoloGerado}</p>
+          <p style={{ color: '#8b9ab4' }} className="text-xs mb-5">
+            Você poderá acompanhar o andamento da demanda pelo seu painel.
+          </p>
+          <button
+            style={{ background: '#1A7FFF' }}
+            className="w-full py-3 rounded-xl text-white text-sm font-semibold"
+            onClick={() => { onSalvar(); onFechar() }}
+          >
+            Entendi
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (
     <div style={{ background: 'rgba(0,0,0,0.7)' }} className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto" onClick={onFechar}>
       <div style={{ background: '#0d1b2e', border: '0.5px solid #1e3a5f' }} className="rounded-2xl p-6 w-full max-w-lg my-6" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-5">
-          <h3 className="text-white font-semibold">Nova solicitação</h3>
+          <h3 className="text-white font-semibold">{editando ? 'Editar solicitação' : 'Nova solicitação'}</h3>
           <button onClick={onFechar} style={{ color: '#8b9ab4' }}><X size={16} /></button>
         </div>
         <form onSubmit={enviar} className="space-y-4">
@@ -276,7 +388,7 @@ function FormularioDemanda({ clienteId, contratoId, onSalvar, onFechar }: {
           {erro && <p style={{ color: '#ef4444' }} className="text-xs">{erro}</p>}
           <button type="submit" disabled={salvando} style={{ background: '#1A7FFF' }}
             className="w-full py-3 rounded-xl text-white text-sm font-semibold disabled:opacity-50">
-            {salvando ? 'Enviando...' : 'Enviar solicitação'}
+            {salvando ? 'Enviando...' : editando ? 'Salvar alterações' : 'Enviar solicitação'}
           </button>
         </form>
       </div>
@@ -285,28 +397,36 @@ function FormularioDemanda({ clienteId, contratoId, onSalvar, onFechar }: {
 }
 
 // ── CARD DEMANDA ──────────────────────────────────────────────────────
-function CardDemanda({ d }: { d: any }) {
+function CardDemanda({ d, onEditar }: { d: any; onEditar: (d: any) => void }) {
   const [aberto, setAberto] = useState(false)
-  const st = statusDemanda[d.status] || { label: d.status, cor: '#8b9ab4', bg: '#0d1b2e', border: '#1e3a5f' }
-  const fotos: string[] = d.fotos_chamado || []
+  const st = statusDemanda[d.status] || statusDemanda.aberta
+  const podeEditar = d.status === 'aberta'
+
   return (
-    <div style={{ background: st.bg, border: `0.5px solid ${st.border}` }} className="rounded-xl overflow-hidden">
-      <div className="flex items-center justify-between p-4 cursor-pointer" onClick={() => setAberto(!aberto)}>
-        <div className="flex-1 min-w-0 pr-3">
+    <div style={{ background: '#0d1b2e', border: '0.5px solid #1e3a5f' }} className="rounded-xl p-4">
+      <div className="flex items-center justify-between cursor-pointer" onClick={() => setAberto(!aberto)}>
+        <div className="flex-1 min-w-0">
           <p className="text-white text-sm font-medium truncate">{d.titulo}</p>
-          <p style={{ color: '#8b9ab4' }} className="text-[10px] mt-0.5">{new Date(d.created_at).toLocaleDateString('pt-BR')} · {d.urgencia}</p>
+          <p style={{ color: '#8b9ab4' }} className="text-[10px] mt-0.5">
+            {d.numero ? `${d.numero} · ` : ''}{formatDate(d.data_abertura?.split('T')[0] || d.created_at?.split('T')[0])}
+          </p>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <span style={{ color: st.cor, border: `0.5px solid ${st.border}` }} className="text-[10px] px-2 py-0.5 rounded-full font-semibold whitespace-nowrap">{st.label}</span>
+        <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+          <span style={{ color: st.cor, background: st.bg, border: `0.5px solid ${st.border}` }} className="text-[10px] font-semibold px-2 py-1 rounded-full">{st.label}</span>
           {aberto ? <ChevronUp size={14} style={{ color: '#8b9ab4' }} /> : <ChevronDown size={14} style={{ color: '#8b9ab4' }} />}
         </div>
       </div>
+
       {aberto && (
-        <div style={{ borderTop: `0.5px solid ${st.border}` }} className="px-4 pb-4 pt-3 space-y-3">
+        <div className="mt-3 pt-3 space-y-2" style={{ borderTop: '0.5px solid #1e3a5f' }}>
           {d.descricao && <p style={{ color: '#c3c2b7' }} className="text-sm">{d.descricao}</p>}
-          {fotos.length > 0 && (
+          {d.fotos?.length > 0 && (
             <div className="flex gap-2 flex-wrap">
-              {fotos.map((url, i) => <a key={i} href={url} target="_blank" rel="noopener noreferrer"><img src={url} alt="" className="w-16 h-16 object-cover rounded-lg border border-gray-700" /></a>)}
+              {d.fotos.map((url: string, i: number) => (
+                <a key={i} href={url} target="_blank" rel="noopener noreferrer" style={{ background: '#16243a', border: '0.5px solid #1e3a5f' }} className="w-14 h-14 rounded-lg overflow-hidden flex items-center justify-center">
+                  <img src={url} alt="" className="w-full h-full object-cover" onError={(e: any) => { e.target.style.display = 'none' }} />
+                </a>
+              ))}
             </div>
           )}
           {d.resposta_imobiliaria && (
@@ -323,6 +443,15 @@ function CardDemanda({ d }: { d: any }) {
               <p style={{ color: '#c3c2b7' }} className="text-sm">{d.justificativa}</p>
             </div>
           )}
+          {podeEditar && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onEditar(d) }}
+              style={{ border: '0.5px solid #1e3a5f', color: '#5b9bf5' }}
+              className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 mt-1"
+            >
+              <Edit2 size={11} />Editar solicitação
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -337,6 +466,8 @@ function PainelLocatario({ user }: { user: PortalUser }) {
   const [clienteData, setClienteData] = useState<any>(null)
   const [aba, setAba] = useState<'contrato' | 'demandas'>('contrato')
   const [modalDemanda, setModalDemanda] = useState(false)
+  const [demandaEditando, setDemandaEditando] = useState<any>(null)
+  const [modalRescisao, setModalRescisao] = useState(false)
   const [boletoGerado, setBoletoGerado] = useState<any>(null)
   const [gerandoBoleto, setGerandoBoleto] = useState<string | null>(null)
   const [erroBoleto, setErroBoleto] = useState<string | null>(null)
@@ -372,13 +503,14 @@ function PainelLocatario({ user }: { user: PortalUser }) {
   async function gerarBoleto(c: any) {
     setGerandoBoleto(c.id)
     setErroBoleto(null)
-    const { valorAtualizado } = calcularValorAtualizado(c.valor_aluguel, c.data_vencimento)
+    const base = valorCobranca(c)
+    const { valorAtualizado } = calcularValorAtualizado(base, c.data_vencimento)
     try {
       const res = await fetch('/api/boleto', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          valor: c.valor_aluguel,
+          valor: base,
           valorAtualizado,
           vencimento: c.data_vencimento,
           nomeLocatario: clienteData?.nome || user.nome,
@@ -394,7 +526,6 @@ function PainelLocatario({ user }: { user: PortalUser }) {
         setErroBoleto(data.erro || 'Erro ao gerar boleto.')
       } else {
         setBoletoGerado(data)
-        // Salva o ID do boleto MP na cobrança
         await supabase.from('cobrancas').update({ mp_payment_id: data.id }).eq('id', c.id)
       }
     } catch (err) {
@@ -407,7 +538,7 @@ function PainelLocatario({ user }: { user: PortalUser }) {
     const { default: jsPDF } = await import('jspdf')
     const doc = new jsPDF({ format: 'a4', unit: 'mm' })
     const W = 210; const ML = 20; const MR = W - 20; let y = 20
-    const { data: org } = await supabase.from('organizations').select('nome, cnpj, creci, logo_url').eq('id', ORG_ID).single()
+    const { data: org } = await supabase.from('organizations').select('nome, cnpj, creci, logo_url').eq('id', user.organization_id).single()
     if (org?.logo_url) { try { doc.addImage(org.logo_url, 'JPEG', ML, y, 24, 12) } catch {} }
     doc.setFontSize(16).setFont('helvetica', 'bold').text('RECIBO DE PAGAMENTO DE ALUGUEL', W/2, y+8, { align: 'center' })
     doc.setFontSize(8).setFont('helvetica', 'normal').text(org?.nome || '', W/2, y+14, { align: 'center' })
@@ -428,13 +559,24 @@ function PainelLocatario({ user }: { user: PortalUser }) {
     })
     y += 6; doc.setDrawColor(200).line(ML, y, MR, y); y += 8
     doc.setFontSize(13).setFont('helvetica', 'bold').text('Valor recebido:', ML, y)
-    doc.setTextColor(0,140,0); doc.text(formatVal(c.valor_aluguel), MR, y, { align: 'right' })
+    doc.setTextColor(0,140,0); doc.text(formatVal(valorCobranca(c)), MR, y, { align: 'right' })
     doc.setTextColor(0)
     doc.setFontSize(7).setTextColor(150).text(`Emitido em ${new Date().toLocaleString('pt-BR')} · CNPJ: ${org?.cnpj || ''} · CRECI: ${org?.creci || ''}`, W/2, 287, { align: 'center' })
     doc.save(`recibo-${c.mes_referencia || c.data_vencimento}.pdf`)
   }
 
   if (loading) return <div className="text-center py-16" style={{ color: '#8b9ab4' }}>Carregando...</div>
+
+  const cobrancaAtual = cobrancas
+    .filter(c => c.status_cobranca !== 'pago' && mesJaChegou(c.data_vencimento))
+    .sort((a, b) => a.data_vencimento.localeCompare(b.data_vencimento))[0]
+
+  const somaAluguel = contrato?.valor_atual || contrato?.valor_mensal || 0
+  const somaCondominio = contrato?.valor_condominio || 0
+  const somaIptu = contrato?.valor_iptu || 0
+  const somaSeguroIncendio = contrato?.valor_seguro_incendio || 0
+  const somaSeguroFianca = contrato?.tipo_garantia === 'seguro_fianca' ? (contrato?.valor_seguro_fianca || 0) : 0
+  const somaTotalContrato = somaAluguel + somaCondominio + somaIptu + somaSeguroIncendio + somaSeguroFianca
 
   return (
     <div>
@@ -449,14 +591,57 @@ function PainelLocatario({ user }: { user: PortalUser }) {
       {aba === 'contrato' && (
         <div className="space-y-4">
           {contrato ? (
-            <div style={{ background: '#0d1b2e', border: '0.5px solid #1e3a5f' }} className="rounded-xl p-4">
-              <p style={{ color: '#8b9ab4' }} className="text-xs font-medium mb-3">Dados do contrato</p>
-              <div className="grid grid-cols-2 gap-3">
-                {[['Imóvel', imovel?.titulo||'—'],['Endereço', imovel?`${imovel.endereco}, ${imovel.numero}`:'—'],['Início', formatDate(contrato.data_inicio)],['Término', formatDate(contrato.data_fim)],['Valor mensal', formatVal(contrato.valor_atual||contrato.valor_mensal)],['Reajuste',(contrato.indice_reajuste||'—').toUpperCase()]].map(([l,v]) => (
-                  <div key={l}><p style={{ color: '#8b9ab4' }} className="text-[10px]">{l}</p><p className="text-white text-sm font-medium mt-0.5">{v}</p></div>
-                ))}
+            <>
+              <div style={{ background: '#0d1b2e', border: '0.5px solid #1e3a5f' }} className="rounded-xl p-4">
+                <p style={{ color: '#8b9ab4' }} className="text-xs font-medium mb-3">Dados do contrato</p>
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  {[
+                    ['Locatário', user.nome],
+                    ['Imóvel', imovel?.titulo || '—'],
+                    ['Início', formatDate(contrato.data_inicio)],
+                    ['Término', formatDate(contrato.data_fim)],
+                    ['Meses cumpridos', String(infoMeses(contrato.data_inicio, contrato.data_fim).cumpridos)],
+                    ['Meses faltantes', String(infoMeses(contrato.data_inicio, contrato.data_fim).faltantes)],
+                  ].map(([l, v]) => (
+                    <div key={l}><p style={{ color: '#8b9ab4' }} className="text-[10px]">{l}</p><p className="text-white text-sm font-medium mt-0.5">{v}</p></div>
+                  ))}
+                </div>
+
+                <div style={{ borderTop: '0.5px solid #1e3a5f' }} className="pt-3 space-y-1.5">
+                  {[
+                    ['Aluguel', somaAluguel],
+                    ['Condomínio', somaCondominio],
+                    ['IPTU', somaIptu],
+                    ['Seguro incêndio', somaSeguroIncendio],
+                    ...(somaSeguroFianca > 0 ? [['Seguro fiança', somaSeguroFianca] as [string, number]] : []),
+                  ].map(([l, v]) => (
+                    <div key={l as string} className="flex justify-between text-sm">
+                      <span style={{ color: '#8b9ab4' }}>{l}</span>
+                      <span className="text-white">{formatVal(v as number)}</span>
+                    </div>
+                  ))}
+                  <div style={{ borderTop: '0.5px solid #1e3a5f' }} className="flex justify-between pt-1.5 mt-1.5">
+                    <span style={{ color: '#5b9bf5' }} className="text-sm font-semibold">Total mensal</span>
+                    <span className="text-white text-sm font-bold">{formatVal(somaTotalContrato)}</span>
+                  </div>
+                </div>
               </div>
-            </div>
+
+              <div className="flex gap-2 flex-wrap">
+                <button onClick={() => setModalRescisao(true)}
+                  style={{ border: '0.5px solid #1e3a5f', color: '#f4f4f3' }}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-medium">
+                  🧮 Simule sua rescisão antecipada
+                </button>
+                <button
+                  onClick={() => cobrancaAtual && gerarBoleto(cobrancaAtual)}
+                  disabled={!cobrancaAtual || gerandoBoleto === cobrancaAtual?.id}
+                  style={{ background: '#1A7FFF' }}
+                  className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50">
+                  {gerandoBoleto && cobrancaAtual && gerandoBoleto === cobrancaAtual.id ? 'Gerando...' : '📄 Baixe seu boleto atualizado'}
+                </button>
+              </div>
+            </>
           ) : <p style={{ color: '#8b9ab4' }} className="text-sm text-center py-8">Nenhum contrato ativo.</p>}
 
           {erroBoleto && (
@@ -474,7 +659,9 @@ function PainelLocatario({ user }: { user: PortalUser }) {
                   {cobrancas.map(c => {
                     const st = statusCor(c.status_cobranca, c.data_vencimento)
                     const emAtraso = c.status_cobranca !== 'pago' && diasAte(c.data_vencimento) < 0
-                    const { valorAtualizado, multa, juros, diasAtraso } = calcularValorAtualizado(c.valor_aluguel, c.data_vencimento)
+                    const base = valorCobranca(c)
+                    const { valorAtualizado, multa, juros, diasAtraso } = calcularValorAtualizado(base, c.data_vencimento)
+                    const disponivel = mesJaChegou(c.data_vencimento)
                     return (
                       <div key={c.id} style={{ background: st.bg, border: `0.5px solid ${st.border}` }} className="rounded-xl p-4">
                         <div className="flex items-center justify-between mb-2">
@@ -485,10 +672,10 @@ function PainelLocatario({ user }: { user: PortalUser }) {
                           <div className="text-right">
                             {emAtraso ? (
                               <div>
-                                <p style={{ color: '#8b9ab4' }} className="text-[10px] line-through">{formatVal(c.valor_aluguel)}</p>
+                                <p style={{ color: '#8b9ab4' }} className="text-[10px] line-through">{formatVal(base)}</p>
                                 <p className="text-white font-bold">{formatVal(valorAtualizado)}</p>
                               </div>
-                            ) : <p className="text-white font-bold">{formatVal(c.valor_aluguel)}</p>}
+                            ) : <p className="text-white font-bold">{formatVal(base)}</p>}
                             <p style={{ color: st.cor }} className="text-[10px] font-semibold">{st.label}</p>
                           </div>
                         </div>
@@ -496,20 +683,52 @@ function PainelLocatario({ user }: { user: PortalUser }) {
                           <div style={{ background: '#2e1717', border: '0.5px solid #4a2424' }} className="rounded-lg p-2 mb-2 text-[10px]">
                             <div style={{ color: '#f87171' }} className="flex items-center gap-1 font-semibold mb-1"><AlertCircle size={10} />Valor atualizado ({diasAtraso}d de atraso)</div>
                             <div style={{ color: '#fca5a5' }} className="space-y-0.5">
-                              <div className="flex justify-between"><span>Valor original</span><span>{formatVal(c.valor_aluguel)}</span></div>
+                              <div className="flex justify-between"><span>Valor original</span><span>{formatVal(base)}</span></div>
                               <div className="flex justify-between"><span>Multa (10%)</span><span>+ {formatVal(multa)}</span></div>
                               <div className="flex justify-between"><span>Juros ({diasAtraso}d × 0,033%)</span><span>+ {formatVal(juros)}</span></div>
                               <div style={{ color: '#ef4444', borderTop: '0.5px solid #4a2424' }} className="flex justify-between font-bold pt-0.5"><span>Total</span><span>{formatVal(valorAtualizado)}</span></div>
                             </div>
                           </div>
                         )}
-                        <div className="flex gap-2 flex-wrap">
-                          {c.status_cobranca !== 'pago' && (
+                        <div style={{ background: '#060D1C', border: '0.5px solid #1e3a5f' }} className="rounded-lg p-2 mb-2 text-[10px] space-y-0.5">
+                          {[
+                            ['Aluguel', c.valor_aluguel],
+                            ['Condomínio', c.valor_condominio],
+                            ['IPTU', c.valor_iptu],
+                            ['Seguro incêndio', c.valor_seguro_incendio],
+                            ['Seguro fiança', c.valor_seguro_fianca],
+                          ].filter(([, v]) => (v as number) > 0).map(([l, v]) => (
+                            <div key={l as string} className="flex justify-between" style={{ color: '#8b9ab4' }}>
+                              <span>{l}</span><span>{formatVal(v as number)}</span>
+                            </div>
+                          ))}
+                          {c.valor_caucao_parcela > 0 && (
+                            <div className="flex justify-between" style={{ color: '#5b9bf5' }}>
+                              <span>Caução ({c.caucao_parcela_num}/{c.caucao_parcelas_total})</span>
+                              <span>{formatVal(c.valor_caucao_parcela)}</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex gap-2 flex-wrap items-center">
+                          {c.status_cobranca !== 'pago' && disponivel && (
                             <button onClick={() => gerarBoleto(c)} disabled={gerandoBoleto === c.id}
                               style={{ background: '#1A7FFF' }}
                               className="text-[11px] px-3 py-1.5 rounded-lg text-white flex items-center gap-1.5 disabled:opacity-50">
                               <FileDown size={11} />{gerandoBoleto === c.id ? 'Gerando...' : 'Gerar boleto + Pix'}
                             </button>
+                          )}
+                          {c.status_cobranca !== 'pago' && !disponivel && (
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                style={{ border: '0.5px solid #1e3a5f', color: '#5b5e6b' }}
+                                className="text-[11px] px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-not-allowed"
+                              >
+                                <FileDown size={11} />Gerar boleto + Pix
+                              </span>
+                              <span style={{ color: '#5b5e6b' }} className="text-[10px]">
+                                Disponível em {proximoMesDisponivel(c.data_vencimento)}
+                              </span>
+                            </div>
                           )}
                           {c.status_cobranca === 'pago' && (
                             <button onClick={() => gerarReciboPDF(c)}
@@ -536,12 +755,31 @@ function PainelLocatario({ user }: { user: PortalUser }) {
           </button>
           {demandas.length === 0
             ? <p style={{ color: '#8b9ab4' }} className="text-sm text-center py-10">Nenhuma solicitação enviada ainda.</p>
-            : <div className="space-y-3">{demandas.map(d => <CardDemanda key={d.id} d={d} />)}</div>
+            : <div className="space-y-3">{demandas.map(d => <CardDemanda key={d.id} d={d} onEditar={setDemandaEditando} />)}</div>
           }
         </div>
       )}
 
-      {modalDemanda && <FormularioDemanda clienteId={user.cliente_id} contratoId={contrato?.id||''} onSalvar={carregar} onFechar={() => setModalDemanda(false)} />}
+      {modalDemanda && (
+        <FormularioDemanda
+          clienteId={user.cliente_id}
+          contratoId={contrato?.id||''}
+          organizationId={user.organization_id}
+          onSalvar={carregar}
+          onFechar={() => setModalDemanda(false)}
+        />
+      )}
+      {demandaEditando && (
+        <FormularioDemanda
+          clienteId={user.cliente_id}
+          contratoId={contrato?.id||''}
+          organizationId={user.organization_id}
+          editando={demandaEditando}
+          onSalvar={carregar}
+          onFechar={() => setDemandaEditando(null)}
+        />
+      )}
+      {modalRescisao && contrato && <ModalRescisao contrato={contrato} onFechar={() => setModalRescisao(false)} />}
       {boletoGerado && <ModalBoleto boleto={boletoGerado} onFechar={() => setBoletoGerado(null)} />}
     </div>
   )
@@ -555,11 +793,15 @@ export default function PortalPage() {
   const [modalSenha, setModalSenha] = useState(false)
 
   useEffect(() => {
-    const u = getPortalUser()
-    if (!u) { router.push('/portal/login'); return }
-    if (u.tipo !== 'locatario') { logoutPortal(); router.push('/portal/login'); return }
-    setUser(u)
-    supabase.from('organizations').select('nome, logo_url').eq('id', ORG_ID).single().then(({ data }) => { if (data) setOrg(data) })
+    async function iniciar() {
+      const u = await getPortalUser()
+      if (!u) { router.push('/portal/login'); return }
+      if (u.tipo !== 'locatario') { await logoutPortal(); router.push('/portal/login'); return }
+      setUser(u)
+      const { data } = await supabase.from('organizations').select('nome, logo_url').eq('id', u.organization_id).single()
+      if (data) setOrg(data)
+    }
+    iniciar()
   }, [])
 
   if (!user) return null
@@ -574,7 +816,7 @@ export default function PortalPage() {
             <div style={{ color: '#8b9ab4' }} className="text-[10px]">Locatário</div>
           </div>
           <button onClick={() => setModalSenha(true)} style={{ color: '#8b9ab4' }} className="hover:text-blue-400 transition-colors"><Key size={16} /></button>
-          <button onClick={() => { logoutPortal(); router.push('/portal/login') }} style={{ color: '#8b9ab4' }} className="hover:text-red-400 transition-colors"><LogOut size={16} /></button>
+          <button onClick={async () => { await logoutPortal(); router.push('/portal/login') }} style={{ color: '#8b9ab4' }} className="hover:text-red-400 transition-colors"><LogOut size={16} /></button>
         </div>
       </div>
       <div className="max-w-xl mx-auto p-4 pb-12">
@@ -584,7 +826,7 @@ export default function PortalPage() {
         </div>
         <PainelLocatario user={user} />
       </div>
-      {modalSenha && <ModalTrocarSenha userId={user.id} onFechar={() => setModalSenha(false)} />}
+      {modalSenha && <ModalTrocarSenha onFechar={() => setModalSenha(false)} />}
     </div>
   )
 }

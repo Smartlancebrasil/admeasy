@@ -1,393 +1,393 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import AppLayout from '@/components/layout/AppLayout'
-import Topbar from '@/components/layout/Topbar'
-import { supabase } from '@/lib/supabase'
-import { Building2, Plus, Search, X } from 'lucide-react'
+import { Inter } from 'next/font/google'
+import { useState } from 'react'
+import Link from 'next/link'
+import Image from 'next/image'
+import { CreditCard, ArrowLeftRight, ShieldCheck, FileText, BarChart3 } from 'lucide-react'
 
-type Imovel = {
-  id: string
-  titulo: string
-  tipo?: string
-  finalidade?: string
-  endereco?: string
-  bairro?: string
-  cidade?: string
-  estado?: string
-  area_total?: number
-  quartos?: number
-  banheiros?: number
-  vagas?: number
-  valor_aluguel?: number
-  valor_venda?: number
-  valor_condominio?: number
-  status: string
-  publicado_portal: boolean
-  created_at: string
+const inter = Inter({ subsets: ['latin'], weight: ['400', '500', '600', '700'], variable: '--font-body' })
+
+const COLORS = {
+  bg: '#07111F',
+  bgGradientTop: '#0d1f38',
+  surface: '#0d1a2e',
+  surfaceAlt: '#0a1524',
+  line: 'rgba(59,130,246,0.25)',
+  text: '#FFFFFF',
+  muted: '#AEBBD0',
+  blue: '#1E88FF',
+  blueSecondary: '#0B5FD3',
+  blueDim: 'rgba(30,136,255,0.14)',
+  green: '#22C55E',
+  orange: '#F59E0B',
+  red: '#EF4444',
 }
 
-const statusBadge: Record<string, string> = {
-  disponivel: 'badge badge-green',
-  alugado: 'badge badge-blue',
-  vendido: 'badge badge-gray',
-  em_analise: 'badge badge-yellow',
-  inativo: 'badge badge-gray',
-  rascunho: 'badge badge-gray',
-}
-
-const statusLabel: Record<string, string> = {
-  disponivel: 'Disponível',
-  alugado: 'Alugado',
-  vendido: 'Vendido',
-  em_analise: 'Em análise',
-  inativo: 'Inativo',
-  rascunho: 'Rascunho',
-}
-
-export default function ImoveisPage() {
-  const [imoveis, setImoveis] = useState<Imovel[]>([])
-  const [clientes, setClientes] = useState<{id: string, nome: string}[]>([])
-  const [loading, setLoading] = useState(true)
-  const [busca, setBusca] = useState('')
-  const [showForm, setShowForm] = useState(false)
-  const [salvando, setSalvando] = useState(false)
-  const [erro, setErro] = useState('')
-  const [sucesso, setSucesso] = useState('')
-
-  const [form, setForm] = useState({
-    titulo: '', tipo: 'apartamento', finalidade: 'aluguel',
-    proprietario_id: '',
-    endereco: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '', cep: '',
-    area_total: '', area_util: '', quartos: '0', suites: '0', banheiros: '0', vagas: '0',
-    andar: '', mobiliado: false, pet: false,
-    valor_aluguel: '', valor_venda: '', valor_condominio: '', valor_iptu: '',
-    status: 'disponivel', publicado_portal: false, descricao: '',
-  })
-
-  useEffect(() => {
-    buscarImoveis()
-    buscarProprietarios()
-  }, [])
-
-  async function buscarImoveis() {
-    setLoading(true)
-    const { data, error } = await supabase
-      .from('imoveis')
-      .select('*')
-      .order('created_at', { ascending: false })
-    if (!error && data) setImoveis(data)
-    setLoading(false)
-  }
-
-  async function buscarProprietarios() {
-    const { data } = await supabase
-      .from('clientes')
-      .select('id, nome')
-      .in('tipo', ['locador', 'vendedor'])
-      .order('nome')
-    if (data) setClientes(data)
-  }
-
-  async function salvarImovel(e: React.FormEvent) {
-    e.preventDefault()
-    setSalvando(true)
-    setErro('')
-
-    const payload = {
-      titulo: form.titulo,
-      tipo: form.tipo,
-      finalidade: form.finalidade,
-      proprietario_id: form.proprietario_id || null,
-      endereco: form.endereco,
-      numero: form.numero,
-      complemento: form.complemento,
-      bairro: form.bairro,
-      cidade: form.cidade,
-      estado: form.estado,
-      cep: form.cep,
-      area_total: form.area_total ? parseFloat(form.area_total) : null,
-      area_util: form.area_util ? parseFloat(form.area_util) : null,
-      quartos: parseInt(form.quartos) || 0,
-      suites: parseInt(form.suites) || 0,
-      banheiros: parseInt(form.banheiros) || 0,
-      vagas: parseInt(form.vagas) || 0,
-      andar: form.andar ? parseInt(form.andar) : null,
-      mobiliado: form.mobiliado,
-      pet: form.pet,
-      valor_aluguel: form.valor_aluguel ? parseFloat(form.valor_aluguel) : null,
-      valor_venda: form.valor_venda ? parseFloat(form.valor_venda) : null,
-      valor_condominio: form.valor_condominio ? parseFloat(form.valor_condominio) : null,
-      valor_iptu: form.valor_iptu ? parseFloat(form.valor_iptu) : null,
-      status: form.status,
-      publicado_portal: form.publicado_portal,
-      descricao: form.descricao,
-      fotos: [],
-    }
-
-    const { error } = await supabase.from('imoveis').insert([payload])
-
-    if (error) {
-      setErro('Erro ao salvar: ' + error.message)
-    } else {
-      setSucesso('Imóvel cadastrado com sucesso!')
-      setShowForm(false)
-      buscarImoveis()
-      setTimeout(() => setSucesso(''), 3000)
-    }
-    setSalvando(false)
-  }
-
-  const filtrados = imoveis.filter(i =>
-    i.titulo.toLowerCase().includes(busca.toLowerCase()) ||
-    i.bairro?.toLowerCase().includes(busca.toLowerCase()) ||
-    i.cidade?.toLowerCase().includes(busca.toLowerCase()) ||
-    i.endereco?.toLowerCase().includes(busca.toLowerCase())
+function Eyebrow({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ color: COLORS.blue, background: COLORS.blueDim, border: `1px solid ${COLORS.line}` }} className="inline-block text-[11px] font-medium uppercase tracking-wide px-3 py-1 rounded-full mb-5">
+      {children}
+    </div>
   )
+}
 
-  function formatVal(val?: number) {
-    if (!val) return '—'
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val)
-  }
+function DashboardMockup() {
+  const linhaPontos = [28, 40, 34, 52, 45, 60, 54, 68, 62, 78, 72, 88]
+  const w = 240
+  const h = 72
+  const linhaPath = linhaPontos.map((v, i) => `${i === 0 ? 'M' : 'L'} ${(i / (linhaPontos.length - 1)) * w} ${h - (v / 100) * (h - 10)}`).join(' ')
+
+  const kpis = [
+    { label: 'Receita prevista', value: 'R$ 184.500', color: COLORS.blue },
+    { label: 'Recebido no mês', value: 'R$ 143.200', color: COLORS.green },
+    { label: 'Em aberto', value: 'R$ 41.300', color: COLORS.orange },
+    { label: 'Inadimplência', value: '6,8%', color: COLORS.red },
+    { label: 'Repasses pendentes', value: 'R$ 92.700', color: COLORS.orange },
+    { label: 'Ocupação da carteira', value: '87%', color: COLORS.green },
+  ]
+
+  const cobrancas = [
+    { nome: 'João da Silva', imovel: 'Apto Santana', valor: 'R$ 2.500', status: 'Pago', cor: COLORS.green },
+    { nome: 'Maria Oliveira', imovel: 'Casa Mandaqui', valor: 'R$ 2.200', status: 'A vencer', cor: COLORS.orange },
+    { nome: 'Carlos Santos', imovel: 'Apto Tucuruvi', valor: 'R$ 1.800', status: 'Atrasado', cor: COLORS.red },
+  ]
+
+  const alertas = [
+    { texto: '12 boletos em atraso', cor: COLORS.red },
+    { texto: '8 contratos vencem em 30 dias', cor: COLORS.orange },
+    { texto: '5 reajustes para aplicar', cor: COLORS.blue },
+  ]
 
   return (
-    <AppLayout>
-      <Topbar titulo="Imóveis">
-        <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
-          {showForm ? <X size={14} /> : <Plus size={14} />}
-          {showForm ? 'Cancelar' : 'Cadastrar imóvel'}
-        </button>
-      </Topbar>
+    <div className="relative w-full max-w-2xl" style={{ perspective: '1600px' }}>
+      <div
+        aria-hidden
+        style={{ background: `radial-gradient(circle, ${COLORS.blue}45 0%, transparent 68%)` }}
+        className="absolute -inset-16 blur-3xl -z-10"
+      />
+      <div
+        aria-hidden
+        style={{ background: `radial-gradient(circle, ${COLORS.blueSecondary}30 0%, transparent 60%)` }}
+        className="absolute -inset-6 blur-2xl -z-10"
+      />
 
-      <div className="flex-1 overflow-y-auto p-6">
-        {sucesso && (
-          <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-4 text-sm">
-            {sucesso}
+      <div
+        style={{
+          background: `linear-gradient(155deg, ${COLORS.surface} 0%, ${COLORS.surfaceAlt} 100%)`,
+          border: `1px solid ${COLORS.line}`,
+          transform: 'rotateY(-7deg) rotateX(3deg)',
+          transformStyle: 'preserve-3d',
+          boxShadow: `0 60px 120px -25px rgba(0,0,0,0.75), 0 0 0 1px rgba(255,255,255,0.03) inset`,
+        }}
+        className="rounded-2xl p-6"
+      >
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <div style={{ color: COLORS.text }} className="text-base font-semibold">Visão Executiva da Carteira</div>
+            <div style={{ color: COLORS.muted }} className="text-[11px] mt-0.5">Julho/2026 · Todos os imóveis</div>
           </div>
-        )}
+          <span className="flex items-center gap-1.5 text-[11px] flex-shrink-0" style={{ color: COLORS.green }}>
+            <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: COLORS.green }} />
+            Atualizado agora
+          </span>
+        </div>
 
-        {showForm && (
-          <div className="card mb-6">
-            <h2 className="text-sm font-semibold mb-4">Cadastrar novo imóvel</h2>
-            <form onSubmit={salvarImovel}>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2">
-                  <label className="label">Título do anúncio *</label>
-                  <input className="input" required value={form.titulo} onChange={e => setForm({...form, titulo: e.target.value})} placeholder="Ex: Apartamento 2 dormitórios com vaga — Moema" />
-                </div>
-                <div>
-                  <label className="label">Tipo *</label>
-                  <select className="input" value={form.tipo} onChange={e => setForm({...form, tipo: e.target.value})}>
-                    <option value="apartamento">Apartamento</option>
-                    <option value="casa">Casa</option>
-                    <option value="studio">Studio</option>
-                    <option value="sobrado">Sobrado</option>
-                    <option value="terreno">Terreno</option>
-                    <option value="comercial">Comercial</option>
-                    <option value="galpao">Galpão</option>
-                    <option value="outro">Outro</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Finalidade *</label>
-                  <select className="input" value={form.finalidade} onChange={e => setForm({...form, finalidade: e.target.value})}>
-                    <option value="aluguel">Aluguel</option>
-                    <option value="venda">Venda</option>
-                    <option value="aluguel_venda">Aluguel e venda</option>
-                  </select>
-                </div>
-                <div className="col-span-2">
-                  <label className="label">Proprietário</label>
-                  <select className="input" value={form.proprietario_id} onChange={e => setForm({...form, proprietario_id: e.target.value})}>
-                    <option value="">Selecionar proprietário</option>
-                    {clientes.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                  </select>
-                </div>
-                <div className="col-span-2">
-                  <label className="label">Endereço</label>
-                  <input className="input" value={form.endereco} onChange={e => setForm({...form, endereco: e.target.value})} placeholder="Rua, avenida..." />
-                </div>
-                <div>
-                  <label className="label">Número</label>
-                  <input className="input" value={form.numero} onChange={e => setForm({...form, numero: e.target.value})} />
-                </div>
-                <div>
-                  <label className="label">Complemento</label>
-                  <input className="input" value={form.complemento} onChange={e => setForm({...form, complemento: e.target.value})} placeholder="Apto, bloco..." />
-                </div>
-                <div>
-                  <label className="label">Bairro</label>
-                  <input className="input" value={form.bairro} onChange={e => setForm({...form, bairro: e.target.value})} />
-                </div>
-                <div>
-                  <label className="label">Cidade</label>
-                  <input className="input" value={form.cidade} onChange={e => setForm({...form, cidade: e.target.value})} />
-                </div>
-                <div>
-                  <label className="label">Estado</label>
-                  <select className="input" value={form.estado} onChange={e => setForm({...form, estado: e.target.value})}>
-                    <option value="">UF</option>
-                    {['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'].map(uf => (
-                      <option key={uf} value={uf}>{uf}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="label">CEP</label>
-                  <input className="input" value={form.cep} onChange={e => setForm({...form, cep: e.target.value})} placeholder="00000-000" />
-                </div>
-                <div>
-                  <label className="label">Área total (m²)</label>
-                  <input className="input" type="number" value={form.area_total} onChange={e => setForm({...form, area_total: e.target.value})} />
-                </div>
-                <div>
-                  <label className="label">Área útil (m²)</label>
-                  <input className="input" type="number" value={form.area_util} onChange={e => setForm({...form, area_util: e.target.value})} />
-                </div>
-                <div>
-                  <label className="label">Dormitórios</label>
-                  <select className="input" value={form.quartos} onChange={e => setForm({...form, quartos: e.target.value})}>
-                    {['0','1','2','3','4','5'].map(n => <option key={n} value={n}>{n}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Suítes</label>
-                  <select className="input" value={form.suites} onChange={e => setForm({...form, suites: e.target.value})}>
-                    {['0','1','2','3','4'].map(n => <option key={n} value={n}>{n}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Banheiros</label>
-                  <select className="input" value={form.banheiros} onChange={e => setForm({...form, banheiros: e.target.value})}>
-                    {['0','1','2','3','4'].map(n => <option key={n} value={n}>{n}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Vagas</label>
-                  <select className="input" value={form.vagas} onChange={e => setForm({...form, vagas: e.target.value})}>
-                    {['0','1','2','3','4'].map(n => <option key={n} value={n}>{n}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Valor aluguel (R$)</label>
-                  <input className="input" type="number" value={form.valor_aluguel} onChange={e => setForm({...form, valor_aluguel: e.target.value})} placeholder="0,00" />
-                </div>
-                <div>
-                  <label className="label">Valor venda (R$)</label>
-                  <input className="input" type="number" value={form.valor_venda} onChange={e => setForm({...form, valor_venda: e.target.value})} placeholder="0,00" />
-                </div>
-                <div>
-                  <label className="label">Condomínio (R$)</label>
-                  <input className="input" type="number" value={form.valor_condominio} onChange={e => setForm({...form, valor_condominio: e.target.value})} placeholder="0,00" />
-                </div>
-                <div>
-                  <label className="label">IPTU anual (R$)</label>
-                  <input className="input" type="number" value={form.valor_iptu} onChange={e => setForm({...form, valor_iptu: e.target.value})} placeholder="0,00" />
-                </div>
-                <div>
-                  <label className="label">Status</label>
-                  <select className="input" value={form.status} onChange={e => setForm({...form, status: e.target.value})}>
-                    <option value="disponivel">Disponível</option>
-                    <option value="alugado">Alugado</option>
-                    <option value="vendido">Vendido</option>
-                    <option value="em_analise">Em análise</option>
-                    <option value="rascunho">Rascunho</option>
-                  </select>
-                </div>
-                <div className="flex items-center gap-4 pt-5">
-                  <label className="flex items-center gap-2 text-sm cursor-pointer">
-                    <input type="checkbox" checked={form.mobiliado} onChange={e => setForm({...form, mobiliado: e.target.checked})} />
-                    Mobiliado
-                  </label>
-                  <label className="flex items-center gap-2 text-sm cursor-pointer">
-                    <input type="checkbox" checked={form.pet} onChange={e => setForm({...form, pet: e.target.checked})} />
-                    Aceita pet
-                  </label>
-                  <label className="flex items-center gap-2 text-sm cursor-pointer">
-                    <input type="checkbox" checked={form.publicado_portal} onChange={e => setForm({...form, publicado_portal: e.target.checked})} />
-                    Publicar no portal
-                  </label>
-                </div>
-                <div className="col-span-2">
-                  <label className="label">Descrição</label>
-                  <textarea className="input" rows={3} value={form.descricao} onChange={e => setForm({...form, descricao: e.target.value})} placeholder="Descreva o imóvel, diferenciais, estado de conservação..." />
-                </div>
-              </div>
-              {erro && <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-3 py-2 rounded-lg mt-3">{erro}</div>}
-              <div className="flex gap-2 mt-4">
-                <button type="submit" disabled={salvando} className="btn btn-primary">
-                  {salvando ? 'Salvando...' : 'Salvar imóvel'}
-                </button>
-                <button type="button" className="btn" onClick={() => setShowForm(false)}>Cancelar</button>
-              </div>
-            </form>
+        <div className="grid grid-cols-3 gap-2.5 mb-3.5">
+          {kpis.map((k, i) => (
+            <div
+              key={i}
+              style={{ background: `${COLORS.bg}90`, border: `1px solid ${COLORS.line}`, borderTop: `2px solid ${k.color}` }}
+              className="rounded-lg p-3"
+            >
+              <div style={{ color: COLORS.muted }} className="text-[9px] mb-1 leading-tight">{k.label}</div>
+              <div style={{ color: k.color }} className="text-[14px] font-bold leading-tight">{k.value}</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-[1.4fr_1fr] gap-2.5 mb-3.5">
+          <div style={{ background: `${COLORS.bg}90`, border: `1px solid ${COLORS.line}` }} className="rounded-lg p-4">
+            <div style={{ color: COLORS.muted }} className="text-[10px] mb-2">Evolução de recebimentos</div>
+            <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-20">
+              <defs>
+                <linearGradient id="areaFillHero" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={COLORS.blue} stopOpacity="0.45" />
+                  <stop offset="100%" stopColor={COLORS.blue} stopOpacity="0" />
+                </linearGradient>
+              </defs>
+              <path d={`${linhaPath} L ${w} ${h} L 0 ${h} Z`} fill="url(#areaFillHero)" />
+              <path d={linhaPath} fill="none" stroke={COLORS.blue} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
           </div>
-        )}
-
-        <div className="card mb-4 py-3">
-          <div className="flex items-center gap-2">
-            <Search size={15} className="text-gray-400" />
-            <input className="flex-1 text-sm outline-none bg-transparent placeholder:text-gray-400" placeholder="Buscar por título, bairro ou cidade..." value={busca} onChange={e => setBusca(e.target.value)} />
+          <div style={{ background: `${COLORS.bg}90`, border: `1px solid ${COLORS.line}` }} className="rounded-lg p-4 flex flex-col items-center justify-center">
+            <svg viewBox="0 0 36 36" className="w-16 h-16 mb-1.5">
+              <circle cx="18" cy="18" r="15.5" fill="none" stroke={COLORS.line} strokeWidth="4" />
+              <circle cx="18" cy="18" r="15.5" fill="none" stroke={COLORS.blue} strokeWidth="4" strokeDasharray="87 100" strokeDashoffset="25" strokeLinecap="round" />
+            </svg>
+            <div style={{ color: COLORS.text }} className="text-[12px] font-bold">87% ocupação</div>
           </div>
         </div>
 
-        <div className="card p-0 overflow-hidden">
-          {loading ? (
-            <div className="text-center py-12 text-gray-400 text-sm">Carregando imóveis...</div>
-          ) : filtrados.length === 0 ? (
-            <div className="text-center py-12 text-gray-400">
-              <Building2 size={36} className="mx-auto mb-2 opacity-30" />
-              <div className="font-medium text-gray-500">Nenhum imóvel cadastrado</div>
-              <div className="text-sm mt-1">Clique em "Cadastrar imóvel" para começar</div>
+        <div className="grid grid-cols-[1.3fr_1fr] gap-2.5">
+          <div style={{ background: `${COLORS.bg}90`, border: `1px solid ${COLORS.line}` }} className="rounded-lg p-4">
+            <div style={{ color: COLORS.muted }} className="text-[10px] mb-2.5">Cobranças críticas</div>
+            <div className="flex flex-col gap-2">
+              {cobrancas.map((c, i) => (
+                <div key={i} className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div style={{ color: COLORS.text }} className="text-[11px] truncate">{c.nome}</div>
+                    <div style={{ color: COLORS.muted }} className="text-[9px] truncate">{c.imovel}</div>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <div style={{ color: COLORS.text }} className="text-[11px] font-medium">{c.valor}</div>
+                    <div style={{ color: c.cor }} className="text-[9px] font-semibold">{c.status}</div>
+                  </div>
+                </div>
+              ))}
             </div>
-          ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100">
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Imóvel</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Tipo</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Características</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Valor</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Status</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Portal</th>
-                  <th className="px-4 py-3"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtrados.map((i) => (
-                  <tr key={i.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-9 h-9 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
-                          <Building2 size={16} />
-                        </div>
-                        <div>
-                          <div className="font-medium text-gray-900 text-sm">{i.titulo}</div>
-                          <div className="text-xs text-gray-400">{[i.bairro, i.cidade, i.estado].filter(Boolean).join(' · ')}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-gray-500 text-xs capitalize">{i.tipo}</td>
-                    <td className="px-4 py-3 text-xs text-gray-500">
-                      {[
-                        i.area_total ? `${i.area_total}m²` : null,
-                        i.quartos ? `${i.quartos} dorms` : null,
-                        i.vagas ? `${i.vagas} vaga${i.vagas > 1 ? 's' : ''}` : null,
-                      ].filter(Boolean).join(' · ') || '—'}
-                    </td>
-                    <td className="px-4 py-3 font-medium text-sm">
-                      {i.valor_aluguel ? formatVal(i.valor_aluguel) + '/mês' : i.valor_venda ? formatVal(i.valor_venda) : '—'}
-                    </td>
-                    <td className="px-4 py-3"><span className={statusBadge[i.status] || 'badge badge-gray'}>{statusLabel[i.status] || i.status}</span></td>
-                    <td className="px-4 py-3"><span className={`badge ${i.publicado_portal ? 'badge-green' : 'badge-gray'}`}>{i.publicado_portal ? 'Publicado' : 'Rascunho'}</span></td>
-                    <td className="px-4 py-3"><button className="btn text-xs py-1 px-2.5">Ver</button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+          </div>
+          <div style={{ background: `${COLORS.bg}90`, border: `1px solid ${COLORS.line}` }} className="rounded-lg p-4">
+            <div style={{ color: COLORS.muted }} className="text-[10px] mb-2.5">Alertas</div>
+            <div className="flex flex-col gap-2">
+              {alertas.map((a, i) => (
+                <div key={i} className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: a.cor }} />
+                  <span style={{ color: COLORS.text }} className="text-[10px] leading-tight">{a.texto}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
-    </AppLayout>
+    </div>
+  )
+}
+
+function LedgerRow({ eyebrow, title, description }: { eyebrow: string; title: string; description: string }) {
+  return (
+    <div style={{ borderTop: `1px solid ${COLORS.line}` }} className="grid grid-cols-1 md:grid-cols-[140px_1fr_1.4fr] gap-3 md:gap-8 py-7">
+      <div style={{ color: COLORS.blue }} className="text-[11px] font-semibold uppercase tracking-wider pt-1">{eyebrow}</div>
+      <h3 style={{ color: COLORS.text }} className="text-xl md:text-2xl font-semibold">{title}</h3>
+      <p style={{ color: COLORS.muted }} className="text-sm leading-relaxed">{description}</p>
+    </div>
+  )
+}
+
+const artigos = [
+  {
+    tag: 'Para locadores',
+    titulo: 'Como reduzir a inadimplência sem perder bons inquilinos',
+    resumo: 'Três práticas de cobrança que preservam a relação e ainda assim protegem o caixa da sua carteira.',
+  },
+  {
+    tag: 'Gestão',
+    titulo: 'Reajuste de aluguel: IGP-M, IPCA ou IVAR — qual escolher',
+    resumo: 'As diferenças entre os principais índices e como decidir junto com o proprietário na hora de fechar o contrato.',
+  },
+  {
+    tag: 'Para inquilinos',
+    titulo: 'Boleto, Pix ou cartão: como funciona o pagamento do aluguel',
+    resumo: 'Um guia rápido para o locatário entender os prazos, multas e formas de pagamento aceitas pela imobiliária.',
+  },
+]
+
+export default function PaginaInicial() {
+  const [menuAberto, setMenuAberto] = useState(false)
+
+  return (
+    <div
+      style={{
+        background: `radial-gradient(ellipse 900px 500px at 75% 5%, ${COLORS.blue}22 0%, transparent 60%), linear-gradient(180deg, #0a1526 0%, #050b16 480px, ${COLORS.bg} 100%)`,
+        color: COLORS.text,
+      }}
+      className={`${inter.variable} min-h-screen font-sans`}
+    >
+      {/* Header */}
+      <header style={{ borderBottom: `1px solid ${COLORS.line}`, background: `${COLORS.bg}cc` }} className="sticky top-0 z-50 backdrop-blur">
+        <div className="max-w-6xl mx-auto px-5 md:px-8 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <Image src="/admeasy-logo.png" alt="AdmEasy" width={28} height={28} className="rounded-sm" />
+            <span className="text-base font-bold tracking-wide">
+              Adm<span style={{ color: COLORS.blue }}>easy</span>
+            </span>
+          </div>
+
+          <nav className="hidden md:flex items-center gap-8 text-sm" style={{ color: COLORS.muted }}>
+            <a href="#modulos" className="hover:opacity-80 transition-opacity">Como funciona</a>
+            <a href="#recursos" className="hover:opacity-80 transition-opacity">Recursos</a>
+            <a href="#imobiliarias" className="hover:opacity-80 transition-opacity">Para imobiliárias</a>
+            <a href="#blog" className="hover:opacity-80 transition-opacity">Blog</a>
+          </nav>
+
+          <div className="hidden md:flex items-center gap-3">
+            <Link href="/portal" style={{ color: COLORS.text, border: `1px solid ${COLORS.line}` }} className="text-sm font-medium px-4 py-2 rounded-md hover:border-[#1A7FFF] transition-colors">
+              Área do inquilino
+            </Link>
+            <Link href="/login" style={{ background: COLORS.blue, color: '#fff' }} className="text-sm font-semibold px-4 py-2 rounded-md hover:opacity-90 transition-opacity">
+              Entrar
+            </Link>
+          </div>
+
+          <button onClick={() => setMenuAberto(!menuAberto)} className="md:hidden" style={{ color: COLORS.text }} aria-label="Abrir menu">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+          </button>
+        </div>
+
+        {menuAberto && (
+          <div style={{ borderTop: `1px solid ${COLORS.line}` }} className="md:hidden px-5 py-4 flex flex-col gap-4 text-sm">
+            <a href="#modulos" style={{ color: COLORS.muted }} onClick={() => setMenuAberto(false)}>Como funciona</a>
+            <a href="#recursos" style={{ color: COLORS.muted }} onClick={() => setMenuAberto(false)}>Recursos</a>
+            <a href="#imobiliarias" style={{ color: COLORS.muted }} onClick={() => setMenuAberto(false)}>Para imobiliárias</a>
+            <a href="#blog" style={{ color: COLORS.muted }} onClick={() => setMenuAberto(false)}>Blog</a>
+            <Link href="/portal" style={{ color: COLORS.text, border: `1px solid ${COLORS.line}` }} className="text-center font-medium px-4 py-2.5 rounded-md">Área do inquilino</Link>
+            <Link href="/login" style={{ background: COLORS.blue, color: '#fff' }} className="text-center font-semibold px-4 py-2.5 rounded-md">Entrar</Link>
+          </div>
+        )}
+      </header>
+
+      {/* Hero */}
+      <section className="max-w-7xl mx-auto px-5 md:px-8 pt-8 md:pt-12 pb-10 grid grid-cols-1 md:grid-cols-[0.85fr_1.3fr] gap-12 items-start">
+        <div>
+          <Eyebrow>Plataforma de gestão para imobiliárias</Eyebrow>
+          <h1 className="text-[2.4rem] md:text-[3.1rem] leading-[1.12] font-bold">
+            Sua imobiliária no controle. <span style={{ color: COLORS.blue }}>Sempre.</span>
+          </h1>
+          <p style={{ color: COLORS.muted }} className="mt-6 text-base md:text-lg leading-relaxed max-w-md">
+            Gestão completa de aluguéis, contratos, cobranças, repasses e inadimplência em um só lugar. Mais controle, menos trabalho e decisões baseadas em dados reais.
+          </p>
+          <div className="mt-8 flex flex-wrap items-center gap-4">
+            <a
+              href="mailto:contato@admeasy.com.br"
+              style={{
+                background: `linear-gradient(135deg, ${COLORS.blue} 0%, ${COLORS.blueSecondary} 100%)`,
+                color: '#fff',
+                boxShadow: `0 12px 30px -8px ${COLORS.blue}80`,
+              }}
+              className="text-sm font-semibold uppercase tracking-wide px-6 py-3.5 rounded-lg transition-all hover:-translate-y-0.5 hover:shadow-xl"
+            >
+              Solicitar demonstração
+            </a>
+            <a
+              href="#modulos"
+              style={{ color: COLORS.text, background: `${COLORS.bg}80`, border: `1px solid ${COLORS.line}` }}
+              className="text-sm font-semibold uppercase tracking-wide px-6 py-3.5 rounded-lg transition-all hover:-translate-y-0.5 hover:border-[#1E88FF]"
+            >
+              Ver painel de gestão
+            </a>
+          </div>
+          <p style={{ color: COLORS.muted, borderTop: `1px solid ${COLORS.line}` }} className="mt-8 pt-5 text-xs">
+            Feito para imobiliárias que administram de 20 a 2.000 imóveis.
+          </p>
+        </div>
+        <div className="flex justify-center md:justify-end" style={{ overflow: 'visible' }}>
+          <DashboardMockup />
+        </div>
+      </section>
+
+      {/* Faixa de benefícios */}
+      <section style={{ borderTop: `1px solid ${COLORS.line}`, borderBottom: `1px solid ${COLORS.line}`, background: COLORS.surfaceAlt }}>
+        <div className="max-w-6xl mx-auto px-5 md:px-8 py-10 grid grid-cols-2 md:grid-cols-5 gap-6">
+          {[
+            { icone: CreditCard, titulo: 'Cobranças automáticas', desc: 'Boletos, Pix e cartão com conciliação automática.' },
+            { icone: ArrowLeftRight, titulo: 'Repasses com controle total', desc: 'Repasse automático aos proprietários com transparência.' },
+            { icone: ShieldCheck, titulo: 'Inadimplência monitorada', desc: 'Alertas, cobranças e acompanhamento em tempo real.' },
+            { icone: FileText, titulo: 'Contratos e reajustes organizados', desc: 'Renovações, reajustes e documentos sempre em dia.' },
+            { icone: BarChart3, titulo: 'Relatórios e BI em tempo real', desc: 'Decisões mais rápidas com dados claros e confiáveis.' },
+          ].map((b, i) => {
+            const Icone = b.icone
+            return (
+              <div key={i} className="col-span-2 md:col-span-1">
+                <div style={{ background: COLORS.blueDim, color: COLORS.blue }} className="w-9 h-9 rounded-md flex items-center justify-center mb-3">
+                  <Icone size={17} strokeWidth={2} />
+                </div>
+                <div style={{ color: COLORS.text }} className="text-sm font-semibold mb-1">{b.titulo}</div>
+                <p style={{ color: COLORS.muted }} className="text-xs leading-relaxed">{b.desc}</p>
+              </div>
+            )
+          })}
+        </div>
+      </section>
+
+      {/* Módulos / como funciona */}
+      <section id="modulos" className="max-w-6xl mx-auto px-5 md:px-8 py-16 md:py-20">
+        <div id="recursos" />
+        <Eyebrow>O que está incluso</Eyebrow>
+        <h2 className="text-2xl md:text-3xl font-bold mb-2 max-w-lg">
+          Cada módulo resolve uma dor real de quem administra imóveis.
+        </h2>
+
+        <div className="mt-8">
+          <LedgerRow eyebrow="Contratos" title="Da assinatura ao PDF, sem retrabalho" description="Cadastra o contrato uma vez e o sistema já calcula reajuste, multas, caução e honorários — e gera o PDF pronto pra assinatura." />
+          <LedgerRow eyebrow="Financeiro" title="Fluxo de caixa realizado e previsto" description="Saiba não só quanto já entrou, mas o que está previsto pros próximos 30 dias — aluguéis, honorários e despesas fixas, tudo cruzado." />
+          <LedgerRow eyebrow="Repasses" title="Proprietário recebe, imobiliária concilia" description="Cada cobrança já nasce com o repasse calculado, taxa de administração descontada e status de pagamento rastreável." />
+          <LedgerRow eyebrow="Portal do inquilino" title="Boleto, histórico e manutenção num só link" description="O locatário acessa sozinho: baixa boleto, vê pagamentos anteriores e abre chamado de manutenção com foto." />
+        </div>
+      </section>
+
+      {/* Para imobiliárias */}
+      <section id="imobiliarias" style={{ background: COLORS.surfaceAlt, borderTop: `1px solid ${COLORS.line}`, borderBottom: `1px solid ${COLORS.line}` }} className="py-16 md:py-24">
+        <div className="max-w-6xl mx-auto px-5 md:px-8 grid grid-cols-1 md:grid-cols-[1fr_1fr] gap-12 items-start">
+          <div>
+            <Eyebrow>Para outras imobiliárias</Eyebrow>
+            <h2 className="text-2xl md:text-3xl font-bold leading-tight">
+              Testado na prática. Disponível pra sua imobiliária.
+            </h2>
+            <p style={{ color: COLORS.muted }} className="mt-5 text-sm leading-relaxed max-w-md">
+              O mesmo sistema que administra a carteira da nossa imobiliária piloto está disponível como plataforma própria pra você — com sua marca, seus dados, seu domínio.
+            </p>
+          </div>
+
+          <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.line}` }} className="rounded-lg p-7">
+            <div style={{ borderBottom: `1px solid ${COLORS.line}` }} className="pb-5 mb-5">
+              <div style={{ color: COLORS.muted }} className="text-xs uppercase tracking-wider mb-1">Adesão única</div>
+              <div style={{ color: COLORS.blue }} className="text-2xl font-bold">Sob consulta</div>
+              <p style={{ color: COLORS.muted }} className="text-xs mt-1">Implantação, migração de dados e configuração da sua marca.</p>
+            </div>
+            <div>
+              <div style={{ color: COLORS.muted }} className="text-xs uppercase tracking-wider mb-1">Mensalidade</div>
+              <div style={{ color: COLORS.blue }} className="text-2xl font-bold">Sob consulta</div>
+              <p style={{ color: COLORS.muted }} className="text-xs mt-1">Varia pelo tamanho da carteira administrada.</p>
+            </div>
+            <a href="mailto:contato@admeasy.com.br" style={{ background: COLORS.blue, color: '#fff' }} className="mt-6 block text-center text-sm font-semibold px-5 py-3 rounded-md hover:opacity-90 transition-opacity">
+              Falar com a gente
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* Blog / dicas */}
+      <section id="blog" className="max-w-6xl mx-auto px-5 md:px-8 py-16 md:py-20">
+        <Eyebrow>No blog</Eyebrow>
+        <h2 className="text-2xl md:text-3xl font-bold mb-10 max-w-lg">
+          Dicas pra proprietários, inquilinos e quem administra os dois lados.
+        </h2>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {artigos.map((a, i) => (
+            <article key={i} style={{ border: `1px solid ${COLORS.line}`, background: COLORS.surface }} className="rounded-lg p-6 flex flex-col">
+              <div style={{ color: COLORS.blue }} className="text-[11px] font-semibold uppercase tracking-wider mb-3">{a.tag}</div>
+              <h3 className="text-lg font-semibold leading-snug mb-3">{a.titulo}</h3>
+              <p style={{ color: COLORS.muted }} className="text-sm leading-relaxed flex-1">{a.resumo}</p>
+              <span style={{ color: COLORS.blue }} className="text-xs font-semibold mt-5">Ler artigo →</span>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer style={{ borderTop: `1px solid ${COLORS.line}` }} className="py-10">
+        <div className="max-w-6xl mx-auto px-5 md:px-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div style={{ color: COLORS.muted }} className="text-xs">
+            © {new Date().getFullYear()} AdmEasy — Gestão Inteligente de Locações, por Smartlance Brasil
+          </div>
+          <div className="flex gap-6 text-xs" style={{ color: COLORS.muted }}>
+            <Link href="/login" className="hover:opacity-80">Entrar</Link>
+            <Link href="/portal" className="hover:opacity-80">Área do inquilino</Link>
+            <a href="mailto:contato@admeasy.com.br" className="hover:opacity-80">Contato</a>
+          </div>
+        </div>
+      </footer>
+    </div>
   )
 }

@@ -9,7 +9,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen" style={{ background: '#0d1117' }}>
-      {/* Overlay mobile */}
       {menuAberto && (
         <div
           onClick={() => setMenuAberto(false)}
@@ -18,7 +17,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         />
       )}
 
-      {/* Sidebar: drawer no mobile, fixo no desktop */}
       <div
         className={`fixed lg:static inset-y-0 left-0 z-50 transition-transform duration-200 lg:translate-x-0 ${
           menuAberto ? 'translate-x-0' : '-translate-x-full'
@@ -28,7 +26,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </div>
 
       <main className="flex-1 overflow-hidden flex flex-col min-w-0">
-        {/* Header mobile */}
         <div
           className="lg:hidden flex items-center gap-3 px-4 py-3 sticky top-0 z-30"
           style={{ background: '#0d1117', borderBottom: '0.5px solid #2a2f3a' }}

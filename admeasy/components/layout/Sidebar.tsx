@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
+import { useOrganization } from '@/lib/OrganizationContext'
 import {
   LayoutDashboard, Building2, Users, FileText, TrendingUp,
   Calculator, Wrench, Truck, Calendar, DollarSign,
@@ -12,7 +13,9 @@ import {
   ShieldCheck, Scale, X
 } from 'lucide-react'
 
-const ORG_ID = '00000000-0000-0000-0000-000000000001'
+// ORG_ID fixo removido — agora vem do useOrganization() (multi-tenant)
+
+const STATUS_DEMANDA_FINALIZADA = ['concluida', 'recusada']
 
 const navItems = [
   { section: 'Principal' },
@@ -27,7 +30,7 @@ const navItems = [
   { href: '/clientes', label: 'Clientes', icon: Users },
   { href: '/portal-locatario', label: 'Portal locatário', icon: UserCircle },
   { section: 'Operações' },
-  { href: '/demandas', label: 'Demandas', icon: Wrench, badge: 4 },
+  { href: '/demandas', label: 'Demandas', icon: Wrench }, // badge agora é dinâmico, ver render
   { href: '/fornecedores', label: 'Fornecedores', icon: Truck },
   { href: '/visitas', label: 'Visitas', icon: Calendar },
   { href: '/vistorias', label: 'Vistorias', icon: FileSearch },
@@ -38,17 +41,19 @@ const navItems = [
 
 export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname()
+  const { organizacao } = useOrganization()
   const [nomeUsuario, setNomeUsuario] = useState('')
   const [perfilUsuario, setPerfilUsuario] = useState('Admin')
   const [iniciaisUsuario, setIniciaisUsuario] = useState('??')
   const [logoUrl, setLogoUrl] = useState('')
   const [nomeOrg, setNomeOrg] = useState('AdmEasy')
+  const [demandasPendentes, setDemandasPendentes] = useState(0)
 
   useEffect(() => {
     async function carregarUsuario() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      const { data } = await supabase.from('users').select('nome, perfil').eq('id', user.id).single()
+      const { data } = await supabase.from('users').select('nome, perfil').eq('id', user.id).maybeSingle()
       if (data) {
         setNomeUsuario(data.nome || user.email || '')
         setPerfilUsuario(data.perfil || 'Admin')
@@ -61,16 +66,31 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         setIniciaisUsuario(nome.slice(0, 2).toUpperCase())
       }
     }
-    async function carregarOrg() {
-      const { data } = await supabase.from('organizations').select('logo_url, nome').eq('id', ORG_ID).single()
-      if (data) {
-        if (data.logo_url) setLogoUrl(data.logo_url)
-        if (data.nome) setNomeOrg(data.nome)
+    carregarUsuario()
+  }, [])
+
+  useEffect(() => {
+    if (!organizacao?.id) return
+
+    // Nome/logo já vêm do OrganizationContext, mas se não vierem preenchidos
+    // (ex: campos nulos), usamos os dados já carregados como fallback.
+    setNomeOrg(organizacao.nome || 'AdmEasy')
+    if (organizacao.logo_url) setLogoUrl(organizacao.logo_url)
+
+    async function carregarDemandasPendentes(orgId: string) {
+      const { count, error } = await supabase
+        .from('demandas')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', orgId)
+        .not('status', 'in', `(${STATUS_DEMANDA_FINALIZADA.join(',')})`)
+
+      if (!error && typeof count === 'number') {
+        setDemandasPendentes(count)
       }
     }
-    carregarUsuario()
-    carregarOrg()
-  }, [])
+
+    carregarDemandasPendentes(organizacao.id)
+  }, [organizacao?.id, organizacao?.nome, organizacao?.logo_url])
 
   return (
     <aside
@@ -110,14 +130,15 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           }
           const Icon = item.icon
           const active = pathname === item.href || pathname.startsWith(item.href + '/')
+          const badgeValue = item.href === '/demandas' ? demandasPendentes : item.badge
           return (
             <Link key={item.href} href={item.href} onClick={onNavigate}
               style={active ? { background: '#1c2530', color: '#5b9bf5' } : { color: '#a8aab5' }}
               className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm mb-0.5 transition-all hover:bg-[#161b22]">
               <Icon size={15} className="flex-shrink-0" />
               <span className="flex-1">{item.label}</span>
-              {item.badge && (
-                <span style={{ background: '#ef4444' }} className="text-white text-[10px] px-1.5 py-0.5 rounded-full font-medium">{item.badge}</span>
+              {!!badgeValue && (
+                <span style={{ background: '#ef4444' }} className="text-white text-[10px] px-1.5 py-0.5 rounded-full font-medium">{badgeValue}</span>
               )}
             </Link>
           )
