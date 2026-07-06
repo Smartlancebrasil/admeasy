@@ -540,7 +540,7 @@ export default function ContratoPdfPage() {
 
     // Negrita só o rótulo "PARÁGRAFO ... :" ou "PARÁGRAFO ... –", deixando o resto do texto normal
     function paragrafoRotulo(texto: string) {
-      const match = texto.match(/^(PARÁGRAFO[^:–]*[:–])\s*(.*)$/s)
+      const match = texto.match(/^(PARÁGRAFO[^:-]*[:-])\s*([\s\S]*)$/)
       if (!match) { paragrafo(texto, false); return }
       const [, rotulo, resto] = match
       doc.setFontSize(9).setFont('helvetica', 'bold')
