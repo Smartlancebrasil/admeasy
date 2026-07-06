@@ -12,6 +12,10 @@ type Imovel = {
   codigo?: string
   titulo: string
   tipo?: string
+  categoria?: string
+  numero_instalacao_agua?: string
+  numero_instalacao_energia?: string
+  taxa_administracao?: number
   finalidade?: string
   proprietario_id?: string
   endereco?: string
