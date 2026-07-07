@@ -277,6 +277,9 @@ function FormularioDemanda({ clienteId, contratoId, organizationId, editando, on
     setErro('')
 
     if (editando) {
+      // Edição só é permitida enquanto a demanda ainda está "aberta" (a tela
+      // que chama este formulário já garante isso, mas a query abaixo não
+      // sobrescreve status/decisão de forma alguma).
       const { error } = await supabase.from('demandas').update({
         titulo, descricao: descricao || null, urgencia,
         fotos: anexos.map(a => a.url),
@@ -287,6 +290,9 @@ function FormularioDemanda({ clienteId, contratoId, organizationId, editando, on
       return
     }
 
+    // Nova demanda: "numero" (protocolo) não é enviado — o gatilho no banco
+    // preenche sozinho. Usamos .select() para ler de volta o protocolo
+    // gerado e mostrar ao locatário.
     const { data, error } = await supabase.from('demandas').insert([{
       organization_id: organizationId, titulo, descricao: descricao || null, urgencia,
       origem: 'locatario', status: 'aberta', contrato_id: contratoId || null,
@@ -492,6 +498,13 @@ function PainelLocatario({ user }: { user: PortalUser }) {
     if (dias < 0) return { cor: '#ef4444', bg: '#2e1717', border: '#4a2424', label: `Atrasado ${Math.abs(dias)}d` }
     if (dias <= 5) return { cor: '#f59e0b', bg: '#2e2515', border: '#4a3a1f', label: `Vence em ${dias}d` }
     return { cor: '#8b9ab4', bg: '#0d1b2e', border: '#1e3a5f', label: `Vence em ${dias}d` }
+  }
+
+  // Selo simplificado (bolinha + texto) exibido ao lado do botão de ação
+  const statusSelo = (st: string, dataVenc: string) => {
+    if (st === 'pago') return { cor: '#3fb950', label: 'Pago' }
+    if (diasAte(dataVenc) < 0) return { cor: '#ef4444', label: 'Em atraso' }
+    return { cor: '#f59e0b', label: 'A vencer' }
   }
 
   async function gerarBoleto(c: any) {
@@ -720,6 +733,15 @@ function PainelLocatario({ user }: { user: PortalUser }) {
                               <FileDown size={11} />Baixar recibo
                             </button>
                           )}
+                          {(() => {
+                            const selo = statusSelo(c.status_cobranca, c.data_vencimento)
+                            return (
+                              <span className="flex items-center gap-1.5 text-[11px] font-medium" style={{ color: selo.cor }}>
+                                <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: selo.cor }} />
+                                {selo.label}
+                              </span>
+                            )
+                          })()}
                         </div>
                       </div>
                     )
