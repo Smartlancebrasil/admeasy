@@ -203,7 +203,18 @@ function ModalTrocarSenha({ onFechar }: { onFechar: () => void }) {
 // ── MODAL SIMULAR RESCISÃO ────────────────────────────────────────────
 function ModalRescisao({ contrato, onFechar }: { contrato: any; onFechar: () => void }) {
   const valorMensalAtual = contrato.valor_atual || contrato.valor_mensal || 0
-  const { totalMeses, cumpridos, faltantes } = infoMeses(contrato.data_inicio, contrato.data_fim)
+  const [dataSaida, setDataSaida] = useState(new Date().toISOString().split('T')[0])
+
+  const ini = new Date(contrato.data_inicio + 'T00:00:00')
+  const fim = new Date(contrato.data_fim + 'T00:00:00')
+  const saida = new Date(dataSaida + 'T00:00:00')
+
+  const totalMeses = Math.max(1, (fim.getFullYear() - ini.getFullYear()) * 12 + (fim.getMonth() - ini.getMonth()) + (fim.getDate() >= ini.getDate() ? 1 : 0))
+  let cumpridos = (saida.getFullYear() - ini.getFullYear()) * 12 + (saida.getMonth() - ini.getMonth())
+  if (saida.getDate() < ini.getDate()) cumpridos -= 1
+  cumpridos = Math.max(0, Math.min(totalMeses, cumpridos))
+  const faltantes = Math.max(0, totalMeses - cumpridos)
+
   const multaAlugueis = contrato.multa_rescisao_locatario || 0
   const multaCheia = multaAlugueis * valorMensalAtual
   const multaProporcional = totalMeses > 0 ? multaCheia * (faltantes / totalMeses) : 0
@@ -216,6 +227,14 @@ function ModalRescisao({ contrato, onFechar }: { contrato: any; onFechar: () => 
           <button onClick={onFechar} style={{ color: '#8b9ab4' }}><X size={16} /></button>
         </div>
 
+        <div className="mb-4">
+          <label style={{ color: '#8b9ab4' }} className="block text-xs mb-1.5">Data prevista de saída</label>
+          <input type="date" value={dataSaida} min={contrato.data_inicio} max={contrato.data_fim}
+            onChange={e => setDataSaida(e.target.value)}
+            style={{ background: '#060D1C', border: '0.5px solid #1e3a5f', color: '#f4f4f3' }}
+            className="w-full px-3 py-2.5 rounded-lg text-sm focus:outline-none" />
+        </div>
+
         <div style={{ background: '#16243a', border: '0.5px solid #1e3a5f' }} className="rounded-xl p-4 mb-4 text-center">
           <p style={{ color: '#8b9ab4' }} className="text-xs mb-1">Estimativa de multa proporcional</p>
           <p className="text-white font-bold text-2xl">{formatVal(multaProporcional)}</p>
@@ -223,7 +242,7 @@ function ModalRescisao({ contrato, onFechar }: { contrato: any; onFechar: () => 
 
         <div className="space-y-2 text-sm">
           <div className="flex justify-between"><span style={{ color: '#8b9ab4' }}>Duração total do contrato</span><span className="text-white">{totalMeses} meses</span></div>
-          <div className="flex justify-between"><span style={{ color: '#8b9ab4' }}>Meses cumpridos</span><span className="text-white">{cumpridos}</span></div>
+          <div className="flex justify-between"><span style={{ color: '#8b9ab4' }}>Meses cumpridos até a data informada</span><span className="text-white">{cumpridos}</span></div>
           <div className="flex justify-between"><span style={{ color: '#8b9ab4' }}>Meses faltantes</span><span className="text-white">{faltantes}</span></div>
           <div style={{ borderTop: '0.5px solid #1e3a5f' }} className="pt-2 flex justify-between">
             <span style={{ color: '#8b9ab4' }}>Multa contratual cheia</span>
@@ -233,7 +252,8 @@ function ModalRescisao({ contrato, onFechar }: { contrato: any; onFechar: () => 
 
         <p style={{ color: '#5b5e6b' }} className="text-[10px] mt-4">
           Valor estimado com base na multa contratual ({multaAlugueis} aluguéis) aplicada proporcionalmente
-          ao tempo restante do contrato, conforme art. 4º da Lei 8.245/91. O valor final pode variar e será
+          ao tempo restante a partir da data informada, conforme art. 4º da Lei 8.245/91. Não inclui eventuais
+          aluguéis em atraso, danos ao imóvel ou atualização da caução — o valor final será calculado e
           confirmado pela imobiliária.
         </p>
       </div>
