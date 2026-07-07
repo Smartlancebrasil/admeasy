@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import AppLayout from '@/components/layout/AppLayout'
 import { supabase } from '@/lib/supabase'
-import { Calculator, Edit2, X } from 'lucide-react'
+import { Calculator, Edit2, X, TrendingUp } from 'lucide-react'
 
 type Contrato = {
   id: string
@@ -62,6 +62,9 @@ export default function RescisaoPage() {
   const [gerandoPdf, setGerandoPdf] = useState(false)
 
   const [editandoCaucao, setEditandoCaucao] = useState(false)
+  const [atualizandoGarantia, setAtualizandoGarantia] = useState(false)
+  const [erroGarantia, setErroGarantia] = useState('')
+  const [infoGarantia, setInfoGarantia] = useState<{ percentual: number; meses: number } | null>(null)
   const [caucaoEditado, setCaucaoEditado] = useState('')
   const caucaoValor = editandoCaucao && caucaoEditado !== ''
     ? parseFloat(caucaoEditado.replace(',', '.')) || 0
@@ -123,6 +126,35 @@ export default function RescisaoPage() {
   }
 
   const resultado = calcular()
+
+  async function atualizarGarantia() {
+    if (!contratoSel) return
+    setAtualizandoGarantia(true)
+    setErroGarantia('')
+    setInfoGarantia(null)
+    try {
+      const res = await fetch('/api/poupanca/corrigir', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dataInicial: contratoSel.data_inicio,
+          dataFinal: dataRescisao,
+          valor: contratoSel.valor_caucao || 0,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setErroGarantia(data.erro || 'Erro ao consultar a rentabilidade da poupança.')
+        return
+      }
+      setEditandoCaucao(true)
+      setCaucaoEditado(data.valorCorrigido.toFixed(2))
+      setInfoGarantia({ percentual: data.percentualAcumulado, meses: data.meses })
+    } catch (err) {
+      setErroGarantia('Erro de conexão ao consultar a poupança. Tente novamente.')
+    }
+    setAtualizandoGarantia(false)
+  }
 
   async function gerarPdf() {
     if (!contratoSel || !resultado) return
@@ -375,6 +407,22 @@ export default function RescisaoPage() {
                           )}
                         </div>
                         {editandoCaucao && <p style={{ color: '#f59e0b' }} className="text-[10px] mt-1">⚠ Valor editado manualmente para este cálculo</p>}
+                        <button onClick={atualizarGarantia} disabled={atualizandoGarantia}
+                          style={{ border: '0.5px solid #1e3a5f', color: '#5b9bf5' }}
+                          className="text-xs px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 mt-2 disabled:opacity-50">
+                          <TrendingUp size={12} />{atualizandoGarantia ? 'Consultando poupança...' : 'Atualizar garantia'}
+                        </button>
+                        {erroGarantia && <p style={{ color: '#ef4444' }} className="text-[10px] mt-1">{erroGarantia}</p>}
+                        {infoGarantia && !erroGarantia && (
+                          <p style={{ color: '#3fb950' }} className="text-[10px] mt-1">
+                            Corrigido pela poupança: +{infoGarantia.percentual.toFixed(2).replace('.', ',')}% acumulado ({infoGarantia.meses} meses)
+                          </p>
+                        )}
+                        {!infoGarantia && !erroGarantia && (
+                          <p style={{ color: '#5b5e6b' }} className="text-[10px] mt-1">
+                            Corrige a caução pela rentabilidade acumulada da poupança, do início do contrato até a data da rescisão.
+                          </p>
+                        )}
                       </div>
 
                       <div>
