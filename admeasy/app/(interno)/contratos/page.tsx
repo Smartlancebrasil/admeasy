@@ -261,7 +261,7 @@ const clienteFormVazio: Record<string, string> = {
   nome: '', tipo: 'locatario', cpf: '', rg: '',
   estado_civil: '', profissao: '',
   email: '', telefone: '',
-  endereco: '', bairro: '', cidade: '', estado: '', cep: '',
+  cep: '', endereco: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '',
   chave_pix: '',
   status: 'ativo',
 }
@@ -295,6 +295,38 @@ function ModalClienteCompleto({ tipoParte, onSalvar, onFechar }: {
   const setConj = (campo: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setConjuge(c => ({ ...c, [campo]: e.target.value }))
 
+  const [buscandoCep, setBuscandoCep] = useState(false)
+
+  // Busca o endereço automaticamente assim que o CEP tiver os 8 dígitos —
+  // não precisa clicar em outro campo nem apertar Enter.
+  async function buscarCep(cepDigitado: string) {
+    const cepLimpo = cepDigitado.replace(/\D/g, '')
+    if (cepLimpo.length !== 8) return
+    setBuscandoCep(true)
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`)
+      const dados = await res.json()
+      if (!dados.erro) {
+        setForm(f => ({
+          ...f,
+          endereco: dados.logradouro || f.endereco,
+          bairro: dados.bairro || f.bairro,
+          cidade: dados.localidade || f.cidade,
+          estado: dados.uf || f.estado,
+        }))
+      }
+    } catch {
+      // Sem internet ou API fora do ar: usuário preenche manualmente, sem travar o formulário.
+    }
+    setBuscandoCep(false)
+  }
+
+  function aoDigitarCep(e: React.ChangeEvent<HTMLInputElement>) {
+    const valor = e.target.value
+    setForm(f => ({ ...f, cep: valor }))
+    buscarCep(valor)
+  }
+
   const ehCasado = form.estado_civil === 'casado'
 
   async function salvar(e: React.FormEvent) {
@@ -302,7 +334,13 @@ function ModalClienteCompleto({ tipoParte, onSalvar, onFechar }: {
     setSalvando(true)
     setErro('')
 
-    const payloadTitular = { ...form, organization_id: ORG_ID, tem_portal: false }
+    // A tabela "clientes" guarda o endereço todo num campo só (endereco),
+    // então juntamos rua + número + complemento aqui antes de enviar —
+    // número/complemento existem só nesta tela, para facilitar o preenchimento.
+    const enderecoCompleto = [form.endereco, form.numero, form.complemento].filter(Boolean).join(', ')
+    const { numero, complemento, ...formSemNumeroComplemento } = form
+
+    const payloadTitular = { ...formSemNumeroComplemento, endereco: enderecoCompleto, organization_id: ORG_ID, tem_portal: false }
     const { data: titular, error: erroTitular } = await supabase
       .from('clientes').insert([payloadTitular]).select('id, nome').single()
 
@@ -314,7 +352,7 @@ function ModalClienteCompleto({ tipoParte, onSalvar, onFechar }: {
         profissao: conjuge.profissao || null,
         estado_civil: 'casado', tipo: form.tipo, status: 'ativo', tem_portal: false,
         // mesmo endereco do titular, para evitar duplicidade de cadastro
-        endereco: form.endereco || null, bairro: form.bairro || null,
+        endereco: enderecoCompleto || null, bairro: form.bairro || null,
         cidade: form.cidade || null, estado: form.estado || null, cep: form.cep || null,
         organization_id: ORG_ID,
       }
@@ -362,18 +400,26 @@ function ModalClienteCompleto({ tipoParte, onSalvar, onFechar }: {
               <input className="input" type="email" value={form.email} onChange={set('email')} /></div>
             <div><label className="label">Celular *</label>
               <input className="input" required value={form.telefone} onChange={set('telefone')} placeholder="(11) 99999-9999" /></div>
-            <div className="sm:col-span-2"><label className="label">Endereço completo *</label>
-              <input className="input" required value={form.endereco} onChange={set('endereco')} placeholder="Rua, número, complemento" /></div>
-            <div><label className="label">Bairro *</label>
-              <input className="input" required value={form.bairro} onChange={set('bairro')} /></div>
-            <div><label className="label">Cidade *</label>
-              <input className="input" required value={form.cidade} onChange={set('cidade')} /></div>
+            <div><label className="label">CEP</label>
+              <div className="relative">
+                <input className="input" value={form.cep} onChange={aoDigitarCep} placeholder="00000-000" maxLength={9} />
+                {buscandoCep && <span style={{ color: '#5b9bf5' }} className="absolute right-3 top-1/2 -translate-y-1/2 text-xs">Buscando...</span>}
+              </div>
+            </div>
             <div><label className="label">Estado *</label>
               <select className="input" required value={form.estado} onChange={set('estado')}>
                 <option value="">UF</option>{UFs_MODAL.map(uf => <option key={uf} value={uf}>{uf}</option>)}
               </select></div>
-            <div><label className="label">CEP</label>
-              <input className="input" value={form.cep} onChange={set('cep')} placeholder="00000-000" /></div>
+            <div className="sm:col-span-2"><label className="label">Endereço (rua) *</label>
+              <input className="input" required value={form.endereco} onChange={set('endereco')} placeholder="Preenchido automaticamente pelo CEP, ou digite" /></div>
+            <div><label className="label">Número *</label>
+              <input className="input" required value={form.numero} onChange={set('numero')} placeholder="Ex: 123" /></div>
+            <div><label className="label">Complemento</label>
+              <input className="input" value={form.complemento} onChange={set('complemento')} placeholder="Ex: Apto 42, Bloco B" /></div>
+            <div><label className="label">Bairro *</label>
+              <input className="input" required value={form.bairro} onChange={set('bairro')} /></div>
+            <div><label className="label">Cidade *</label>
+              <input className="input" required value={form.cidade} onChange={set('cidade')} /></div>
             {tipoParte === 'locador' && (
               <div className="sm:col-span-2"><label className="label">Chave PIX (para recebimento dos repasses)</label>
                 <input className="input" value={form.chave_pix || ''} onChange={set('chave_pix')} placeholder="CPF, CNPJ, e-mail, celular ou chave aleatória" /></div>
@@ -903,7 +949,11 @@ export default function ContratosPage() {
           status: 'pendente',
         })
       }
-      await supabase.from('lancamentos').insert(lancamentos)
+      const { error: erroLancamentos } = await supabase.from('lancamentos').insert(lancamentos)
+      if (erroLancamentos) {
+        console.error('Erro ao gerar lançamentos de caução:', erroLancamentos)
+        throw new Error(`Contrato salvo, mas falhou ao gerar lançamentos de caução: ${erroLancamentos.message}`)
+      }
     }
 
     if (!dados.id && contratoId) {
@@ -942,6 +992,7 @@ export default function ContratosPage() {
           locador_id: dados.locador_id,
           data_vencimento: vencimento.toISOString().split('T')[0],
           mes_referencia: `${meses[vencimento.getMonth()]}/${vencimento.getFullYear()}`,
+          competencia: new Date(vencimento.getFullYear(), vencimento.getMonth(), 1).toISOString().split('T')[0],
           valor_aluguel: valorMensal,
           valor_condominio: valorCondominio,
           valor_iptu: valorIptu,
@@ -958,7 +1009,11 @@ export default function ContratosPage() {
           status_cobranca: 'pendente',
         })
       }
-      await supabase.from('cobrancas').insert(cobrancas)
+      const { error: erroCobrancas } = await supabase.from('cobrancas').insert(cobrancas)
+      if (erroCobrancas) {
+        console.error('Erro ao gerar cobranças:', erroCobrancas)
+        throw new Error(`Contrato salvo, mas falhou ao gerar cobranças: ${erroCobrancas.message}`)
+      }
     }
 
     await registrarLog({

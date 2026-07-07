@@ -4,9 +4,8 @@ import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import AppLayout from '@/components/layout/AppLayout'
 import { supabase } from '@/lib/supabase'
+import { useOrganization } from '@/lib/OrganizationContext'
 import { Save, Plus, X, Camera, ChevronDown, ChevronUp } from 'lucide-react'
-
-const ORG_ID = '00000000-0000-0000-0000-000000000001'
 
 const AMBIENTES_PADRAO = [
   'Sala', 'Sala de estar', 'Sala de jantar', 'Cozinha',
@@ -35,6 +34,7 @@ type Vistoriador = { id: string; nome: string }
 function NovaVistoriaConteudo() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { organizacao } = useOrganization()
   const editId = searchParams.get('id')
   const [carregandoEdicao, setCarregandoEdicao] = useState(!!editId)
 
@@ -57,16 +57,18 @@ function NovaVistoriaConteudo() {
   const [testemunha2Nome, setTestemunha2Nome] = useState('')
   const [testemunha2Cpf, setTestemunha2Cpf] = useState('')
 
-  useEffect(() => { carregarDados() }, [])
+  useEffect(() => {
+    if (organizacao?.id) carregarDados(organizacao.id)
+  }, [organizacao?.id])
 
   useEffect(() => {
     if (editId) carregarVistoriaParaEdicao(editId)
   }, [editId])
 
-  async function carregarDados() {
-    const { data: imv } = await supabase.from('imoveis').select('id, endereco, numero, bairro, cidade, estado').eq('organization_id', ORG_ID).order('endereco')
+  async function carregarDados(orgId: string) {
+    const { data: imv } = await supabase.from('imoveis').select('id, endereco, numero, bairro, cidade, estado').eq('organization_id', orgId).order('endereco')
     if (imv) setImoveis(imv)
-    const { data: vist } = await supabase.from('vistoriadores').select('id, nome').eq('organization_id', ORG_ID).eq('ativo', true).order('nome')
+    const { data: vist } = await supabase.from('vistoriadores').select('id, nome').eq('organization_id', orgId).eq('ativo', true).order('nome')
     if (vist) setVistoriadores(vist)
   }
 
@@ -145,8 +147,9 @@ function NovaVistoriaConteudo() {
 
   async function adicionarFoto(idx: number, file: File) {
     if (ambientes[idx].fotos.length >= 5) return
+    if (!organizacao?.id) return
     const ext = file.name.split('.').pop()
-    const path = `vistorias/${ORG_ID}/${Date.now()}.${ext}`
+    const path = `vistorias/${organizacao.id}/${Date.now()}.${ext}`
     const { data: up } = await supabase.storage.from('documentos').upload(path, file, { upsert: true })
     if (up) {
       const { data: url } = supabase.storage.from('documentos').getPublicUrl(path)
@@ -161,10 +164,11 @@ function NovaVistoriaConteudo() {
   async function salvar(status: string) {
     if (!imovelId) { alert('Selecione um imóvel'); return }
     if (!data) { alert('Informe a data'); return }
+    if (!organizacao?.id) { alert('Organização não carregada. Recarregue a página.'); return }
     setSalvando(true)
 
     const payload = {
-      organization_id: ORG_ID,
+      organization_id: organizacao.id,
       imovel_id: imovelId,
       vistoriador_id: vistoriadorId || null,
       tipo,

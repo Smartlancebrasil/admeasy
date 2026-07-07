@@ -31,20 +31,20 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 to-blue-700 flex items-center justify-center p-4">
+    <div style={{ background: '#0d1117' }} className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-white rounded-2xl mb-4 shadow-lg">
+          <div style={{ background: '#2563eb' }} className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-4">
             <span className="text-3xl">🏢</span>
           </div>
-          <h1 className="text-2xl font-semibold text-white">AdmEasy</h1>
-          <p className="text-blue-200 text-sm mt-1">Gestão imobiliária inteligente</p>
+          <h1 style={{ color: '#f4f4f3' }} className="text-2xl font-semibold">AdmEasy</h1>
+          <p style={{ color: '#8b8d98' }} className="text-sm mt-1">Gestão imobiliária inteligente</p>
         </div>
 
         {/* Card */}
-        <div className="bg-white rounded-2xl shadow-xl p-8">
-          <h2 className="text-lg font-semibold text-gray-800 mb-6">Entrar na sua conta</h2>
+        <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-2xl p-8">
+          <h2 style={{ color: '#f4f4f3' }} className="text-lg font-semibold mb-6">Entrar na sua conta</h2>
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
@@ -71,7 +71,7 @@ export default function LoginPage() {
             </div>
 
             {erro && (
-              <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-3 py-2 rounded-lg">
+              <div style={{ background: '#2e1717', border: '0.5px solid #4a2424', color: '#ef4444' }} className="text-sm px-3 py-2 rounded-lg">
                 {erro}
               </div>
             )}
@@ -85,7 +85,7 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <p className="text-xs text-gray-400 text-center mt-6">
+          <p style={{ color: '#5b5e6b' }} className="text-xs text-center mt-6">
             Problemas para acessar? Fale com o administrador.
           </p>
         </div>

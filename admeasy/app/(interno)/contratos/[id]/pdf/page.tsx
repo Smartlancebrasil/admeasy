@@ -5,10 +5,9 @@ import { useRouter, useParams } from 'next/navigation'
 import AppLayout from '@/components/layout/AppLayout'
 import Topbar from '@/components/layout/Topbar'
 import { supabase } from '@/lib/supabase'
-import { FileDown, ArrowLeft, Plus, X, Upload, Trash2 } from 'lucide-react'
+import { useOrganization } from '@/lib/OrganizationContext'
+import { FileDown, ArrowLeft, Plus, X, Upload, Trash2, Hourglass, CheckCircle2 } from 'lucide-react'
 import Link from 'next/link'
-
-const ORG_ID = '00000000-0000-0000-0000-000000000001'
 
 type Parte = {
   nome: string; cpf: string; rg: string; profissao: string
@@ -222,10 +221,13 @@ function mesPorExtenso(dateStr: string): string {
 export default function ContratoPdfPage() {
   const params = useParams()
   const contratoId = params?.id as string
+  const { organizacao } = useOrganization()
   const [contrato, setContrato] = useState<Contrato | null>(null)
   const [org, setOrg] = useState<Org | null>(null)
   const [loading, setLoading] = useState(true)
   const [gerandoPdf, setGerandoPdf] = useState(false)
+  const [salvando, setSalvando] = useState(false)
+  const [popupEstado, setPopupEstado] = useState<'processando' | 'sucesso' | null>(null)
   const [documentos, setDocumentos] = useState<Documento[]>([])
   const [uploadando, setUploadando] = useState(false)
   const [sucesso, setSucesso] = useState('')
@@ -257,7 +259,7 @@ export default function ContratoPdfPage() {
   const [foro, setForo] = useState('Santana, São Paulo, SP')
   const [moradores, setMoradores] = useState('')
 
-  useEffect(() => { carregar() }, [contratoId])
+  useEffect(() => { if (organizacao?.id) carregar() }, [contratoId, organizacao?.id])
 
   async function carregar() {
     setLoading(true)
@@ -325,10 +327,19 @@ export default function ContratoPdfPage() {
       if (c.parcelas_caucao) setParcelasCaucao(String(c.parcelas_caucao))
 
       // Restaura dados de qualificação salvos anteriormente nesta tela (sobrescreve os defaults acima)
+      // MAS só quando a pessoa (locador/locatário) continua sendo a mesma —
+      // comparamos pelo CPF do vínculo atual do contrato com o CPF salvo no
+      // retrato antigo. Se o CPF mudou, é porque o locador/locatário foi
+      // trocado no contrato desde a última vez que essa tela foi salva, e
+      // nesse caso mantemos os dados recém-buscados (linhas acima) em vez
+      // de reaplicar a pessoa antiga por cima.
       const dq = c.dados_qualificacao
       if (dq) {
-        if (dq.locadores?.length) setLocadores(dq.locadores)
-        if (dq.locatarios?.length) setLocatarios(dq.locatarios)
+        const locadorMesmaPessoa = !loc?.cpf || !dq.locadores?.[0]?.cpf || loc.cpf === dq.locadores[0].cpf
+        const locatarioMesmaPessoa = !locat?.cpf || !dq.locatarios?.[0]?.cpf || locat.cpf === dq.locatarios[0].cpf
+
+        if (dq.locadores?.length && locadorMesmaPessoa) setLocadores(dq.locadores)
+        if (dq.locatarios?.length && locatarioMesmaPessoa) setLocatarios(dq.locatarios)
         if (dq.fiadores?.length) setFiadores(dq.fiadores)
         if (dq.valorCondominio !== undefined) setValorCondominio(dq.valorCondominio)
         if (dq.valorIptu !== undefined) setValorIptu(dq.valorIptu)
@@ -348,7 +359,7 @@ export default function ContratoPdfPage() {
       }
     }
 
-    const { data: o } = await supabase.from('organizations').select('*').eq('id', ORG_ID).single()
+    const { data: o } = await supabase.from('organizations').select('*').eq('id', organizacao!.id).single()
     if (o) setOrg(o)
 
     const { data: todosClientes } = await supabase
@@ -457,11 +468,13 @@ export default function ContratoPdfPage() {
     )
   }
 
-  async function gerarPdf() {
-    if (!contrato || !org) return
-    setGerandoPdf(true)
-
-    // Salva os dados de qualificação editados nesta tela, para não se perderem
+  /**
+   * Salva só os dados de qualificação (locador/locatário, valores, etc) —
+   * NÃO gera nem baixa o PDF. Usado pelo botão "Salvar" isolado (ex: depois
+   * de subir o contrato assinado, sem precisar re-gerar um PDF novo) e
+   * também reaproveitado internamente pelo "Gerar PDF" antes de montar o documento.
+   */
+  async function salvarQualificacao(): Promise<boolean> {
     const { error: erroSalvar } = await supabase.from('contratos').update({
       dados_qualificacao: {
         locadores, locatarios, fiadores,
@@ -473,8 +486,28 @@ export default function ContratoPdfPage() {
     }).eq('id', contratoId)
 
     if (erroSalvar) {
-      alert('Não foi possível salvar a qualificação antes de gerar o PDF: ' + erroSalvar.message + '\n\nO PDF vai gerar normalmente, mas os dados desta tela não vão ficar salvos para a próxima vez. Confirme se rodou a migração SQL mais recente no Supabase (coluna dados_qualificacao).')
+      alert('Erro ao salvar: ' + erroSalvar.message + '\n\nConfirme se rodou a migração SQL mais recente no Supabase (coluna dados_qualificacao).')
+      return false
     }
+    return true
+  }
+
+  async function salvar() {
+    setSalvando(true)
+    const ok = await salvarQualificacao()
+    setSalvando(false)
+    if (ok) {
+      setSucesso('Dados salvos!')
+      setTimeout(() => setSucesso(''), 3000)
+    }
+  }
+
+  async function gerarPdf() {
+    if (!contrato || !org) return
+    setGerandoPdf(true)
+
+    // Salva os dados de qualificação editados nesta tela, para não se perderem
+    await salvarQualificacao()
 
     const tituloTipo: Record<string, string> = {
       locacao_residencial: 'LOCAÇÃO RESIDENCIAL',
@@ -763,7 +796,17 @@ export default function ContratoPdfPage() {
     }
 
     addRodape()
+
+    // Sensação profissional: mostra "Processando" por 3s, depois "Contrato
+    // Gerado" por mais 3s, e só então dispara o download do PDF de verdade.
+    setPopupEstado('processando')
+    await new Promise(resolve => setTimeout(resolve, 3000))
+
+    setPopupEstado('sucesso')
+    await new Promise(resolve => setTimeout(resolve, 3000))
+
     doc.save(`contrato-${contrato.numero}-${contrato.data_inicio}.pdf`)
+    setPopupEstado(null)
     setGerandoPdf(false)
   }
 
@@ -780,13 +823,6 @@ export default function ContratoPdfPage() {
       <Topbar titulo={`Contrato #${contrato.numero} — Gerar PDF`} />
       <div className="flex-1 overflow-y-auto p-6">
         <div className="max-w-3xl mx-auto space-y-5">
-
-          <div className="flex items-center justify-between">
-            <Link href="/contratos" style={{ color: '#8b9ab4' }} className="btn btn-sm"><ArrowLeft size={13} />Voltar</Link>
-            <button onClick={gerarPdf} disabled={gerandoPdf} className="btn btn-primary">
-              <FileDown size={14} />{gerandoPdf ? 'Salvando e gerando...' : 'Salvar e gerar contrato PDF'}
-            </button>
-          </div>
 
           {/* Resumo do contrato */}
           <div className="card" style={{ background: '#16243a', border: '0.5px solid #1e3a5f' }}>
@@ -1010,14 +1046,53 @@ export default function ContratoPdfPage() {
             )}
           </div>
 
-          {/* Botão final */}
-          <div className="pb-6">
-            <button onClick={gerarPdf} disabled={gerandoPdf} className="btn btn-primary w-full">
-              <FileDown size={14} />{gerandoPdf ? 'Salvando e gerando...' : 'Salvar e gerar contrato PDF'}
+          {/* Botões finais */}
+          <div className="pb-6 flex gap-2">
+            <Link href="/contratos" style={{ color: '#8b9ab4' }} className="btn justify-center"><ArrowLeft size={13} />Voltar</Link>
+            <button onClick={salvar} disabled={salvando || gerandoPdf}
+              style={{ background: '#3fb950', color: '#fff', border: 'none' }}
+              className="btn flex-1 justify-center">
+              {salvando ? 'Salvando...' : 'Salvar'}
+            </button>
+            <button onClick={gerarPdf} disabled={gerandoPdf || salvando}
+              style={{ background: '#2563eb', color: '#fff', border: 'none' }}
+              className="btn flex-1 justify-center">
+              {gerandoPdf ? 'Gerando...' : 'Finalizar Contrato'}
             </button>
           </div>
         </div>
       </div>
+
+      {sucesso && (
+        <div
+          style={{ background: '#1a2e1f', border: '0.5px solid #2d4a35', color: '#3fb950' }}
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 px-5 py-3 rounded-xl text-sm font-medium shadow-lg z-50 flex items-center gap-2"
+        >
+          <CheckCircle2 size={16} />{sucesso}
+        </div>
+      )}
+      {(popupEstado === 'processando' || popupEstado === 'sucesso') && (
+        <div style={{ background: 'rgba(0,0,0,0.6)' }} className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {popupEstado === 'processando' && (
+            <div
+              style={{ background: '#16243a', border: '0.5px solid #1e3a5f', color: '#5b9bf5' }}
+              className="rounded-2xl px-10 py-8 shadow-2xl flex flex-col items-center gap-4"
+            >
+              <Hourglass size={40} className="animate-spin" />
+              <span className="text-lg font-semibold">Processando...</span>
+            </div>
+          )}
+          {popupEstado === 'sucesso' && (
+            <div
+              style={{ background: '#1a2e1f', border: '0.5px solid #2d4a35', color: '#3fb950' }}
+              className="rounded-2xl px-10 py-8 shadow-2xl flex flex-col items-center gap-4"
+            >
+              <CheckCircle2 size={40} />
+              <span className="text-lg font-semibold">Contrato Gerado</span>
+            </div>
+          )}
+        </div>
+      )}
     </AppLayout>
   )
 }
