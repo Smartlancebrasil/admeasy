@@ -710,25 +710,12 @@ function PainelLocatario({ user }: { user: PortalUser }) {
                           )}
                         </div>
                         <div className="flex gap-2 flex-wrap items-center">
-                          {c.status_cobranca !== 'pago' && disponivel && (
+                          {c.status_cobranca !== 'pago' && (
                             <button onClick={() => gerarBoleto(c)} disabled={gerandoBoleto === c.id}
                               style={{ background: '#1A7FFF' }}
                               className="text-[11px] px-3 py-1.5 rounded-lg text-white flex items-center gap-1.5 disabled:opacity-50">
-                              <FileDown size={11} />{gerandoBoleto === c.id ? 'Gerando...' : 'Gerar boleto + Pix'}
+                              <FileDown size={11} />{gerandoBoleto === c.id ? 'Gerando...' : (disponivel ? 'Gerar boleto + Pix' : 'Antecipar e gerar boleto + Pix')}
                             </button>
-                          )}
-                          {c.status_cobranca !== 'pago' && !disponivel && (
-                            <div className="flex items-center gap-1.5">
-                              <span
-                                style={{ border: '0.5px solid #1e3a5f', color: '#5b5e6b' }}
-                                className="text-[11px] px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-not-allowed"
-                              >
-                                <FileDown size={11} />Gerar boleto + Pix
-                              </span>
-                              <span style={{ color: '#5b5e6b' }} className="text-[10px]">
-                                Disponível em {proximoMesDisponivel(c.data_vencimento)}
-                              </span>
-                            </div>
                           )}
                           {c.status_cobranca === 'pago' && (
                             <button onClick={() => gerarReciboPDF(c)}
