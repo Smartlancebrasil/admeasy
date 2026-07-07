@@ -570,7 +570,7 @@ export default function FinanceiroPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr style={{ borderBottom: '0.5px solid #2a2f3a' }}>
-                      {['Imóvel / Locatário','Referência','Vencimento','Aluguel','Taxa adm.','Repasse','Status',''].map(h => (
+                      {['Imóvel / Locatário','Referência','Vencimento','Aluguel','Honorários','Taxa adm.','Repasse','Status',''].map(h => (
                         <th key={h} style={{ color: '#8b8d98' }} className="text-left px-4 py-3 text-xs font-medium">{h}</th>
                       ))}
                     </tr>
@@ -591,8 +591,17 @@ export default function FinanceiroPage() {
                         <td style={{ color: '#8b8d98' }} className="px-4 py-3 text-xs">{formatDate(c.data_vencimento)}</td>
                         <td style={{ color: '#f4f4f3' }} className="px-4 py-3 font-medium text-sm">{formatVal(c.valor_aluguel)}</td>
                         <td className="px-4 py-3 text-xs">
-                          <div style={{ color: '#5b9bf5' }} className="font-medium">{formatVal(c.valor_taxa_adm)}</div>
-                          <div style={{ color: '#8b8d98' }}>{c.taxa_administracao_pct}%</div>
+                          {ehHonorario(c)
+                            ? <div style={{ color: '#5b9bf5' }} className="font-medium">{formatVal(c.valor_taxa_adm)}</div>
+                            : <div style={{ color: '#5b5e6b' }}>—</div>}
+                        </td>
+                        <td className="px-4 py-3 text-xs">
+                          {ehHonorario(c)
+                            ? <div style={{ color: '#5b5e6b' }}>—</div>
+                            : <>
+                                <div style={{ color: '#5b9bf5' }} className="font-medium">{formatVal(c.valor_taxa_adm)}</div>
+                                <div style={{ color: '#8b8d98' }}>{c.taxa_administracao_pct}%</div>
+                              </>}
                         </td>
                         <td style={{ color: '#3fb950' }} className="px-4 py-3 text-sm font-medium">{formatVal(c.valor_repasse)}</td>
                         <td className="px-4 py-3">
