@@ -529,6 +529,15 @@ function PainelLocatario({ user }: { user: PortalUser }) {
   const [gerandoBoleto, setGerandoBoleto] = useState<string | null>(null)
   const [erroBoleto, setErroBoleto] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [anosExpandidos, setAnosExpandidos] = useState<Set<string>>(new Set([String(new Date().getFullYear())]))
+
+  function toggleAno(ano: string) {
+    setAnosExpandidos(prev => {
+      const next = new Set(prev)
+      if (next.has(ano)) next.delete(ano); else next.add(ano)
+      return next
+    })
+  }
 
   useEffect(() => { carregar() }, [])
 
@@ -721,89 +730,128 @@ function PainelLocatario({ user }: { user: PortalUser }) {
             <p style={{ color: '#8b9ab4' }} className="text-xs font-medium mb-3">Cobranças</p>
             {cobrancas.length === 0
               ? <p style={{ color: '#8b9ab4' }} className="text-sm text-center py-6">Nenhuma cobrança.</p>
-              : <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                  {cobrancas.map(c => {
-                    const st = statusCor(c.status_cobranca, c.data_vencimento)
-                    const emAtraso = c.status_cobranca !== 'pago' && diasAte(c.data_vencimento) < 0
-                    const base = valorCobranca(c)
-                    const { valorAtualizado, multa, juros, diasAtraso } = calcularValorAtualizado(base, c.data_vencimento)
-                    const disponivel = mesJaChegou(c.data_vencimento)
-                    return (
-                      <div key={c.id} style={{ background: st.bg, border: `0.5px solid ${st.border}` }} className="rounded-xl p-4 flex flex-col">
-                        <div className="flex items-center justify-between mb-2">
-                          <div>
-                            <p className="text-white text-sm font-medium">{c.mes_referencia || formatDate(c.data_vencimento)}</p>
-                            <p style={{ color: '#8b9ab4' }} className="text-[10px]">Vence: {formatDate(c.data_vencimento)}</p>
-                          </div>
-                          <div className="text-right">
-                            {emAtraso ? (
-                              <div>
-                                <p style={{ color: '#8b9ab4' }} className="text-[10px] line-through">{formatVal(base)}</p>
-                                <p className="text-white font-bold">{formatVal(valorAtualizado)}</p>
+              : (() => {
+                  const porAno: Record<string, any[]> = {}
+                  cobrancas.forEach(c => {
+                    const ano = c.data_vencimento.slice(0, 4)
+                    if (!porAno[ano]) porAno[ano] = []
+                    porAno[ano].push(c)
+                  })
+                  const anos = Object.keys(porAno).sort()
+                  return (
+                    <div className="space-y-3">
+                      {anos.map(ano => {
+                        const lista = porAno[ano]
+                        const aberto = anosExpandidos.has(ano)
+                        const pendentes = lista.filter(c => c.status_cobranca !== 'pago').length
+                        return (
+                          <div key={ano}>
+                            <button onClick={() => toggleAno(ano)}
+                              style={{ background: '#0d1b2e', border: '0.5px solid #1e3a5f' }}
+                              className="w-full flex items-center justify-between px-4 py-3 rounded-xl mb-3">
+                              <span className="text-white text-sm font-semibold">{ano}</span>
+                              <div className="flex items-center gap-3">
+                                <span style={{ color: '#8b9ab4' }} className="text-xs">
+                                  {lista.length} cobrança{lista.length > 1 ? 's' : ''}{pendentes > 0 ? ` · ${pendentes} pendente${pendentes > 1 ? 's' : ''}` : ''}
+                                </span>
+                                {aberto ? <ChevronUp size={14} style={{ color: '#8b9ab4' }} /> : <ChevronDown size={14} style={{ color: '#8b9ab4' }} />}
                               </div>
-                            ) : <p className="text-white font-bold">{formatVal(base)}</p>}
-                            <p style={{ color: st.cor }} className="text-[10px] font-semibold">{st.label}</p>
-                          </div>
-                        </div>
-                        {emAtraso && (
-                          <div style={{ background: '#2e1717', border: '0.5px solid #4a2424' }} className="rounded-lg p-2 mb-2 text-[10px]">
-                            <div style={{ color: '#f87171' }} className="flex items-center gap-1 font-semibold mb-1"><AlertCircle size={10} />Valor atualizado ({diasAtraso}d de atraso)</div>
-                            <div style={{ color: '#fca5a5' }} className="space-y-0.5">
-                              <div className="flex justify-between"><span>Valor original</span><span>{formatVal(base)}</span></div>
-                              <div className="flex justify-between"><span>Multa (10%)</span><span>+ {formatVal(multa)}</span></div>
-                              <div className="flex justify-between"><span>Juros ({diasAtraso}d × 0,033%)</span><span>+ {formatVal(juros)}</span></div>
-                              <div style={{ color: '#ef4444', borderTop: '0.5px solid #4a2424' }} className="flex justify-between font-bold pt-0.5"><span>Total</span><span>{formatVal(valorAtualizado)}</span></div>
-                            </div>
-                          </div>
-                        )}
-                        <div style={{ background: '#060D1C', border: '0.5px solid #1e3a5f' }} className="rounded-lg p-2 mb-2 text-[10px] space-y-0.5">
-                          {[
-                            ['Aluguel', c.valor_aluguel],
-                            ['Condomínio', c.valor_condominio],
-                            ['IPTU', c.valor_iptu],
-                            ['Seguro incêndio', c.valor_seguro_incendio],
-                            ['Seguro fiança', c.valor_seguro_fianca],
-                          ].filter(([, v]) => (v as number) > 0).map(([l, v]) => (
-                            <div key={l as string} className="flex justify-between" style={{ color: '#8b9ab4' }}>
-                              <span>{l}</span><span>{formatVal(v as number)}</span>
-                            </div>
-                          ))}
-                          {c.valor_caucao_parcela > 0 && (
-                            <div className="flex justify-between" style={{ color: '#5b9bf5' }}>
-                              <span>Caução ({c.caucao_parcela_num}/{c.caucao_parcelas_total})</span>
-                              <span>{formatVal(c.valor_caucao_parcela)}</span>
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex gap-2 flex-wrap items-center mt-auto">
-                          {c.status_cobranca !== 'pago' && (
-                            <button onClick={() => gerarBoleto(c)} disabled={gerandoBoleto === c.id}
-                              style={{ background: '#1A7FFF' }}
-                              className="text-[11px] px-3 py-1.5 rounded-lg text-white flex items-center gap-1.5 disabled:opacity-50">
-                              <FileDown size={11} />{gerandoBoleto === c.id ? 'Gerando...' : (disponivel ? 'Gerar boleto + Pix' : 'Antecipar e gerar boleto + Pix')}
                             </button>
-                          )}
-                          {c.status_cobranca === 'pago' && (
-                            <button onClick={() => gerarReciboPDF(c)}
-                              style={{ border: '0.5px solid #2d4a35', color: '#3fb950' }}
-                              className="text-[11px] px-3 py-1.5 rounded-lg flex items-center gap-1.5">
-                              <FileDown size={11} />Baixar recibo
-                            </button>
-                          )}
-                          {(() => {
-                            const selo = statusSelo(c.status_cobranca, c.data_vencimento)
-                            return (
-                              <span className="flex items-center gap-1.5 text-[11px] font-medium" style={{ color: selo.cor }}>
-                                <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: selo.cor }} />
-                                {selo.label}
-                              </span>
-                            )
-                          })()}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
+
+                            {aberto && (
+                              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 mb-1">
+                                {lista.map(c => {
+                                  const st = statusCor(c.status_cobranca, c.data_vencimento)
+                                  const emAtraso = c.status_cobranca !== 'pago' && diasAte(c.data_vencimento) < 0
+                                  const base = valorCobranca(c)
+                                  const { valorAtualizado, multa, juros, diasAtraso } = calcularValorAtualizado(base, c.data_vencimento)
+                                  const disponivel = mesJaChegou(c.data_vencimento)
+                                  return (
+                                    <div key={c.id} style={{ background: st.bg, border: `0.5px solid ${st.border}` }} className="rounded-xl p-3 flex flex-col">
+                                      <div className="mb-2">
+                                        <p className="text-white text-sm font-medium">{c.mes_referencia || formatDate(c.data_vencimento)}</p>
+                                        <p style={{ color: '#8b9ab4' }} className="text-[10px]">Vence: {formatDate(c.data_vencimento)}</p>
+                                        {emAtraso ? (
+                                          <>
+                                            <p style={{ color: '#8b9ab4' }} className="text-[10px] line-through mt-1">{formatVal(base)}</p>
+                                            <p className="text-white font-bold">{formatVal(valorAtualizado)}</p>
+                                          </>
+                                        ) : <p className="text-white font-bold mt-1">{formatVal(base)}</p>}
+                                        <p style={{ color: st.cor }} className="text-[10px] font-semibold">{st.label}</p>
+                                      </div>
+                                      {emAtraso && (
+                                        <div style={{ background: '#2e1717', border: '0.5px solid #4a2424' }} className="rounded-lg p-2 mb-2 text-[10px]">
+                                          <div style={{ color: '#f87171' }} className="flex items-center gap-1 font-semibold mb-1"><AlertCircle size={10} />Atualizado ({diasAtraso}d)</div>
+                                          <div style={{ color: '#fca5a5' }} className="space-y-0.5">
+                                            <div className="flex justify-between"><span>Original</span><span>{formatVal(base)}</span></div>
+                                            <div className="flex justify-between"><span>Multa</span><span>+{formatVal(multa)}</span></div>
+                                            <div className="flex justify-between"><span>Juros</span><span>+{formatVal(juros)}</span></div>
+                                            <div style={{ color: '#ef4444', borderTop: '0.5px solid #4a2424' }} className="flex justify-between font-bold pt-0.5"><span>Total</span><span>{formatVal(valorAtualizado)}</span></div>
+                                          </div>
+                                        </div>
+                                      )}
+                                      <div style={{ background: '#060D1C', border: '0.5px solid #1e3a5f' }} className="rounded-lg p-2 mb-2 text-[10px] space-y-0.5">
+                                        {[
+                                          ['Aluguel', c.valor_aluguel],
+                                          ['Condomínio', c.valor_condominio],
+                                          ['IPTU', c.valor_iptu],
+                                          ['Seguro incêndio', c.valor_seguro_incendio],
+                                          ['Seguro fiança', c.valor_seguro_fianca],
+                                        ].filter(([, v]) => (v as number) > 0).map(([l, v]) => (
+                                          <div key={l as string} className="flex justify-between" style={{ color: '#8b9ab4' }}>
+                                            <span>{l}</span><span>{formatVal(v as number)}</span>
+                                          </div>
+                                        ))}
+                                        {c.valor_caucao_parcela > 0 && (
+                                          <div className="flex justify-between" style={{ color: '#5b9bf5' }}>
+                                            <span>Caução ({c.caucao_parcela_num}/{c.caucao_parcelas_total})</span>
+                                            <span>{formatVal(c.valor_caucao_parcela)}</span>
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="flex flex-col gap-1.5 mt-auto">
+                                        {c.status_cobranca !== 'pago' && disponivel && (
+                                          <button onClick={() => gerarBoleto(c)} disabled={gerandoBoleto === c.id}
+                                            style={{ background: '#1A7FFF' }}
+                                            className="text-[11px] px-2.5 py-1.5 rounded-lg text-white flex items-center justify-center gap-1.5 disabled:opacity-50">
+                                            <FileDown size={11} />{gerandoBoleto === c.id ? 'Gerando...' : 'Gerar boleto + Pix'}
+                                          </button>
+                                        )}
+                                        {c.status_cobranca !== 'pago' && !disponivel && (
+                                          <span
+                                            style={{ border: '0.5px solid #1e3a5f', color: '#5b5e6b' }}
+                                            className="text-[11px] px-2.5 py-1.5 rounded-lg flex items-center justify-center gap-1.5 cursor-not-allowed text-center">
+                                            Disponível em {proximoMesDisponivel(c.data_vencimento)}
+                                          </span>
+                                        )}
+                                        {c.status_cobranca === 'pago' && (
+                                          <button onClick={() => gerarReciboPDF(c)}
+                                            style={{ border: '0.5px solid #2d4a35', color: '#3fb950' }}
+                                            className="text-[11px] px-2.5 py-1.5 rounded-lg flex items-center justify-center gap-1.5">
+                                            <FileDown size={11} />Baixar recibo
+                                          </button>
+                                        )}
+                                        {(() => {
+                                          const selo = statusSelo(c.status_cobranca, c.data_vencimento)
+                                          return (
+                                            <span className="flex items-center justify-center gap-1.5 text-[11px] font-medium" style={{ color: selo.cor }}>
+                                              <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: selo.cor }} />
+                                              {selo.label}
+                                            </span>
+                                          )
+                                        })()}
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                })()
             }
           </div>
         </div>
