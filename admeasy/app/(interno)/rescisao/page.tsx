@@ -69,6 +69,7 @@ export default function RescisaoPage() {
 
   const [danosFisicos, setDanosFisicos] = useState('')
   const [danosFisicosDesc, setDanosFisicosDesc] = useState('')
+  const [alugueisAtraso, setAlugueisAtraso] = useState('')
   const [outros, setOutros] = useState('')
   const [outrosDesc, setOutrosDesc] = useState('')
 
@@ -100,6 +101,7 @@ export default function RescisaoPage() {
     const diasNoMes = new Date(rescisaoDate.getFullYear(), rescisaoDate.getMonth() + 1, 0).getDate()
     const proporcional = (valorMensal / diasNoMes) * (diasNoMes - diaNoMes + 1)
     const danosFisicosVal = parseFloat(danosFisicos.replace(',', '.')) || 0
+    const alugueisAtrasoVal = parseFloat(alugueisAtraso.replace(',', '.')) || 0
     const outrosVal = parseFloat(outros.replace(',', '.')) || 0
     let multaValor = 0
     let avisoPrevioValor = 0
@@ -109,14 +111,14 @@ export default function RescisaoPage() {
       const multaPct = mesesRest > 0 ? (mesesRest / mesesTotais) : 1
       multaValor = contratoSel.multa_rescisao_locatario * valorMensal * multaPct
       if (!avisoPrevio) avisoPrevioValor = valorMensal
-      const totalDevido = proporcional + multaValor + avisoPrevioValor + danosFisicosVal + outrosVal
+      const totalDevido = proporcional + multaValor + avisoPrevioValor + danosFisicosVal + alugueisAtrasoVal + outrosVal
       const saldo = totalDevido - caucaoValor
-      return { proporcional, multaValor, avisoPrevioValor, caucaoValor, danosFisicosVal, outrosVal, total: saldo, quemPaga: 'locatário' }
+      return { proporcional, multaValor, avisoPrevioValor, caucaoValor, danosFisicosVal, alugueisAtrasoVal, outrosVal, total: saldo, quemPaga: 'locatário' }
     } else if (parte === 'locador') {
       multaValor = contratoSel.multa_rescisao_locador * valorMensal
-      return { proporcional: 0, multaValor, avisoPrevioValor: 0, caucaoValor, danosFisicosVal, outrosVal, total: multaValor + caucaoValor + danosFisicosVal + outrosVal, quemPaga: 'locador' }
+      return { proporcional: 0, multaValor, avisoPrevioValor: 0, caucaoValor, danosFisicosVal, alugueisAtrasoVal, outrosVal, total: multaValor + caucaoValor + danosFisicosVal + alugueisAtrasoVal + outrosVal, quemPaga: 'locador' }
     } else {
-      return { proporcional, multaValor: 0, avisoPrevioValor: 0, caucaoValor, danosFisicosVal, outrosVal, total: caucaoValor - proporcional - danosFisicosVal - outrosVal, quemPaga: 'imobiliária' }
+      return { proporcional, multaValor: 0, avisoPrevioValor: 0, caucaoValor, danosFisicosVal, alugueisAtrasoVal, outrosVal, total: caucaoValor - proporcional - danosFisicosVal - alugueisAtrasoVal - outrosVal, quemPaga: 'imobiliária' }
     }
   }
 
@@ -203,6 +205,7 @@ export default function RescisaoPage() {
     if (resultado.multaValor > 0) linhasRes.push(['Multa rescisória', `+ ${formatVal(resultado.multaValor)}`, 'red'])
     if (resultado.avisoPrevioValor > 0) linhasRes.push(['Aviso prévio não cumprido', `+ ${formatVal(resultado.avisoPrevioValor)}`, 'red'])
     if (resultado.danosFisicosVal > 0) linhasRes.push([`Danos físicos${danosFisicosDesc ? ': ' + danosFisicosDesc : ''}`, `+ ${formatVal(resultado.danosFisicosVal)}`, 'red'])
+    if (resultado.alugueisAtrasoVal > 0) linhasRes.push(['Aluguéis em atraso', `+ ${formatVal(resultado.alugueisAtrasoVal)}`, 'red'])
     if (resultado.outrosVal > 0) linhasRes.push([`Outros${outrosDesc ? ': ' + outrosDesc : ''}`, `+ ${formatVal(resultado.outrosVal)}`, 'red'])
     if (resultado.caucaoValor > 0) linhasRes.push(['Caução a devolver', `− ${formatVal(resultado.caucaoValor)}`, 'green'])
 
@@ -387,6 +390,13 @@ export default function RescisaoPage() {
                       </div>
 
                       <div>
+                        <label className="label">Aluguéis em atraso (R$)</label>
+                        <input className="input" type="number" step="0.01" min="0"
+                          value={alugueisAtraso} onChange={e => setAlugueisAtraso(e.target.value)}
+                          placeholder="0,00" />
+                      </div>
+
+                      <div>
                         <label className="label">Outros (R$)</label>
                         <div className="grid grid-cols-2 gap-2">
                           <input className="input" type="number" step="0.01" min="0"
@@ -419,42 +429,34 @@ export default function RescisaoPage() {
                       </div>
 
                       <div className="space-y-1 mb-4">
-                        {resultado.proporcional > 0 && (
-                          <div style={{ borderBottom: '0.5px solid #1c2128' }} className="flex justify-between py-2 text-sm">
-                            <span style={{ color: '#8b8d98' }}>Aluguel proporcional</span>
-                            <span style={{ color: '#ef4444' }} className="font-medium">+ {formatVal(resultado.proporcional)}</span>
-                          </div>
-                        )}
-                        {resultado.multaValor > 0 && (
-                          <div style={{ borderBottom: '0.5px solid #1c2128' }} className="flex justify-between py-2 text-sm">
-                            <span style={{ color: '#8b8d98' }}>Multa rescisória</span>
-                            <span style={{ color: '#ef4444' }} className="font-medium">+ {formatVal(resultado.multaValor)}</span>
-                          </div>
-                        )}
-                        {resultado.avisoPrevioValor > 0 && (
-                          <div style={{ borderBottom: '0.5px solid #1c2128' }} className="flex justify-between py-2 text-sm">
-                            <span style={{ color: '#8b8d98' }}>Aviso prévio não cumprido</span>
-                            <span style={{ color: '#ef4444' }} className="font-medium">+ {formatVal(resultado.avisoPrevioValor)}</span>
-                          </div>
-                        )}
-                        {resultado.danosFisicosVal > 0 && (
-                          <div style={{ borderBottom: '0.5px solid #1c2128' }} className="flex justify-between py-2 text-sm">
-                            <span style={{ color: '#8b8d98' }}>Danos físicos{danosFisicosDesc ? `: ${danosFisicosDesc}` : ''}</span>
-                            <span style={{ color: '#ef4444' }} className="font-medium">+ {formatVal(resultado.danosFisicosVal)}</span>
-                          </div>
-                        )}
-                        {resultado.outrosVal > 0 && (
-                          <div style={{ borderBottom: '0.5px solid #1c2128' }} className="flex justify-between py-2 text-sm">
-                            <span style={{ color: '#8b8d98' }}>Outros{outrosDesc ? `: ${outrosDesc}` : ''}</span>
-                            <span style={{ color: '#ef4444' }} className="font-medium">+ {formatVal(resultado.outrosVal)}</span>
-                          </div>
-                        )}
-                        {resultado.caucaoValor > 0 && (
-                          <div style={{ borderBottom: '0.5px solid #1c2128' }} className="flex justify-between py-2 text-sm">
-                            <span style={{ color: '#8b8d98' }}>Caução a devolver</span>
-                            <span style={{ color: '#3fb950' }} className="font-medium">− {formatVal(resultado.caucaoValor)}</span>
-                          </div>
-                        )}
+                        <div style={{ borderBottom: '0.5px solid #1c2128' }} className="flex justify-between py-2 text-sm">
+                          <span style={{ color: '#8b8d98' }}>Aluguel proporcional</span>
+                          <span style={{ color: resultado.proporcional > 0 ? '#ef4444' : '#8b8d98' }} className="font-medium">+ {formatVal(resultado.proporcional)}</span>
+                        </div>
+                        <div style={{ borderBottom: '0.5px solid #1c2128' }} className="flex justify-between py-2 text-sm">
+                          <span style={{ color: '#8b8d98' }}>Multa rescisória</span>
+                          <span style={{ color: resultado.multaValor > 0 ? '#ef4444' : '#8b8d98' }} className="font-medium">+ {formatVal(resultado.multaValor)}</span>
+                        </div>
+                        <div style={{ borderBottom: '0.5px solid #1c2128' }} className="flex justify-between py-2 text-sm">
+                          <span style={{ color: '#8b8d98' }}>Aviso prévio não cumprido</span>
+                          <span style={{ color: resultado.avisoPrevioValor > 0 ? '#ef4444' : '#8b8d98' }} className="font-medium">+ {formatVal(resultado.avisoPrevioValor)}</span>
+                        </div>
+                        <div style={{ borderBottom: '0.5px solid #1c2128' }} className="flex justify-between py-2 text-sm">
+                          <span style={{ color: '#8b8d98' }}>Danos físicos{danosFisicosDesc ? `: ${danosFisicosDesc}` : ''}</span>
+                          <span style={{ color: resultado.danosFisicosVal > 0 ? '#ef4444' : '#8b8d98' }} className="font-medium">+ {formatVal(resultado.danosFisicosVal)}</span>
+                        </div>
+                        <div style={{ borderBottom: '0.5px solid #1c2128' }} className="flex justify-between py-2 text-sm">
+                          <span style={{ color: '#8b8d98' }}>Aluguéis em atraso</span>
+                          <span style={{ color: resultado.alugueisAtrasoVal > 0 ? '#ef4444' : '#8b8d98' }} className="font-medium">+ {formatVal(resultado.alugueisAtrasoVal)}</span>
+                        </div>
+                        <div style={{ borderBottom: '0.5px solid #1c2128' }} className="flex justify-between py-2 text-sm">
+                          <span style={{ color: '#8b8d98' }}>Outros{outrosDesc ? `: ${outrosDesc}` : ''}</span>
+                          <span style={{ color: resultado.outrosVal > 0 ? '#ef4444' : '#8b8d98' }} className="font-medium">+ {formatVal(resultado.outrosVal)}</span>
+                        </div>
+                        <div style={{ borderBottom: '0.5px solid #1c2128' }} className="flex justify-between py-2 text-sm">
+                          <span style={{ color: '#8b8d98' }}>Caução a devolver</span>
+                          <span style={{ color: resultado.caucaoValor > 0 ? '#3fb950' : '#8b8d98' }} className="font-medium">− {formatVal(resultado.caucaoValor)}</span>
+                        </div>
                         <div style={{ borderTop: '2px solid #2a2f3a' }} className="flex justify-between py-3">
                           <span style={{ color: '#f4f4f3' }} className="font-semibold text-sm">
                             {resultado.total > 0 ? `Total a pagar pelo ${resultado.quemPaga}` : `Total a receber pelo locatário`}
