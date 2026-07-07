@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getPortalUser, logoutPortal, alterarSenhaPortal, PortalUser } from '@/lib/portal-auth'
 import { supabase } from '@/lib/supabase'
-import { LogOut, Key, Plus, X, Upload, ChevronDown, ChevronUp, FileDown, Copy, Check, AlertCircle, QrCode, Edit2 } from 'lucide-react'
+import { LogOut, Key, Plus, X, Upload, ChevronDown, ChevronUp, FileDown, Copy, Check, AlertCircle, QrCode, Edit2, Hourglass, Calculator } from 'lucide-react'
 
 function formatVal(v: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0)
@@ -204,6 +204,8 @@ function ModalTrocarSenha({ onFechar }: { onFechar: () => void }) {
 function ModalRescisao({ contrato, onFechar }: { contrato: any; onFechar: () => void }) {
   const valorMensalAtual = contrato.valor_atual || contrato.valor_mensal || 0
   const [dataSaida, setDataSaida] = useState(new Date().toISOString().split('T')[0])
+  const [calculando, setCalculando] = useState(false)
+  const [calculado, setCalculado] = useState(false)
 
   const ini = new Date(contrato.data_inicio + 'T00:00:00')
   const fim = new Date(contrato.data_fim + 'T00:00:00')
@@ -219,6 +221,20 @@ function ModalRescisao({ contrato, onFechar }: { contrato: any; onFechar: () => 
   const multaCheia = multaAlugueis * valorMensalAtual
   const multaProporcional = totalMeses > 0 ? multaCheia * (faltantes / totalMeses) : 0
 
+  function calcular() {
+    setCalculado(false)
+    setCalculando(true)
+    setTimeout(() => {
+      setCalculando(false)
+      setCalculado(true)
+    }, 1400)
+  }
+
+  function mudarData(v: string) {
+    setDataSaida(v)
+    setCalculado(false)
+  }
+
   return (
     <div style={{ background: 'rgba(0,0,0,0.7)' }} className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto" onClick={onFechar}>
       <div style={{ background: '#0d1b2e', border: '0.5px solid #1e3a5f' }} className="rounded-2xl p-6 w-full max-w-md my-6" onClick={e => e.stopPropagation()}>
@@ -230,32 +246,53 @@ function ModalRescisao({ contrato, onFechar }: { contrato: any; onFechar: () => 
         <div className="mb-4">
           <label style={{ color: '#8b9ab4' }} className="block text-xs mb-1.5">Data prevista de saída</label>
           <input type="date" value={dataSaida} min={contrato.data_inicio} max={contrato.data_fim}
-            onChange={e => setDataSaida(e.target.value)}
+            onChange={e => mudarData(e.target.value)}
             style={{ background: '#060D1C', border: '0.5px solid #1e3a5f', color: '#f4f4f3' }}
             className="w-full px-3 py-2.5 rounded-lg text-sm focus:outline-none" />
         </div>
 
-        <div style={{ background: '#16243a', border: '0.5px solid #1e3a5f' }} className="rounded-xl p-4 mb-4 text-center">
-          <p style={{ color: '#8b9ab4' }} className="text-xs mb-1">Estimativa de multa proporcional</p>
-          <p className="text-white font-bold text-2xl">{formatVal(multaProporcional)}</p>
-        </div>
+        {!calculando && !calculado && (
+          <button onClick={calcular} style={{ background: '#1A7FFF' }}
+            className="w-full py-3 rounded-xl text-white text-sm font-semibold flex items-center justify-center gap-2">
+            <Calculator size={16} />Calcular estimativa
+          </button>
+        )}
 
-        <div className="space-y-2 text-sm">
-          <div className="flex justify-between"><span style={{ color: '#8b9ab4' }}>Duração total do contrato</span><span className="text-white">{totalMeses} meses</span></div>
-          <div className="flex justify-between"><span style={{ color: '#8b9ab4' }}>Meses cumpridos até a data informada</span><span className="text-white">{cumpridos}</span></div>
-          <div className="flex justify-between"><span style={{ color: '#8b9ab4' }}>Meses faltantes</span><span className="text-white">{faltantes}</span></div>
-          <div style={{ borderTop: '0.5px solid #1e3a5f' }} className="pt-2 flex justify-between">
-            <span style={{ color: '#8b9ab4' }}>Multa contratual cheia</span>
-            <span className="text-white">{multaAlugueis}x aluguel = {formatVal(multaCheia)}</span>
+        {calculando && (
+          <div style={{ background: '#16243a', border: '0.5px solid #1e3a5f' }} className="rounded-xl p-8 flex flex-col items-center justify-center gap-3">
+            <Hourglass size={28} style={{ color: '#5b9bf5' }} className="animate-spin" />
+            <p style={{ color: '#8b9ab4' }} className="text-sm">Calculando sua estimativa...</p>
           </div>
-        </div>
+        )}
 
-        <p style={{ color: '#5b5e6b' }} className="text-[10px] mt-4">
-          Valor estimado com base na multa contratual ({multaAlugueis} aluguéis) aplicada proporcionalmente
-          ao tempo restante a partir da data informada, conforme art. 4º da Lei 8.245/91. Não inclui eventuais
-          aluguéis em atraso, danos ao imóvel ou atualização da caução — o valor final será calculado e
-          confirmado pela imobiliária.
-        </p>
+        {calculado && (
+          <>
+            <div style={{ background: '#16243a', border: '0.5px solid #1e3a5f' }} className="rounded-xl p-4 mb-4 mt-1 text-center">
+              <p style={{ color: '#8b9ab4' }} className="text-xs mb-1">Estimativa de multa proporcional</p>
+              <p className="text-white font-bold text-2xl">{formatVal(multaProporcional)}</p>
+            </div>
+
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between"><span style={{ color: '#8b9ab4' }}>Duração total do contrato</span><span className="text-white">{totalMeses} meses</span></div>
+              <div className="flex justify-between"><span style={{ color: '#8b9ab4' }}>Meses cumpridos até a data informada</span><span className="text-white">{cumpridos}</span></div>
+              <div className="flex justify-between"><span style={{ color: '#8b9ab4' }}>Meses faltantes</span><span className="text-white">{faltantes}</span></div>
+              <div style={{ borderTop: '0.5px solid #1e3a5f' }} className="pt-2 flex justify-between">
+                <span style={{ color: '#8b9ab4' }}>Multa contratual cheia</span>
+                <span className="text-white">{multaAlugueis}x aluguel = {formatVal(multaCheia)}</span>
+              </div>
+            </div>
+
+            <div style={{ background: '#2e2515', border: '0.5px solid #4a3a1f' }} className="rounded-lg p-3 mt-4 flex gap-2">
+              <AlertCircle size={14} style={{ color: '#f59e0b', flexShrink: 0, marginTop: 1 }} />
+              <p style={{ color: '#f0c674' }} className="text-[11px] leading-relaxed">
+                Este é apenas um <strong>cálculo estimado</strong>. Valor estimado com base na multa contratual
+                ({multaAlugueis} aluguéis) aplicada proporcionalmente ao tempo restante a partir da data informada,
+                conforme art. 4º da Lei 8.245/91. Não inclui eventuais aluguéis em atraso, danos ao imóvel ou
+                atualização da caução — o valor final será calculado e confirmado pela imobiliária.
+              </p>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
