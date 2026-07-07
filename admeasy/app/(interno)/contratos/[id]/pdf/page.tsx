@@ -822,7 +822,7 @@ export default function ContratoPdfPage() {
     <AppLayout>
       <Topbar titulo={`Contrato #${contrato.numero} — Gerar PDF`} />
       <div className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-3xl mx-auto space-y-5">
+        <div className="max-w-[1400px] mx-auto space-y-5">
 
           {/* Resumo do contrato */}
           <div className="card" style={{ background: '#16243a', border: '0.5px solid #1e3a5f' }}>
@@ -834,8 +834,10 @@ export default function ContratoPdfPage() {
           </div>
 
           {/* Partes */}
-          {renderPartes(locadores, setLocadores, 'Locador')}
-          {renderPartes(locatarios, setLocatarios, 'Locatário')}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+            {renderPartes(locadores, setLocadores, 'Locador')}
+            {renderPartes(locatarios, setLocatarios, 'Locatário')}
+          </div>
           {contrato.tipo_garantia === 'fiador' && renderPartes(fiadores, setFiadores, 'Fiador')}
 
           {modalSelecionarParte && (
