@@ -83,7 +83,7 @@ export async function GET(req: NextRequest) {
     if (erroParaGerar) throw erroParaGerar
 
     if (paraGerar && paraGerar.length > 0) {
-      const locatarioIds = [...new Set(paraGerar.map(c => c.locatario_id))]
+      const locatarioIds = Array.from(new Set(paraGerar.map(c => c.locatario_id)))
       const { data: clientesData } = await supabaseAdmin.from('clientes').select('id, nome, email, cpf').in('id', locatarioIds)
       const clientesMap = Object.fromEntries((clientesData || []).map(c => [c.id, c]))
 
@@ -161,7 +161,7 @@ export async function GET(req: NextRequest) {
     if (erroParaLembrar) throw erroParaLembrar
 
     if (paraLembrar && paraLembrar.length > 0) {
-      const locatarioIds = [...new Set(paraLembrar.map(c => c.locatario_id))]
+      const locatarioIds = Array.from(new Set(paraLembrar.map(c => c.locatario_id)))
       const { data: clientesData } = await supabaseAdmin.from('clientes').select('id, nome, email').in('id', locatarioIds)
       const clientesMap = Object.fromEntries((clientesData || []).map(c => [c.id, c]))
 
