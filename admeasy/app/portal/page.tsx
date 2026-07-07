@@ -277,9 +277,6 @@ function FormularioDemanda({ clienteId, contratoId, organizationId, editando, on
     setErro('')
 
     if (editando) {
-      // Edição só é permitida enquanto a demanda ainda está "aberta" (a tela
-      // que chama este formulário já garante isso, mas a query abaixo não
-      // sobrescreve status/decisão de forma alguma).
       const { error } = await supabase.from('demandas').update({
         titulo, descricao: descricao || null, urgencia,
         fotos: anexos.map(a => a.url),
@@ -290,9 +287,6 @@ function FormularioDemanda({ clienteId, contratoId, organizationId, editando, on
       return
     }
 
-    // Nova demanda: "numero" (protocolo) não é enviado — o gatilho no banco
-    // preenche sozinho. Usamos .select() para ler de volta o protocolo
-    // gerado e mostrar ao locatário.
     const { data, error } = await supabase.from('demandas').insert([{
       organization_id: organizationId, titulo, descricao: descricao || null, urgencia,
       origem: 'locatario', status: 'aberta', contrato_id: contratoId || null,
@@ -479,7 +473,7 @@ function PainelLocatario({ user }: { user: PortalUser }) {
     setLoading(true)
     const [cont, cob, dem, cli] = await Promise.all([
       supabase.from('contratos').select('*, imovel:imoveis(titulo, endereco, numero, bairro, cidade)').eq('locatario_id', user.cliente_id).in('status', ['ativo', 'pendente']).maybeSingle(),
-      supabase.from('cobrancas').select('*').eq('locatario_id', user.cliente_id).order('data_vencimento', { ascending: false }).limit(24),
+      supabase.from('cobrancas').select('*').eq('locatario_id', user.cliente_id).order('data_vencimento', { ascending: true }).limit(60),
       supabase.from('demandas').select('*').eq('locatario_id', user.cliente_id).order('created_at', { ascending: false }),
       supabase.from('clientes').select('nome, cpf, email').eq('id', user.cliente_id).single(),
     ])
@@ -589,73 +583,75 @@ function PainelLocatario({ user }: { user: PortalUser }) {
       </div>
 
       {aba === 'contrato' && (
-        <div className="space-y-4">
-          {contrato ? (
-            <>
-              <div style={{ background: '#0d1b2e', border: '0.5px solid #1e3a5f' }} className="rounded-xl p-4">
-                <p style={{ color: '#8b9ab4' }} className="text-xs font-medium mb-3">Dados do contrato</p>
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  {[
-                    ['Locatário', user.nome],
-                    ['Imóvel', imovel?.titulo || '—'],
-                    ['Início', formatDate(contrato.data_inicio)],
-                    ['Término', formatDate(contrato.data_fim)],
-                    ['Meses cumpridos', String(infoMeses(contrato.data_inicio, contrato.data_fim).cumpridos)],
-                    ['Meses faltantes', String(infoMeses(contrato.data_inicio, contrato.data_fim).faltantes)],
-                  ].map(([l, v]) => (
-                    <div key={l}><p style={{ color: '#8b9ab4' }} className="text-[10px]">{l}</p><p className="text-white text-sm font-medium mt-0.5">{v}</p></div>
-                  ))}
-                </div>
+        <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-5 items-start">
+          <div className="space-y-4 lg:sticky lg:top-20">
+            {contrato ? (
+              <>
+                <div style={{ background: '#0d1b2e', border: '0.5px solid #1e3a5f' }} className="rounded-xl p-4">
+                  <p style={{ color: '#8b9ab4' }} className="text-xs font-medium mb-3">Dados do contrato</p>
+                  <div className="grid grid-cols-2 gap-3 mb-4">
+                    {[
+                      ['Locatário', user.nome],
+                      ['Imóvel', imovel?.titulo || '—'],
+                      ['Início', formatDate(contrato.data_inicio)],
+                      ['Término', formatDate(contrato.data_fim)],
+                      ['Meses cumpridos', String(infoMeses(contrato.data_inicio, contrato.data_fim).cumpridos)],
+                      ['Meses faltantes', String(infoMeses(contrato.data_inicio, contrato.data_fim).faltantes)],
+                    ].map(([l, v]) => (
+                      <div key={l}><p style={{ color: '#8b9ab4' }} className="text-[10px]">{l}</p><p className="text-white text-sm font-medium mt-0.5">{v}</p></div>
+                    ))}
+                  </div>
 
-                <div style={{ borderTop: '0.5px solid #1e3a5f' }} className="pt-3 space-y-1.5">
-                  {[
-                    ['Aluguel', somaAluguel],
-                    ['Condomínio', somaCondominio],
-                    ['IPTU', somaIptu],
-                    ['Seguro incêndio', somaSeguroIncendio],
-                    ...(somaSeguroFianca > 0 ? [['Seguro fiança', somaSeguroFianca] as [string, number]] : []),
-                  ].map(([l, v]) => (
-                    <div key={l as string} className="flex justify-between text-sm">
-                      <span style={{ color: '#8b9ab4' }}>{l}</span>
-                      <span className="text-white">{formatVal(v as number)}</span>
+                  <div style={{ borderTop: '0.5px solid #1e3a5f' }} className="pt-3 space-y-1.5">
+                    {[
+                      ['Aluguel', somaAluguel],
+                      ['Condomínio', somaCondominio],
+                      ['IPTU', somaIptu],
+                      ['Seguro incêndio', somaSeguroIncendio],
+                      ...(somaSeguroFianca > 0 ? [['Seguro fiança', somaSeguroFianca] as [string, number]] : []),
+                    ].map(([l, v]) => (
+                      <div key={l as string} className="flex justify-between text-sm">
+                        <span style={{ color: '#8b9ab4' }}>{l}</span>
+                        <span className="text-white">{formatVal(v as number)}</span>
+                      </div>
+                    ))}
+                    <div style={{ borderTop: '0.5px solid #1e3a5f' }} className="flex justify-between pt-1.5 mt-1.5">
+                      <span style={{ color: '#5b9bf5' }} className="text-sm font-semibold">Total mensal</span>
+                      <span className="text-white text-sm font-bold">{formatVal(somaTotalContrato)}</span>
                     </div>
-                  ))}
-                  <div style={{ borderTop: '0.5px solid #1e3a5f' }} className="flex justify-between pt-1.5 mt-1.5">
-                    <span style={{ color: '#5b9bf5' }} className="text-sm font-semibold">Total mensal</span>
-                    <span className="text-white text-sm font-bold">{formatVal(somaTotalContrato)}</span>
                   </div>
                 </div>
-              </div>
 
-              <div className="flex gap-2 flex-wrap">
-                <button onClick={() => setModalRescisao(true)}
-                  style={{ border: '0.5px solid #1e3a5f', color: '#f4f4f3' }}
-                  className="flex-1 py-2.5 rounded-xl text-sm font-medium">
-                  🧮 Simule sua rescisão antecipada
-                </button>
-                <button
-                  onClick={() => cobrancaAtual && gerarBoleto(cobrancaAtual)}
-                  disabled={!cobrancaAtual || gerandoBoleto === cobrancaAtual?.id}
-                  style={{ background: '#1A7FFF' }}
-                  className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50">
-                  {gerandoBoleto && cobrancaAtual && gerandoBoleto === cobrancaAtual.id ? 'Gerando...' : '📄 Baixe seu boleto atualizado'}
-                </button>
-              </div>
-            </>
-          ) : <p style={{ color: '#8b9ab4' }} className="text-sm text-center py-8">Nenhum contrato ativo.</p>}
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={() => cobrancaAtual && gerarBoleto(cobrancaAtual)}
+                    disabled={!cobrancaAtual || gerandoBoleto === cobrancaAtual?.id}
+                    style={{ background: '#1A7FFF' }}
+                    className="w-full py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50">
+                    {gerandoBoleto && cobrancaAtual && gerandoBoleto === cobrancaAtual.id ? 'Gerando...' : '📄 Baixe seu boleto atualizado'}
+                  </button>
+                  <button onClick={() => setModalRescisao(true)}
+                    style={{ border: '0.5px solid #1e3a5f', color: '#f4f4f3' }}
+                    className="w-full py-2.5 rounded-xl text-sm font-medium">
+                    🧮 Simule sua rescisão antecipada
+                  </button>
+                </div>
+              </>
+            ) : <p style={{ color: '#8b9ab4' }} className="text-sm text-center py-8">Nenhum contrato ativo.</p>}
 
-          {erroBoleto && (
-            <div style={{ background: '#2e1717', border: '0.5px solid #4a2424' }} className="rounded-xl p-3 flex items-center gap-2">
-              <AlertCircle size={14} style={{ color: '#ef4444' }} />
-              <p style={{ color: '#ef4444' }} className="text-sm">{erroBoleto}</p>
-            </div>
-          )}
+            {erroBoleto && (
+              <div style={{ background: '#2e1717', border: '0.5px solid #4a2424' }} className="rounded-xl p-3 flex items-center gap-2">
+                <AlertCircle size={14} style={{ color: '#ef4444' }} />
+                <p style={{ color: '#ef4444' }} className="text-sm">{erroBoleto}</p>
+              </div>
+            )}
+          </div>
 
           <div>
             <p style={{ color: '#8b9ab4' }} className="text-xs font-medium mb-3">Cobranças</p>
             {cobrancas.length === 0
               ? <p style={{ color: '#8b9ab4' }} className="text-sm text-center py-6">Nenhuma cobrança.</p>
-              : <div className="space-y-2">
+              : <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                   {cobrancas.map(c => {
                     const st = statusCor(c.status_cobranca, c.data_vencimento)
                     const emAtraso = c.status_cobranca !== 'pago' && diasAte(c.data_vencimento) < 0
@@ -663,7 +659,7 @@ function PainelLocatario({ user }: { user: PortalUser }) {
                     const { valorAtualizado, multa, juros, diasAtraso } = calcularValorAtualizado(base, c.data_vencimento)
                     const disponivel = mesJaChegou(c.data_vencimento)
                     return (
-                      <div key={c.id} style={{ background: st.bg, border: `0.5px solid ${st.border}` }} className="rounded-xl p-4">
+                      <div key={c.id} style={{ background: st.bg, border: `0.5px solid ${st.border}` }} className="rounded-xl p-4 flex flex-col">
                         <div className="flex items-center justify-between mb-2">
                           <div>
                             <p className="text-white text-sm font-medium">{c.mes_referencia || formatDate(c.data_vencimento)}</p>
@@ -709,7 +705,7 @@ function PainelLocatario({ user }: { user: PortalUser }) {
                             </div>
                           )}
                         </div>
-                        <div className="flex gap-2 flex-wrap items-center">
+                        <div className="flex gap-2 flex-wrap items-center mt-auto">
                           {c.status_cobranca !== 'pago' && (
                             <button onClick={() => gerarBoleto(c)} disabled={gerandoBoleto === c.id}
                               style={{ background: '#1A7FFF' }}
@@ -806,7 +802,7 @@ export default function PortalPage() {
           <button onClick={async () => { await logoutPortal(); router.push('/portal/login') }} style={{ color: '#8b9ab4' }} className="hover:text-red-400 transition-colors"><LogOut size={16} /></button>
         </div>
       </div>
-      <div className="max-w-xl mx-auto p-4 pb-12">
+      <div className="max-w-[1400px] mx-auto p-4 sm:p-6 pb-12">
         <div className="mb-5 pt-2">
           <h1 className="text-white font-bold text-lg">Olá, {user.nome.split(' ')[0]}!</h1>
           <p style={{ color: '#8b9ab4' }} className="text-sm">Bem-vindo ao seu portal</p>
