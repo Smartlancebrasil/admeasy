@@ -26,10 +26,9 @@ export async function POST(req: NextRequest) {
     const dataFinal = dataVenc > hoje ? dataVenc : new Date(hoje.getTime() + 86400000)
     const dataStr = dataFinal.toISOString().split('T')[0]
 
-    const payload = {
+    const payloadBase = {
       transaction_amount: Number((valorAtualizado || valor).toFixed(2)),
       description: descricao || `Aluguel ${mesReferencia || vencimento}`,
-      payment_method_id: 'bolbradesco',
       payer: {
         first_name: nomeLocatario.split(' ')[0],
         last_name: nomeLocatario.split(' ').slice(1).join(' ') || nomeLocatario.split(' ')[0],
@@ -46,35 +45,62 @@ export async function POST(req: NextRequest) {
       },
     }
 
-    const response = await fetch('https://api.mercadopago.com/v1/payments', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'X-Idempotency-Key': `boleto-${cobrancaId}-${Date.now()}`,
-      },
-      body: JSON.stringify(payload),
-    })
+    const idemBase = `${cobrancaId}-${Date.now()}`
 
-    const data = await response.json()
+    // Gera os dois pagamentos em paralelo: um boleto (bolbradesco) e um Pix.
+    // São dois pagamentos distintos no Mercado Pago para a mesma cobrança —
+    // o locatário paga por qualquer um dos dois, e o webhook identifica a
+    // cobrança certa em ambos os casos via metadata.cobranca_id.
+    const [resBoleto, resPix] = await Promise.all([
+      fetch('https://api.mercadopago.com/v1/payments', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'X-Idempotency-Key': `boleto-${idemBase}`,
+        },
+        body: JSON.stringify({ ...payloadBase, payment_method_id: 'bolbradesco' }),
+      }),
+      fetch('https://api.mercadopago.com/v1/payments', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'X-Idempotency-Key': `pix-${idemBase}`,
+        },
+        body: JSON.stringify({ ...payloadBase, payment_method_id: 'pix' }),
+      }),
+    ])
 
-    if (!response.ok) {
-      console.error('Erro Mercado Pago:', data)
+    const [dataBoleto, dataPix] = await Promise.all([resBoleto.json(), resPix.json()])
+
+    if (!resBoleto.ok) console.error('Erro Mercado Pago (boleto):', dataBoleto)
+    if (!resPix.ok) console.error('Erro Mercado Pago (pix):', dataPix)
+
+    // Se os dois falharem, aí sim é erro real — sem boleto e sem Pix não tem
+    // como o locatário pagar nada.
+    if (!resBoleto.ok && !resPix.ok) {
       return NextResponse.json({
-        erro: data.message || 'Erro ao gerar boleto no Mercado Pago.',
-        detalhes: data,
-      }, { status: response.status })
+        erro: dataBoleto.message || dataPix.message || 'Erro ao gerar boleto e Pix no Mercado Pago.',
+        detalhes: { boleto: dataBoleto, pix: dataPix },
+      }, { status: 500 })
     }
 
     return NextResponse.json({
-      id: data.id,
-      status: data.status,
-      linhaDigitavel: data.transaction_details?.barcode_content || '',
-      urlBoleto: data.transaction_details?.external_resource_url || '',
-      qrCodePix: data.point_of_interaction?.transaction_data?.qr_code || '',
-      qrCodePixBase64: data.point_of_interaction?.transaction_data?.qr_code_base64 || '',
-      valorFinal: data.transaction_amount,
+      // "id" mantido por compatibilidade com o código atual do portal, que
+      // salva esse valor em cobrancas.mp_payment_id
+      id: dataBoleto?.id || dataPix?.id,
+      idBoleto: resBoleto.ok ? dataBoleto.id : null,
+      idPix: resPix.ok ? dataPix.id : null,
+      status: (resBoleto.ok ? dataBoleto.status : null) || (resPix.ok ? dataPix.status : null),
+      linhaDigitavel: resBoleto.ok ? (dataBoleto.transaction_details?.barcode_content || '') : '',
+      urlBoleto: resBoleto.ok ? (dataBoleto.transaction_details?.external_resource_url || '') : '',
+      qrCodePix: resPix.ok ? (dataPix.point_of_interaction?.transaction_data?.qr_code || '') : '',
+      qrCodePixBase64: resPix.ok ? (dataPix.point_of_interaction?.transaction_data?.qr_code_base64 || '') : '',
+      valorFinal: (resBoleto.ok ? dataBoleto.transaction_amount : null) ?? (resPix.ok ? dataPix.transaction_amount : null),
       vencimento: dataStr,
+      erroBoleto: resBoleto.ok ? null : (dataBoleto.message || 'Falha ao gerar boleto.'),
+      erroPix: resPix.ok ? null : (dataPix.message || 'Falha ao gerar Pix.'),
     })
   } catch (err: any) {
     console.error('Erro interno:', err)
