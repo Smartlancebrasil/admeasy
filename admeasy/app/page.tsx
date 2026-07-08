@@ -1,12 +1,53 @@
 'use client'
 
 import { Inter } from 'next/font/google'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { CreditCard, ArrowLeftRight, ShieldCheck, FileText, BarChart3 } from 'lucide-react'
 
 const inter = Inter({ subsets: ['latin'], weight: ['400', '500', '600', '700'], variable: '--font-body' })
+
+// Carrega o embed do Cal.com uma única vez. Qualquer elemento com
+// data-cal-link vira automaticamente um gatilho que abre o agendamento
+// num popup, sem sair da página. Confirmações/lembretes já são enviados
+// pelo próprio Cal.com pro e-mail cadastrado na conta admeasy.
+function useCalEmbed() {
+  useEffect(() => {
+    (function (C: any, A: any, L: any) {
+      let p = function (a: any, ar: any) { a.q.push(ar) }
+      let d = C.document
+      C.Cal = C.Cal || function () {
+        let cal = C.Cal
+        let ar = arguments
+        if (!cal.loaded) {
+          cal.ns = {}
+          cal.q = cal.q || []
+          d.head.appendChild(d.createElement('script')).src = A
+          cal.loaded = true
+        }
+        if (ar[0] === L) {
+          const api: any = function () { p(api, arguments) }
+          const namespace = ar[1]
+          api.q = api.q || []
+          if (typeof namespace === 'string') {
+            cal.ns[namespace] = cal.ns[namespace] || api
+            p(cal.ns[namespace], ar)
+            p(cal, ['initNamespace', namespace])
+          } else p(cal, ar)
+          return
+        }
+        p(cal, ar)
+      }
+    })(window, 'https://app.cal.com/embed/embed.js', 'init')
+    ;(window as any).Cal('init', { origin: 'https://cal.com' })
+    ;(window as any).Cal('ui', {
+      styles: { branding: { brandColor: '#1E88FF' } },
+      hideEventTypeDetails: false,
+      layout: 'month_view',
+    })
+  }, [])
+}
 
 const COLORS = {
   bg: '#07111F',
@@ -194,6 +235,7 @@ const artigos = [
 
 export default function PaginaInicial() {
   const [menuAberto, setMenuAberto] = useState(false)
+  useCalEmbed()
 
   return (
     <div
@@ -257,8 +299,9 @@ export default function PaginaInicial() {
             Gestão completa de aluguéis, contratos, cobranças, repasses e inadimplência em um só lugar. Mais controle, menos trabalho e decisões baseadas em dados reais.
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-4">
-            <a
-              href="mailto:contato@admeasy.com.br"
+            <button
+              data-cal-link="admeasy"
+              data-cal-config='{"layout":"month_view"}'
               style={{
                 background: `linear-gradient(135deg, ${COLORS.blue} 0%, ${COLORS.blueSecondary} 100%)`,
                 color: '#fff',
@@ -266,8 +309,8 @@ export default function PaginaInicial() {
               }}
               className="text-sm font-semibold uppercase tracking-wide px-6 py-3.5 rounded-lg transition-all hover:-translate-y-0.5 hover:shadow-xl"
             >
-              Solicitar demonstração
-            </a>
+              Agendar demonstração
+            </button>
             <a
               href="#modulos"
               style={{ color: COLORS.text, background: `${COLORS.bg}80`, border: `1px solid ${COLORS.line}` }}
