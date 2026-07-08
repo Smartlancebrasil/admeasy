@@ -1112,7 +1112,7 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
           </button>
           {form.id && (
             <button type="button"
-              style={{ background: 'transparent', color: '#3fb950', border: '1px solid #2d4a35' }}
+              style={{ background: '#22c55e', color: '#fff', border: 'none' }}
               className="btn font-medium"
               disabled={!!popupPdf} onClick={() => onGerarPdf(form.id)}>
               <FileDown size={13} />Emitir Contrato
