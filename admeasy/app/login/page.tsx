@@ -16,18 +16,26 @@ export default function LoginPage() {
     setLoading(true)
     setErro('')
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password: senha,
     })
 
-    if (error) {
+    if (error || !data.user) {
       setErro('E-mail ou senha incorretos.')
       setLoading(false)
       return
     }
 
-    router.push('/dashboard')
+    // Se quem logou faz parte da equipe AdmEasy (admin master), vai pro
+    // painel de administração da plataforma em vez do dashboard normal.
+    const { data: admin } = await supabase
+      .from('admeasy_admins')
+      .select('user_id')
+      .eq('user_id', data.user.id)
+      .maybeSingle()
+
+    router.push(admin ? '/admin' : '/dashboard')
   }
 
   return (
