@@ -10,7 +10,7 @@ import {
   LayoutDashboard, Building2, Users, FileText, TrendingUp,
   Calculator, Wrench, Truck, Calendar, DollarSign,
   UserCircle, BuildingIcon, Settings, LogOut, FileSearch,
-  ShieldCheck, Scale, X
+  ShieldCheck, X
 } from 'lucide-react'
 
 // ORG_ID fixo removido — agora vem do useOrganization() (multi-tenant)
@@ -20,21 +20,20 @@ const STATUS_DEMANDA_FINALIZADA = ['concluida', 'recusada']
 const navItems = [
   { section: 'Principal' },
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/imoveis', label: 'Imóveis', icon: Building2 },
-  { href: '/contratos', label: 'Contratos', icon: FileText, badge: 3 },
-  { href: '/reajuste', label: 'Reajuste', icon: TrendingUp },
-  { href: '/rescisao', label: 'Calc. rescisão', icon: Calculator },
-  { href: '/processos-judiciais', label: 'Processos judiciais', icon: Scale },
-  { section: 'Partes' },
-  { href: '/analise-cadastral', label: 'Análise cadastral', icon: ShieldCheck },
-  { href: '/clientes', label: 'Clientes', icon: Users },
-  { href: '/portal-locatario', label: 'Portal locatário', icon: UserCircle },
-  { section: 'Operações' },
-  { href: '/demandas', label: 'Demandas', icon: Wrench }, // badge agora é dinâmico, ver render
-  { href: '/fornecedores', label: 'Fornecedores', icon: Truck },
-  { href: '/visitas', label: 'Visitas', icon: Calendar },
-  { href: '/vistorias', label: 'Vistorias', icon: FileSearch },
   { href: '/financeiro', label: 'Financeiro', icon: DollarSign },
+  { href: '/imoveis', label: 'Cadastro Imóveis', icon: Building2 },
+  { href: '/contratos', label: 'Contratos', icon: FileText, badge: 3 },
+  { href: '/vistorias', label: 'Laudo de Vistoria', icon: FileSearch },
+  { section: 'Partes' },
+  { href: '/clientes', label: 'Cadastro Cliente', icon: Users },
+  { href: '/portal-locatario', label: 'Portal locatário', icon: UserCircle },
+  { href: '/fornecedores', label: 'Fornecedores', icon: Truck },
+  { section: 'Operações' },
+  { href: '/demandas', label: 'Chamados', icon: Wrench }, // badge agora é dinâmico, ver render
+  { href: '/visitas', label: 'Visitas', icon: Calendar },
+  { href: '/analise-cadastral', label: 'Análise Locatários', icon: ShieldCheck },
+  { href: '/rescisao', label: 'Cálculo de Rescisão', icon: Calculator },
+  { href: '/reajuste', label: 'Reajustes', icon: TrendingUp },
   { section: 'Config' },
   { href: '/configuracoes', label: 'Configurações', icon: Settings },
 ]
