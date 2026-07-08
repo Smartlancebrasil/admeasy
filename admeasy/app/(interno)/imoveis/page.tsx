@@ -722,7 +722,6 @@ export default function ImoveisPage() {
                           </div>
                           <div>
                             <div style={{ color: '#f4f4f3' }} className="font-medium text-sm whitespace-nowrap flex items-center gap-1.5">
-                              {i.codigo && <span style={{ background: '#16243a', color: '#5b9bf5', border: '0.5px solid #1e3a5f' }} className="text-[10px] font-semibold px-1.5 py-0.5 rounded">{i.codigo}</span>}
                               {i.titulo}
                             </div>
                             <div style={{ color: '#8b8d98' }} className="text-xs whitespace-nowrap">{[i.bairro, i.cidade, i.estado].filter(Boolean).join(' · ')}</div>
