@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import AppLayout from '@/components/layout/AppLayout'
 import { supabase } from '@/lib/supabase'
-import { FileText, Plus, X, AlertTriangle, Edit2, FileDown, UserPlus, Upload, Trash2, Hourglass, CheckCircle2 } from 'lucide-react'
+import { FileText, Plus, X, AlertTriangle, Edit2, FileDown, UserPlus, Upload, Download, Trash2, Hourglass, CheckCircle2 } from 'lucide-react'
 import { registrarLog } from '@/lib/logs'
 
 const ORG_ID = '00000000-0000-0000-0000-000000000001'
@@ -1082,16 +1082,21 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
                         <span style={{ color: '#f4f4f3' }} className="text-xs truncate">{cat.label}</span>
                       </div>
                       <div className="flex items-center gap-1.5 flex-shrink-0">
-                        {doc && <a href={doc.url} target="_blank" rel="noopener noreferrer" style={{ color: '#5b9bf5' }} className="text-xs px-2 py-1">Ver</a>}
-                        <label
-                          style={doc
-                            ? { background: '#1a2e1f', color: '#3fb950', border: '0.5px solid #2d4a35' }
-                            : { color: '#5b9bf5', border: '0.5px solid #1e3a5f' }}
-                          className="text-xs px-2.5 py-1 rounded-md cursor-pointer flex items-center gap-1 font-medium">
-                          <Upload size={10} />{uploadandoKit === cat.chave ? 'Enviando...' : doc ? 'Substituir' : 'Enviar'}
-                          <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png"
-                            onChange={e => { const f = e.target.files?.[0]; if (f) uploadKit(cat.chave, f); e.target.value = '' }} />
-                        </label>
+                        {doc ? (
+                          <a href={doc.url} target="_blank" rel="noopener noreferrer" download
+                            style={{ background: '#22c55e', color: '#fff' }}
+                            className="p-1.5 rounded-md flex items-center justify-center" title="Baixar">
+                            <Download size={13} />
+                          </a>
+                        ) : (
+                          <label
+                            style={{ color: '#5b9bf5', border: '0.5px solid #1e3a5f' }}
+                            className="text-xs px-2.5 py-1 rounded-md cursor-pointer flex items-center gap-1 font-medium">
+                            <Upload size={10} />{uploadandoKit === cat.chave ? 'Enviando...' : 'Enviar'}
+                            <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png"
+                              onChange={e => { const f = e.target.files?.[0]; if (f) uploadKit(cat.chave, f); e.target.value = '' }} />
+                          </label>
+                        )}
                       </div>
                     </div>
                   )
