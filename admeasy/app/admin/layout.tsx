@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import { LayoutDashboard, LogOut } from 'lucide-react'
+import { LayoutDashboard, LogOut, Building2 } from 'lucide-react'
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -47,6 +47,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <LayoutDashboard size={15} />Clientes
           </Link>
         </nav>
+        <div style={{ borderTop: '0.5px solid #2a2f3a' }} className="p-2">
+          <Link href="/dashboard" style={{ color: '#a8aab5' }} className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm hover:bg-[#161b22] transition-all">
+            <Building2 size={15} />Painel da Echelli
+          </Link>
+        </div>
         <div style={{ borderTop: '0.5px solid #2a2f3a' }} className="p-3">
           <button
             onClick={async () => { await supabase.auth.signOut(); router.push('/login') }}
