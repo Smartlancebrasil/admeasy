@@ -379,7 +379,7 @@ const formVazio = {
   status:'ativo', observacoes:'',
   // Campos usados só no texto do PDF do contrato (opcionais, ficam na própria tela principal)
   foro: 'Santana, São Paulo, SP',
-  apolice_incendio_numero: '', apolice_incendio_valor: '',
+  apolice_incendio_numero: '',
   forma_recebimento_caucao: 'pix',
   pix_recebimento_caucao: '', banco_recebimento_caucao: '', agencia_recebimento_caucao: '', conta_recebimento_caucao: '',
   fiador_imovel_cep: '', fiador_imovel_endereco: '', fiador_imovel_numero: '', fiador_imovel_complemento: '',
@@ -593,14 +593,13 @@ function ModalClienteCompleto({ tipoParte, onSalvar, onFechar }: {
   )
 }
 
-function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClienteCriado, somenteLeituraInicial, popupPdf, onGerarPdf }: {
+function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClienteCriado, popupPdf, onGerarPdf }: {
   inicial: Record<string,string>
   imoveis: SelectOpt[]
   clientes: SelectOpt[]
   onSalvar: (dados: Record<string,string>) => Promise<string | void>
   onCancelar: () => void
   onClienteCriado: () => Promise<void>
-  somenteLeituraInicial?: boolean
   popupPdf: 'processando' | 'sucesso' | null
   onGerarPdf: (contratoId: string) => void
 }) {
@@ -611,7 +610,6 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
   const [modalCadastro, setModalCadastro] = useState<CampoParte | null>(null)
   const [modalImovel, setModalImovel] = useState(false)
   const [modalSelecionarCliente, setModalSelecionarCliente] = useState<CampoParte | null>(null)
-  const [bloqueado, setBloqueado] = useState(!!somenteLeituraInicial)
   const [documentos, setDocumentos] = useState<Record<string, Documento | null>>({})
   const [uploadandoKit, setUploadandoKit] = useState<string | null>(null)
   const [loadingKit, setLoadingKit] = useState(true)
@@ -686,7 +684,6 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
     try {
       const novoId = await onSalvar(form)
       if (novoId) setForm(f => ({ ...f, id: novoId }))
-      setBloqueado(true)
     } catch(err: any) { setErro(err.message) }
     setSalvando(false)
   }
@@ -721,7 +718,6 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
       </div>
       {erro && <div style={{ background: '#2e1717', border: '0.5px solid #4a2424', color: '#ef4444' }} className="px-3 py-2 rounded-lg mb-3 text-sm">{erro}</div>}
       <form onSubmit={handleSubmit}>
-        <fieldset disabled={bloqueado} style={{ border: 0, padding: 0, margin: 0 }}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div><label className="label">Número *</label>
             <input className="input" required value={form.numero} onChange={set('numero')} placeholder="Ex: 001/2024" /></div>
@@ -736,10 +732,7 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
               className="input w-full text-left flex items-center gap-2">
               {form.imovel_id ? (() => {
                 const sel = imoveis.find(i => i.id === form.imovel_id)
-                return <>
-                  {sel?.codigo && <span style={{ background: '#16243a', color: '#5b9bf5', border: '0.5px solid #1e3a5f' }} className="text-[10px] font-semibold px-1.5 py-0.5 rounded flex-shrink-0">{sel.codigo}</span>}
-                  <span className="truncate">{sel?.titulo}</span>
-                </>
+                return <span className="truncate">{sel?.titulo}</span>
               })() : 'Selecionar imóvel'}
             </button>
             <p style={{ color: '#5b5e6b' }} className="text-[10px] mt-1">
@@ -966,12 +959,10 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
             <InputMoeda value={form.valor_condominio} onChange={v => setForm(f => ({...f, valor_condominio: v}))} /></div>
           <div><label className="label">IPTU (mensal) (R$)</label>
             <InputMoeda value={form.valor_iptu} onChange={v => setForm(f => ({...f, valor_iptu: v}))} /></div>
-          <div><label className="label">Seguro incêndio (R$)</label>
+          <div><label className="label">Seguro incêndio (R$/mês)</label>
             <InputMoeda value={form.valor_seguro_incendio} onChange={v => setForm(f => ({...f, valor_seguro_incendio: v}))} /></div>
           <div><label className="label">Nº apólice — Seguro incêndio</label>
             <input className="input" value={form.apolice_incendio_numero} onChange={set('apolice_incendio_numero')} /></div>
-          <div><label className="label">Valor anual — Apólice incêndio (R$)</label>
-            <InputMoeda value={form.apolice_incendio_valor} onChange={v => setForm(f => ({...f, apolice_incendio_valor: v}))} /></div>
 
           <div className="sm:col-span-2">
             <div style={{ background: '#16243a', border: '0.5px solid #1e3a5f' }} className="rounded-lg p-3">
@@ -1078,62 +1069,57 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
             </div>
           )}
         </div>
-        </fieldset>
+
+        {form.id && (
+          <div className="card mt-4" style={{ background: '#0d1117' }}>
+            <h3 style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-1">Kit de documentos</h3>
+            <p style={{ color: '#8b9ab4' }} className="text-xs mb-4">Documentos assinados, guardados pra consulta futura.</p>
+            {loadingKit ? (
+              <p style={{ color: '#8b9ab4' }} className="text-sm text-center py-4">Carregando...</p>
+            ) : (
+              <div className="space-y-1.5">
+                {KIT_CATEGORIAS.filter(cat => !cat.somenteGarantia || cat.somenteGarantia === form.tipo_garantia).map(cat => {
+                  const doc = documentos[cat.chave]
+                  return (
+                    <div key={cat.chave} style={{ background: '#16243a', border: '0.5px solid #1e3a5f' }} className="flex items-center justify-between px-3 py-2 rounded-lg">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {doc ? <CheckCircle2 size={13} style={{ color: '#3fb950' }} className="flex-shrink-0" /> : <Hourglass size={13} style={{ color: '#5b5e6b' }} className="flex-shrink-0" />}
+                        <span style={{ color: '#f4f4f3' }} className="text-xs truncate">{cat.label}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        {doc && <a href={doc.url} target="_blank" rel="noopener noreferrer" style={{ color: '#5b9bf5' }} className="text-xs px-2 py-1">Ver</a>}
+                        <label
+                          style={doc
+                            ? { background: '#1a2e1f', color: '#3fb950', border: '0.5px solid #2d4a35' }
+                            : { color: '#5b9bf5', border: '0.5px solid #1e3a5f' }}
+                          className="text-xs px-2.5 py-1 rounded-md cursor-pointer flex items-center gap-1 font-medium">
+                          <Upload size={10} />{uploadandoKit === cat.chave ? 'Enviando...' : doc ? 'Substituir' : 'Enviar'}
+                          <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png"
+                            onChange={e => { const f = e.target.files?.[0]; if (f) uploadKit(cat.chave, f); e.target.value = '' }} />
+                        </label>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="flex gap-2 mt-4">
-          {!form.id ? (
-            <button type="submit" disabled={salvando} className="btn btn-primary">
-              {salvando ? 'Salvando...' : 'Salvar'}
+          <button type="submit" disabled={salvando} className="btn btn-primary">
+            {salvando ? 'Salvando...' : 'Salvar'}
+          </button>
+          {form.id && (
+            <button type="button"
+              style={{ background: 'transparent', color: '#3fb950', border: '1px solid #2d4a35' }}
+              className="btn font-medium"
+              disabled={!!popupPdf} onClick={() => onGerarPdf(form.id)}>
+              <FileDown size={13} />Emitir Contrato
             </button>
-          ) : (
-            <>
-              <button type="submit" disabled={salvando || bloqueado} className="btn btn-primary">
-                {salvando ? 'Salvando...' : 'Salvar'}
-              </button>
-              <button type="button" style={{ background: '#ef4444', color: '#fff', border: 'none' }} className="btn"
-                onClick={() => setBloqueado(b => !b)}>
-                <Edit2 size={12} />Editar
-              </button>
-              <button type="button" style={{ background: '#22c55e', color: '#fff', border: 'none' }} className="btn"
-                disabled={!!popupPdf} onClick={() => onGerarPdf(form.id)}>
-                <FileDown size={12} />Contrato
-              </button>
-            </>
           )}
         </div>
       </form>
-
-      {form.id && (
-        <div className="card mt-4" style={{ background: '#0d1117' }}>
-          <h3 style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-1">Kit de documentos</h3>
-          <p style={{ color: '#8b9ab4' }} className="text-xs mb-4">Documentos assinados, guardados pra consulta futura.</p>
-          {loadingKit ? (
-            <p style={{ color: '#8b9ab4' }} className="text-sm text-center py-4">Carregando...</p>
-          ) : (
-            <div className="space-y-2">
-              {KIT_CATEGORIAS.filter(cat => !cat.somenteGarantia || cat.somenteGarantia === form.tipo_garantia).map(cat => {
-                const doc = documentos[cat.chave]
-                return (
-                  <div key={cat.chave} style={{ background: '#16243a', border: '0.5px solid #1e3a5f' }} className="flex items-center justify-between p-3 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      {doc ? <CheckCircle2 size={14} style={{ color: '#3fb950' }} /> : <Hourglass size={14} style={{ color: '#8b9ab4' }} />}
-                      <span style={{ color: '#f4f4f3' }} className="text-sm">{cat.label}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {doc && <a href={doc.url} target="_blank" rel="noopener noreferrer" style={{ color: '#5b9bf5' }} className="btn btn-sm text-xs">Ver</a>}
-                      <label style={{ color: '#5b9bf5', border: '0.5px solid #1e3a5f' }} className="btn btn-sm text-xs cursor-pointer">
-                        <Upload size={11} />{uploadandoKit === cat.chave ? 'Enviando...' : doc ? 'Substituir' : 'Enviar'}
-                        <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png"
-                          onChange={e => { const f = e.target.files?.[0]; if (f) uploadKit(cat.chave, f); e.target.value = '' }} />
-                      </label>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-      )}
 
       {popupPdf && (
         <div style={{ background: 'rgba(0,0,0,0.6)' }} className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -1271,7 +1257,7 @@ async function gerarContratoPdf(contratoId: string, onEstado: (e: 'processando' 
   const descricaoImovel = descricaoImovelAuto(c.imovel)
   const foro = c.foro || 'Santana, São Paulo, SP'
   const numApoliceIncendio = c.apolice_incendio_numero || ''
-  const valorApoliceIncendio = c.apolice_incendio_valor != null ? String(c.apolice_incendio_valor) : ''
+  const valorSeguroIncendioMensal = c.valor_seguro_incendio != null ? String(c.valor_seguro_incendio) : ''
   const numApoliceSeguroFianca = c.apolice_fianca || ''
   const formaRecebimento = c.forma_recebimento_caucao || 'pix'
   const pixLocador = c.pix_recebimento_caucao || c.locador?.chave_pix || ''
@@ -1495,7 +1481,7 @@ async function gerarContratoPdf(contratoId: string, onEstado: (e: 'processando' 
 
   titulo('DO SEGURO')
   let textoSeguro = `Os LOCATÁRIOS farão um seguro do imóvel contra incêndio em companhia de sua livre escolha, durante todo o prazo da locação, correndo por conta dos LOCATÁRIOS todas as despesas decorrentes`
-  if (numApoliceIncendio) textoSeguro += `. Apólice nº ${numApoliceIncendio}${valorApoliceIncendio ? ', valor: ' + formatVal(parseFloat(valorApoliceIncendio)) : ''}`
+  if (numApoliceIncendio) textoSeguro += `. Apólice nº ${numApoliceIncendio}${valorSeguroIncendioMensal ? ', valor mensal: ' + formatVal(parseFloat(valorSeguroIncendioMensal)) : ''}`
   clausula('27ª', textoSeguro + '.')
 
   titulo('DAS DISPOSIÇÕES FINAIS')
@@ -1587,7 +1573,6 @@ export default function ContratosPage() {
   const [clientes, setClientes] = useState<SelectOpt[]>([])
   const [loading, setLoading] = useState(true)
   const [formInicial, setFormInicial] = useState<Record<string,string>|null>(null)
-  const [formSomenteLeitura, setFormSomenteLeitura] = useState(false)
   const [popupPdf, setPopupPdf] = useState<'processando' | 'sucesso' | null>(null)
   const [sucesso, setSucesso] = useState('')
   const [erroExclusao, setErroExclusao] = useState('')
@@ -1621,7 +1606,6 @@ export default function ContratosPage() {
       .filter(n => !isNaN(n))
     const proximo = numerosDoAno.length > 0 ? Math.max(...numerosDoAno) + 1 : 1
     const numeroGerado = `${String(proximo).padStart(3, '0')}/${anoAtual}`
-    setFormSomenteLeitura(false)
     setFormInicial({ ...formVazio, numero: numeroGerado })
   }
 
@@ -1650,7 +1634,6 @@ export default function ContratosPage() {
       observacoes: c.observacoes||'',
       foro: c.foro || 'Santana, São Paulo, SP',
       apolice_incendio_numero: c.apolice_incendio_numero || '',
-      apolice_incendio_valor: c.apolice_incendio_valor?.toString() || '',
       forma_recebimento_caucao: c.forma_recebimento_caucao || 'pix',
       pix_recebimento_caucao: c.pix_recebimento_caucao || '',
       banco_recebimento_caucao: c.banco_recebimento_caucao || '',
@@ -1669,12 +1652,6 @@ export default function ContratosPage() {
   }
 
   function abrirEdicao(c: Contrato) {
-    setFormSomenteLeitura(false)
-    setFormInicial(dadosFormDoContrato(c))
-  }
-
-  function abrirConsulta(c: Contrato) {
-    setFormSomenteLeitura(true)
     setFormInicial(dadosFormDoContrato(c))
   }
 
@@ -1712,7 +1689,6 @@ export default function ContratosPage() {
       observacoes: dados.observacoes||null,
       foro: dados.foro || 'Santana, São Paulo, SP',
       apolice_incendio_numero: dados.apolice_incendio_numero || null,
-      apolice_incendio_valor: dados.apolice_incendio_valor ? parseFloat(dados.apolice_incendio_valor) : null,
       forma_recebimento_caucao: dados.forma_recebimento_caucao || 'pix',
       pix_recebimento_caucao: dados.pix_recebimento_caucao || null,
       banco_recebimento_caucao: dados.banco_recebimento_caucao || null,
@@ -1909,7 +1885,6 @@ export default function ContratosPage() {
               imoveis={imoveis} clientes={clientes}
               onSalvar={salvar} onCancelar={() => setFormInicial(null)}
               onClienteCriado={recarregarClientes}
-              somenteLeituraInicial={formSomenteLeitura}
               popupPdf={popupPdf}
               onGerarPdf={(id) => confirmarEGerarPdf(id, setPopupPdf)} />
           )}
@@ -1954,7 +1929,7 @@ export default function ContratosPage() {
                     const dias = diasRestantes(c.data_fim)
                     return (
                       <tr key={c.id} style={{ borderBottom: '0.5px solid #1c2128', cursor: 'pointer' }} className="hover:bg-[#161b22]"
-                        onClick={() => abrirConsulta(c)}>
+                        onClick={() => abrirEdicao(c)}>
                         <td style={{ color: '#8b8d98' }} className="px-2.5 py-2.5 text-xs font-mono whitespace-nowrap">#{c.numero}</td>
                         <td style={{ color: '#f4f4f3' }} className="px-2.5 py-2.5 font-medium text-sm whitespace-nowrap">{getTitulo(c.imovel)}</td>
                         <td style={{ color: '#c3c2b7' }} className="px-2.5 py-2.5 text-sm whitespace-nowrap">{getNome(c.locatario)}</td>
