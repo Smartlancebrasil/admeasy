@@ -326,11 +326,6 @@ function ModalSelecionarImovel({ imoveis, onSelecionar, onFechar }: {
               style={{ background: '#16243a', border: '0.5px solid #1e3a5f' }}
               className="w-full text-left rounded-xl p-3 hover:opacity-80 transition-opacity flex items-center gap-3"
             >
-              {i.codigo && (
-                <span style={{ background: '#0d1b2e', color: '#5b9bf5', border: '0.5px solid #1e3a5f' }} className="text-[10px] font-semibold px-2 py-1 rounded flex-shrink-0">
-                  {i.codigo}
-                </span>
-              )}
               <div className="min-w-0">
                 <p style={{ color: '#f4f4f3' }} className="text-sm font-medium truncate">{i.titulo}</p>
                 <p style={{ color: '#8b9ab4' }} className="text-xs truncate">{[i.endereco, i.bairro].filter(Boolean).join(', ')}</p>
