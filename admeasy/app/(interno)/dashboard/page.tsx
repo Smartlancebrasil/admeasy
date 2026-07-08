@@ -597,7 +597,7 @@ export default function DashboardPage() {
   return (
     <AppLayout>
       <div style={{ background: '#0d1117', minHeight: '100vh' }} className="flex-1 overflow-y-auto p-4 lg:p-6">
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-[1800px] mx-auto">
 
           {/* Cabeçalho executivo */}
           <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-3 mb-5">
