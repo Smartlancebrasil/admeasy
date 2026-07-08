@@ -387,12 +387,12 @@ export default function FinanceiroPage() {
 
   return (
     <AppLayout>
-      <div style={{ background: '#0d1117', minHeight: '100vh' }} className="flex-1 overflow-y-auto p-6">
+      <div style={{ background: '#0d1117', minHeight: '100vh' }} className="flex-1 overflow-y-auto p-4 sm:p-6">
         <div className="max-w-[1600px] mx-auto">
 
-          <div className="flex items-center justify-between mb-5">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
             <h1 style={{ color: '#f4f4f3' }} className="text-lg font-medium">Financeiro — Fluxo de caixa</h1>
-            <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
+            <button className="btn btn-primary justify-center" onClick={() => setShowForm(!showForm)}>
               {showForm ? <X size={14} /> : <Plus size={14} />}
               {showForm ? 'Cancelar' : 'Gerar cobrança'}
             </button>
@@ -401,7 +401,7 @@ export default function FinanceiroPage() {
           {sucesso && <div style={{ background: '#1a2e1f', border: '0.5px solid #2d4a35', color: '#3fb950' }} className="px-4 py-3 rounded-lg mb-4 text-sm">{sucesso}</div>}
 
           {/* MÉTRICAS */}
-          <div className="grid grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
             <div className="card">
               <div style={{ color: '#8b8d98' }} className="text-xs mb-1 flex items-center gap-1"><Clock size={12} />A receber</div>
               <div style={{ color: '#f59e0b' }} className="text-xl font-semibold">{formatVal(totalReceber)}</div>
@@ -429,8 +429,8 @@ export default function FinanceiroPage() {
             <div className="card mb-6">
               <h2 style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-4">Gerar cobrança mensal</h2>
               <form onSubmit={gerarCobranca}>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="col-span-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="sm:col-span-2">
                     <label className="label">Contrato *</label>
                     <select className="input" required value={form.contrato_id} onChange={e => selecionarContrato(e.target.value)}>
                       <option value="">Selecionar contrato</option>
@@ -440,7 +440,7 @@ export default function FinanceiroPage() {
                     </select>
                   </div>
                   {contratoSel && (
-                    <div style={{ background: '#16243a', border: '0.5px solid #1e3a5f', color: '#5b9bf5' }} className="col-span-2 rounded-lg p-3 text-xs">
+                    <div style={{ background: '#16243a', border: '0.5px solid #1e3a5f', color: '#5b9bf5' }} className="sm:col-span-2 rounded-lg p-3 text-xs">
                       <strong>Locador:</strong> {getNome(contratoSel.locador)} · <strong>Valor base:</strong> {formatVal(contratoSel.valor_mensal)}
                     </div>
                   )}
@@ -485,11 +485,11 @@ export default function FinanceiroPage() {
           )}
 
           {/* ABAS */}
-          <div style={{ borderBottom: '0.5px solid #2a2f3a' }} className="flex gap-0 mb-4">
+          <div style={{ borderBottom: '0.5px solid #2a2f3a' }} className="flex gap-0 mb-4 overflow-x-auto">
             {(['fluxo','cobrancas','repasses','previsto'] as const).map(aba => (
               <button key={aba} onClick={() => setAbaAtiva(aba)}
                 style={abaAtiva === aba ? { borderBottom: '2px solid #2563eb', color: '#5b9bf5' } : { borderBottom: '2px solid transparent', color: '#8b8d98' }}
-                className="px-4 py-2 text-sm font-medium transition-all">
+                className="px-4 py-2 text-sm font-medium transition-all flex-shrink-0 whitespace-nowrap">
                 {aba === 'fluxo' ? 'Fluxo de caixa' : aba === 'cobrancas' ? 'Cobranças' : aba === 'repasses' ? 'Repasses' : 'Previsto'}
               </button>
             ))}
@@ -512,44 +512,48 @@ export default function FinanceiroPage() {
                     const dias = Math.ceil((venc.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24))
                     const atrasado = dias < 0 && c.status_cobranca === 'pendente'
                     return (
-                      <div key={c.id} className="card py-3 px-4 flex items-center gap-4" style={atrasado ? { borderColor: '#4a2424', background: '#1f1414' } : {}}>
-                        <div style={{ background: '#0d1117', border: '0.5px solid #2a2f3a' }} className="w-12 h-12 rounded-xl flex flex-col items-center justify-center flex-shrink-0">
-                          <div style={{ color: '#c3c2b7' }} className="text-lg font-bold leading-none">{venc.getDate()}</div>
-                          <div style={{ color: '#8b8d98' }} className="text-[10px]">{meses[venc.getMonth()].slice(0,3)}</div>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div style={{ color: '#f4f4f3' }} className="font-medium text-sm flex items-center gap-1.5">
-                            {getTitulo(c.contrato?.imovel) || '—'}
-                            {ehHonorario(c) && (
-                              <span style={{ background: '#3987e522', color: '#5b9bf5' }} className="text-[9px] font-semibold px-1.5 py-0.5 rounded">Honorários</span>
-                            )}
+                      <div key={c.id} className="card py-3 px-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4" style={atrasado ? { borderColor: '#4a2424', background: '#1f1414' } : {}}>
+                        <div className="flex items-center gap-3 sm:contents">
+                          <div style={{ background: '#0d1117', border: '0.5px solid #2a2f3a' }} className="w-12 h-12 rounded-xl flex flex-col items-center justify-center flex-shrink-0">
+                            <div style={{ color: '#c3c2b7' }} className="text-lg font-bold leading-none">{venc.getDate()}</div>
+                            <div style={{ color: '#8b8d98' }} className="text-[10px]">{meses[venc.getMonth()].slice(0,3)}</div>
                           </div>
-                          <div style={{ color: '#8b8d98' }} className="text-xs">{getNome(c.locatario)} · {c.mes_referencia}</div>
-                          {atrasado && <div style={{ color: '#ef4444' }} className="text-xs font-medium">{Math.abs(dias)} dias em atraso</div>}
-                          {!atrasado && dias >= 0 && dias <= 7 && <div style={{ color: '#f59e0b' }} className="text-xs">Vence em {dias} dias</div>}
+                          <div className="flex-1 min-w-0">
+                            <div style={{ color: '#f4f4f3' }} className="font-medium text-sm flex items-center gap-1.5">
+                              {getTitulo(c.contrato?.imovel) || '—'}
+                              {ehHonorario(c) && (
+                                <span style={{ background: '#3987e522', color: '#5b9bf5' }} className="text-[9px] font-semibold px-1.5 py-0.5 rounded">Honorários</span>
+                              )}
+                            </div>
+                            <div style={{ color: '#8b8d98' }} className="text-xs">{getNome(c.locatario)} · {c.mes_referencia}</div>
+                            {atrasado && <div style={{ color: '#ef4444' }} className="text-xs font-medium">{Math.abs(dias)} dias em atraso</div>}
+                            {!atrasado && dias >= 0 && dias <= 7 && <div style={{ color: '#f59e0b' }} className="text-xs">Vence em {dias} dias</div>}
+                          </div>
                         </div>
-                        <div className="text-right flex-shrink-0">
-                          <div style={{ color: '#f4f4f3' }} className="font-semibold">{formatVal(c.valor_aluguel)}</div>
-                          <div style={{ color: '#8b8d98' }} className="text-xs">Taxa: {formatVal(c.valor_taxa_adm)} · Repasse: {formatVal(c.valor_repasse)}</div>
-                        </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          {statusIcon(c.status_cobranca)}
-                          <span className={statusCobrancaBadge[c.status_cobranca] || 'badge badge-gray'}>
-                            {c.status_cobranca === 'pendente' ? 'Pendente' : c.status_cobranca === 'pago' ? 'Pago' : 'Atraso'}
-                          </span>
-                          {c.status_cobranca === 'pendente' && (
-                            <button className="btn btn-success text-xs py-1 px-2" onClick={() => marcarPago(c.id)}>
-                              Confirmar pagamento
+                        <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4 flex-wrap">
+                          <div className="text-right flex-shrink-0">
+                            <div style={{ color: '#f4f4f3' }} className="font-semibold">{formatVal(c.valor_aluguel)}</div>
+                            <div style={{ color: '#8b8d98' }} className="text-xs">Taxa: {formatVal(c.valor_taxa_adm)} · Repasse: {formatVal(c.valor_repasse)}</div>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
+                            {statusIcon(c.status_cobranca)}
+                            <span className={statusCobrancaBadge[c.status_cobranca] || 'badge badge-gray'}>
+                              {c.status_cobranca === 'pendente' ? 'Pendente' : c.status_cobranca === 'pago' ? 'Pago' : 'Atraso'}
+                            </span>
+                            {c.status_cobranca === 'pendente' && (
+                              <button className="btn btn-success text-xs py-1 px-2" onClick={() => marcarPago(c.id)}>
+                                Confirmar pagamento
+                              </button>
+                            )}
+                            <button
+                              className="btn text-xs py-1 px-2"
+                              style={{ color: '#ef4444', borderColor: '#4a2424' }}
+                              onClick={() => excluirCobranca(c.id)}
+                              title="Excluir cobrança"
+                            >
+                              Excluir
                             </button>
-                          )}
-                          <button
-                            className="btn text-xs py-1 px-2"
-                            style={{ color: '#ef4444', borderColor: '#4a2424' }}
-                            onClick={() => excluirCobranca(c.id)}
-                            title="Excluir cobrança"
-                          >
-                            Excluir
-                          </button>
+                          </div>
                         </div>
                       </div>
                     )
@@ -561,7 +565,7 @@ export default function FinanceiroPage() {
 
           {/* COBRANÇAS */}
           {abaAtiva === 'cobrancas' && (
-            <div className="card p-0 overflow-hidden">
+            <div className="card p-0 overflow-hidden overflow-x-auto">
               {loading ? (
                 <div style={{ color: '#8b8d98' }} className="text-center py-10 text-sm">Carregando...</div>
               ) : cobrancas.length === 0 ? (
@@ -571,7 +575,7 @@ export default function FinanceiroPage() {
                   <thead>
                     <tr style={{ borderBottom: '0.5px solid #2a2f3a' }}>
                       {['Imóvel / Locatário','Referência','Vencimento','Aluguel','Honorários','Taxa adm.','Repasse','Status',''].map(h => (
-                        <th key={h} style={{ color: '#8b8d98' }} className="text-left px-4 py-3 text-xs font-medium">{h}</th>
+                        <th key={h} style={{ color: '#8b8d98' }} className="text-left px-4 py-3 text-xs font-medium whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -635,12 +639,12 @@ export default function FinanceiroPage() {
 
           {/* REPASSES */}
           {abaAtiva === 'repasses' && (
-            <div className="card p-0 overflow-hidden">
+            <div className="card p-0 overflow-hidden overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{ borderBottom: '0.5px solid #2a2f3a' }}>
                     {['Locador','Imóvel','Referência','Aluguel','Taxa adm.','Repasse líquido','Prev. repasse','Status',''].map(h => (
-                      <th key={h} style={{ color: '#8b8d98' }} className="text-left px-4 py-3 text-xs font-medium">{h}</th>
+                      <th key={h} style={{ color: '#8b8d98' }} className="text-left px-4 py-3 text-xs font-medium whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -677,7 +681,7 @@ export default function FinanceiroPage() {
           {/* PREVISTO */}
           {abaAtiva === 'previsto' && (
             <div>
-              <div className="grid grid-cols-3 gap-4 mb-5">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
                 <div className="card">
                   <div style={{ color: '#8b8d98' }} className="text-xs mb-1 flex items-center gap-1"><TrendingUp size={12} />Entradas previstas</div>
                   <div style={{ color: '#3fb950' }} className="text-xl font-semibold">{formatVal(totalEntradasPrevistas)}</div>
@@ -706,8 +710,8 @@ export default function FinanceiroPage() {
               {showFormDespesa && (
                 <div className="card mb-4">
                   <form onSubmit={salvarDespesa}>
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="col-span-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="sm:col-span-3">
                         <label className="label">Descrição *</label>
                         <input className="input" required value={formDespesa.descricao} onChange={e => setFormDespesa(f => ({ ...f, descricao: e.target.value }))} placeholder="Ex: Aluguel do escritório, Internet, Contador..." />
                       </div>
@@ -749,16 +753,18 @@ export default function FinanceiroPage() {
                   ]
                     .sort((a, b) => a.data.localeCompare(b.data))
                     .map((item, i) => (
-                      <div key={i} className="card py-3 px-4 flex items-center gap-4">
-                        <div style={{ background: '#0d1117', border: '0.5px solid #2a2f3a' }} className="w-12 h-12 rounded-xl flex flex-col items-center justify-center flex-shrink-0">
-                          <div style={{ color: '#c3c2b7' }} className="text-lg font-bold leading-none">{item.data ? new Date(item.data + 'T00:00:00').getDate() : '—'}</div>
-                          <div style={{ color: '#8b8d98' }} className="text-[10px]">{item.data ? meses[new Date(item.data + 'T00:00:00').getMonth()].slice(0,3) : ''}</div>
+                      <div key={i} className="card py-3 px-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+                        <div className="flex items-center gap-3 sm:contents">
+                          <div style={{ background: '#0d1117', border: '0.5px solid #2a2f3a' }} className="w-12 h-12 rounded-xl flex flex-col items-center justify-center flex-shrink-0">
+                            <div style={{ color: '#c3c2b7' }} className="text-lg font-bold leading-none">{item.data ? new Date(item.data + 'T00:00:00').getDate() : '—'}</div>
+                            <div style={{ color: '#8b8d98' }} className="text-[10px]">{item.data ? meses[new Date(item.data + 'T00:00:00').getMonth()].slice(0,3) : ''}</div>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div style={{ color: '#f4f4f3' }} className="font-medium text-sm">{item.descricao}</div>
+                            <div style={{ color: '#8b8d98' }} className="text-xs">{item.subdescricao}</div>
+                          </div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div style={{ color: '#f4f4f3' }} className="font-medium text-sm">{item.descricao}</div>
-                          <div style={{ color: '#8b8d98' }} className="text-xs">{item.subdescricao}</div>
-                        </div>
-                        <div className="text-right flex-shrink-0">
+                        <div className="text-right sm:text-right flex-shrink-0">
                           <div style={{ color: item.sinal > 0 ? '#3fb950' : '#ef4444' }} className="font-semibold">
                             {item.sinal > 0 ? '+ ' : '− '}{formatVal(item.valor)}
                           </div>
