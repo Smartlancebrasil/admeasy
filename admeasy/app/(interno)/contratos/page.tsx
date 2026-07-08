@@ -36,6 +36,17 @@ type Contrato = {
   locatario_id?: string
   locador_id?: string
   fiador_id?: string
+  locatarios_adicionais?: string[]
+  locadores_adicionais?: string[]
+  fiador_imovel_cep?: string
+  fiador_imovel_endereco?: string
+  fiador_imovel_numero?: string
+  fiador_imovel_complemento?: string
+  fiador_imovel_bairro?: string
+  fiador_imovel_cidade?: string
+  fiador_imovel_estado?: string
+  fiador_imovel_matricula?: string
+  fiador_imovel_iptu?: string
   taxa_administracao?: number
   honorarios_aplicavel?: boolean
   valor_honorarios?: number
@@ -64,9 +75,12 @@ type Documento = { nome: string; url: string; tipo: string; created_at: string }
 // Categorias fixas do "kit" de documentos assinados, exibido na tela de
 // consulta (somente leitura) do contrato — depois de gerado o PDF.
 const KIT_CATEGORIAS: { chave: string; label: string; somenteGarantia?: string }[] = [
+  { chave: 'documentos_locatario', label: 'Documentos do locatário' },
+  { chave: 'documentos_locador', label: 'Documentos do locador' },
   { chave: 'contrato_assinado', label: 'Contrato de locação assinado' },
   { chave: 'laudo_vistoria', label: 'Laudo de vistoria assinado' },
   { chave: 'termo_entrega_chaves', label: 'Termo de entrega de chaves' },
+  { chave: 'apolice_seguro_incendio', label: 'Apólice do seguro incêndio' },
   { chave: 'comprovante_caucao', label: 'Comprovante de pagamento da caução', somenteGarantia: 'caucao' },
   { chave: 'apolice_seguro_fianca', label: 'Apólice do seguro fiança assinado', somenteGarantia: 'seguro_fianca' },
 ]
@@ -101,7 +115,6 @@ function calcularDataFim(dataInicio: string, duracaoMeses: number) {
 }
 
 function tipoContratoDoImovel(categoriaImovel?: string, finalidadeImovel?: string): string | null {
-  if (finalidadeImovel === 'venda') return 'compra_venda'
   if (categoriaImovel === 'comercial') return 'locacao_comercial'
   if (categoriaImovel === 'residencial') return 'locacao_residencial'
   return null
@@ -353,7 +366,7 @@ function InputMoeda({ value, onChange, placeholder }: { value: string; onChange:
 
 const formVazio = {
   id:'', numero:'', tipo:'locacao_residencial',
-  imovel_id:'', locatario_id:'', locador_id:'', fiador_id:'', taxa_administracao: '10',
+  imovel_id:'', locatario_id:'', locador_id:'', fiador_id:'', locatarios_adicionais:'', locadores_adicionais:'', taxa_administracao: '10',
   honorarios_aplicavel: '', valor_honorarios: '',
   data_inicio:'', data_fim:'', duracao_meses:'',
   valor_mensal:'', valor_condominio:'', valor_iptu:'', valor_seguro_incendio:'', valor_seguro_fianca:'',
@@ -369,6 +382,9 @@ const formVazio = {
   apolice_incendio_numero: '', apolice_incendio_valor: '',
   forma_recebimento_caucao: 'pix',
   pix_recebimento_caucao: '', banco_recebimento_caucao: '', agencia_recebimento_caucao: '', conta_recebimento_caucao: '',
+  fiador_imovel_cep: '', fiador_imovel_endereco: '', fiador_imovel_numero: '', fiador_imovel_complemento: '',
+  fiador_imovel_bairro: '', fiador_imovel_cidade: '', fiador_imovel_estado: '',
+  fiador_imovel_matricula: '', fiador_imovel_iptu: '',
 }
 
 const clienteFormVazio: Record<string, string> = {
@@ -577,21 +593,52 @@ function ModalClienteCompleto({ tipoParte, onSalvar, onFechar }: {
   )
 }
 
-function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClienteCriado }: {
+function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClienteCriado, somenteLeituraInicial, popupPdf, onGerarPdf }: {
   inicial: Record<string,string>
   imoveis: SelectOpt[]
   clientes: SelectOpt[]
-  onSalvar: (dados: Record<string,string>) => Promise<void>
+  onSalvar: (dados: Record<string,string>) => Promise<string | void>
   onCancelar: () => void
   onClienteCriado: () => Promise<void>
+  somenteLeituraInicial?: boolean
+  popupPdf: 'processando' | 'sucesso' | null
+  onGerarPdf: (contratoId: string) => void
 }) {
   const [form, setForm] = useState(inicial)
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
-  const [modalCadastro, setModalCadastro] = useState<'locatario' | 'locador' | 'fiador' | null>(null)
+  type CampoParte = 'locatario_id' | 'locador_id' | 'fiador_id' | 'locatarios_adicionais' | 'locadores_adicionais'
+  const [modalCadastro, setModalCadastro] = useState<CampoParte | null>(null)
   const [modalImovel, setModalImovel] = useState(false)
-  const [modalSelecionarCliente, setModalSelecionarCliente] = useState<'locatario' | 'locador' | 'fiador' | null>(null)
+  const [modalSelecionarCliente, setModalSelecionarCliente] = useState<CampoParte | null>(null)
+  const [bloqueado, setBloqueado] = useState(!!somenteLeituraInicial)
+  const [documentos, setDocumentos] = useState<Record<string, Documento | null>>({})
+  const [uploadandoKit, setUploadandoKit] = useState<string | null>(null)
+  const [loadingKit, setLoadingKit] = useState(true)
   const set = (c: string) => (e: React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) => setForm(f=>({...f,[c]:e.target.value}))
+  const [buscandoCepFiador, setBuscandoCepFiador] = useState(false)
+
+  async function buscarCepFiador(cepDigitado: string) {
+    const cepLimpo = cepDigitado.replace(/\D/g, '')
+    if (cepLimpo.length !== 8) return
+    setBuscandoCepFiador(true)
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`)
+      const dados = await res.json()
+      if (!dados.erro) {
+        setForm(f => ({
+          ...f,
+          fiador_imovel_endereco: dados.logradouro || f.fiador_imovel_endereco,
+          fiador_imovel_bairro: dados.bairro || f.fiador_imovel_bairro,
+          fiador_imovel_cidade: dados.localidade || f.fiador_imovel_cidade,
+          fiador_imovel_estado: dados.uf || f.fiador_imovel_estado,
+        }))
+      }
+    } catch {
+      // sem internet ou API fora do ar — usuário preenche manualmente
+    }
+    setBuscandoCepFiador(false)
+  }
 
   const caucaoVal = parseFloat(form.valor_caucao) || 0
   const parcelasNum = parseInt(form.parcelas_caucao) || 1
@@ -605,26 +652,76 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
     (form.tipo_garantia === 'seguro_fianca' ? (parseFloat(form.valor_seguro_fianca) || 0) : 0) +
     (parcelasNum > 1 ? valorParcela : 0)
 
+  useEffect(() => { if (form.id) carregarKit() }, [form.id])
+
+  async function carregarKit() {
+    setLoadingKit(true)
+    const { data: files } = await supabase.storage.from('documentos').list(`contratos/${form.id}/kit`)
+    const mapa: Record<string, Documento | null> = {}
+    for (const cat of KIT_CATEGORIAS) {
+      const arquivo = files?.find(f => f.name.startsWith(cat.chave))
+      mapa[cat.chave] = arquivo ? {
+        nome: arquivo.name,
+        url: supabase.storage.from('documentos').getPublicUrl(`contratos/${form.id}/kit/${arquivo.name}`).data.publicUrl,
+        tipo: arquivo.name.split('.').pop() || '',
+        created_at: arquivo.created_at || '',
+      } : null
+    }
+    setDocumentos(mapa)
+    setLoadingKit(false)
+  }
+
+  async function uploadKit(chave: string, file: File) {
+    setUploadandoKit(chave)
+    const ext = file.name.split('.').pop()
+    const path = `contratos/${form.id}/kit/${chave}.${ext}`
+    const { error } = await supabase.storage.from('documentos').upload(path, file, { upsert: true })
+    if (error) alert('Erro ao enviar: ' + error.message)
+    await carregarKit()
+    setUploadandoKit(null)
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault(); setSalvando(true); setErro('')
-    try { await onSalvar(form) } catch(err: any) { setErro(err.message) }
+    try {
+      const novoId = await onSalvar(form)
+      if (novoId) setForm(f => ({ ...f, id: novoId }))
+      setBloqueado(true)
+    } catch(err: any) { setErro(err.message) }
     setSalvando(false)
   }
 
-  async function aoCriarCliente(campo: 'locatario_id' | 'locador_id' | 'fiador_id', cliente: { id: string; nome: string }) {
+  function idsExtras(campo: 'locatarios_adicionais' | 'locadores_adicionais'): string[] {
+    return (form[campo] || '').split(',').filter(Boolean)
+  }
+  function adicionarExtra(campo: 'locatarios_adicionais' | 'locadores_adicionais', id: string) {
+    const atuais = idsExtras(campo)
+    if (atuais.includes(id) || id === form.locatario_id || id === form.locador_id) return
+    setForm(f => ({ ...f, [campo]: [...atuais, id].join(',') }))
+  }
+  function removerExtra(campo: 'locatarios_adicionais' | 'locadores_adicionais', id: string) {
+    setForm(f => ({ ...f, [campo]: idsExtras(campo).filter(x => x !== id).join(',') }))
+  }
+
+  async function aoCriarCliente(campo: CampoParte, cliente: { id: string; nome: string }) {
     await onClienteCriado()
-    setForm(f => ({ ...f, [campo]: cliente.id }))
+    if (campo === 'locatarios_adicionais' || campo === 'locadores_adicionais') {
+      adicionarExtra(campo, cliente.id)
+    } else {
+      setForm(f => ({ ...f, [campo]: cliente.id }))
+    }
     setModalCadastro(null)
   }
 
   return (
     <div className="card mb-6">
       <div className="flex items-center justify-between mb-4">
-        <h2 style={{ color: '#f4f4f3' }} className="text-sm font-semibold">{inicial.id ? `Editando contrato #${inicial.numero}` : 'Novo contrato'}</h2>
+        <h2 style={{ color: '#f4f4f3' }} className="text-sm font-semibold">{form.id ? `Contrato #${form.numero}` : 'Novo contrato'}</h2>
         <button onClick={onCancelar} className="btn btn-sm"><X size={13} /></button>
       </div>
       {erro && <div style={{ background: '#2e1717', border: '0.5px solid #4a2424', color: '#ef4444' }} className="px-3 py-2 rounded-lg mb-3 text-sm">{erro}</div>}
       <form onSubmit={handleSubmit}>
+        <fieldset disabled={bloqueado} style={{ border: 0, padding: 0, margin: 0 }}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div><label className="label">Número *</label>
             <input className="input" required value={form.numero} onChange={set('numero')} placeholder="Ex: 001/2024" /></div>
@@ -632,7 +729,6 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
             <select className="input" value={form.tipo} onChange={set('tipo')}>
               <option value="locacao_residencial">Locação residencial</option>
               <option value="locacao_comercial">Locação comercial</option>
-              <option value="compra_venda">Compra e venda</option>
             </select></div>
           <div className="sm:col-span-2"><label className="label">Imóvel *</label>
             <button type="button" onClick={() => setModalImovel(true)}
@@ -653,23 +749,55 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
 
           <div>
             <label className="label">Locatário *</label>
-            <button type="button" onClick={() => setModalSelecionarCliente('locatario')}
+            <button type="button" onClick={() => setModalSelecionarCliente('locatario_id')}
               style={{ background: '#060D1C', border: '0.5px solid #1e3a5f', color: form.locatario_id ? '#f4f4f3' : '#5b5e6b' }}
               className="input text-left">
               {form.locatario_id ? clientes.find(c => c.id === form.locatario_id)?.nome : 'Clique para selecionar ou cadastrar'}
             </button>
+            {idsExtras('locatarios_adicionais').length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {idsExtras('locatarios_adicionais').map(id => (
+                  <span key={id} style={{ background: '#16243a', border: '0.5px solid #1e3a5f', color: '#c3c2b7' }} className="text-xs px-2 py-1 rounded-lg flex items-center gap-1.5">
+                    {clientes.find(c => c.id === id)?.nome || '—'}
+                    <button type="button" onClick={() => removerExtra('locatarios_adicionais', id)} style={{ color: '#8b9ab4' }}><X size={11} /></button>
+                  </span>
+                ))}
+              </div>
+            )}
+            {form.locatario_id && (
+              <button type="button" onClick={() => setModalSelecionarCliente('locatarios_adicionais')}
+                style={{ color: '#5b9bf5' }} className="text-xs font-medium mt-1.5 hover:underline">
+                <Plus size={11} className="inline" /> Adicionar outro locatário
+              </button>
+            )}
           </div>
 
           <div>
             <label className="label">Locador *</label>
-            <button type="button" onClick={() => setModalSelecionarCliente('locador')}
+            <button type="button" onClick={() => setModalSelecionarCliente('locador_id')}
               style={{ background: '#060D1C', border: '0.5px solid #1e3a5f', color: form.locador_id ? '#f4f4f3' : '#5b5e6b' }}
               className="input text-left">
               {form.locador_id ? clientes.find(c => c.id === form.locador_id)?.nome : 'Clique para selecionar ou cadastrar'}
             </button>
+            {idsExtras('locadores_adicionais').length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {idsExtras('locadores_adicionais').map(id => (
+                  <span key={id} style={{ background: '#16243a', border: '0.5px solid #1e3a5f', color: '#c3c2b7' }} className="text-xs px-2 py-1 rounded-lg flex items-center gap-1.5">
+                    {clientes.find(c => c.id === id)?.nome || '—'}
+                    <button type="button" onClick={() => removerExtra('locadores_adicionais', id)} style={{ color: '#8b9ab4' }}><X size={11} /></button>
+                  </span>
+                ))}
+              </div>
+            )}
+            {form.locador_id && (
+              <button type="button" onClick={() => setModalSelecionarCliente('locadores_adicionais')}
+                style={{ color: '#5b9bf5' }} className="text-xs font-medium mt-1.5 hover:underline">
+                <Plus size={11} className="inline" /> Adicionar outro locador
+              </button>
+            )}
           </div>
 
-          <div><label className="label">Valor mensal (R$) *</label>
+          <div><label className="label">Aluguel (R$) *</label>
             <InputMoeda value={form.valor_mensal} onChange={v => setForm(f => ({
               ...f,
               valor_mensal: v,
@@ -745,11 +873,41 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
           {form.tipo_garantia === 'fiador' && (
             <div className="sm:col-span-2">
               <label className="label">Fiador *</label>
-              <button type="button" onClick={() => setModalSelecionarCliente('fiador')}
+              <button type="button" onClick={() => setModalSelecionarCliente('fiador_id')}
                 style={{ background: '#060D1C', border: '0.5px solid #1e3a5f', color: form.fiador_id ? '#f4f4f3' : '#5b5e6b' }}
                 className="input text-left">
                 {form.fiador_id ? clientes.find(c => c.id === form.fiador_id)?.nome : 'Clique para selecionar ou cadastrar'}
               </button>
+            </div>
+          )}
+
+          {form.tipo_garantia === 'fiador' && form.fiador_id && (
+            <div className="sm:col-span-2 card" style={{ background: '#0d1117' }}>
+              <h3 style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-3">Imóvel de garantia do fiador</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div><label className="label">CEP</label>
+                  <input className="input" value={form.fiador_imovel_cep}
+                    onChange={e => { const v = e.target.value; setForm(f => ({...f, fiador_imovel_cep: v})); buscarCepFiador(v) }}
+                    placeholder="00000-000" />
+                  {buscandoCepFiador && <p style={{ color: '#5b9bf5' }} className="text-[10px] mt-1">Buscando endereço...</p>}
+                </div>
+                <div><label className="label">Nº de matrícula do imóvel</label>
+                  <input className="input" value={form.fiador_imovel_matricula} onChange={set('fiador_imovel_matricula')} /></div>
+                <div className="sm:col-span-2"><label className="label">Logradouro</label>
+                  <input className="input" value={form.fiador_imovel_endereco} onChange={set('fiador_imovel_endereco')} /></div>
+                <div><label className="label">Número</label>
+                  <input className="input" value={form.fiador_imovel_numero} onChange={set('fiador_imovel_numero')} /></div>
+                <div><label className="label">Complemento</label>
+                  <input className="input" value={form.fiador_imovel_complemento} onChange={set('fiador_imovel_complemento')} /></div>
+                <div><label className="label">Bairro</label>
+                  <input className="input" value={form.fiador_imovel_bairro} onChange={set('fiador_imovel_bairro')} /></div>
+                <div><label className="label">Cidade</label>
+                  <input className="input" value={form.fiador_imovel_cidade} onChange={set('fiador_imovel_cidade')} /></div>
+                <div><label className="label">Estado (UF)</label>
+                  <input className="input" maxLength={2} value={form.fiador_imovel_estado} onChange={set('fiador_imovel_estado')} /></div>
+                <div><label className="label">IPTU (nº ou valor)</label>
+                  <input className="input" value={form.fiador_imovel_iptu} onChange={set('fiador_imovel_iptu')} /></div>
+              </div>
             </div>
           )}
 
@@ -810,6 +968,10 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
             <InputMoeda value={form.valor_iptu} onChange={v => setForm(f => ({...f, valor_iptu: v}))} /></div>
           <div><label className="label">Seguro incêndio (R$)</label>
             <InputMoeda value={form.valor_seguro_incendio} onChange={v => setForm(f => ({...f, valor_seguro_incendio: v}))} /></div>
+          <div><label className="label">Nº apólice — Seguro incêndio</label>
+            <input className="input" value={form.apolice_incendio_numero} onChange={set('apolice_incendio_numero')} /></div>
+          <div><label className="label">Valor anual — Apólice incêndio (R$)</label>
+            <InputMoeda value={form.apolice_incendio_valor} onChange={v => setForm(f => ({...f, apolice_incendio_valor: v}))} /></div>
 
           <div className="sm:col-span-2">
             <div style={{ background: '#16243a', border: '0.5px solid #1e3a5f' }} className="rounded-lg p-3">
@@ -890,11 +1052,6 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
           <div><label className="label">Foro eleito</label>
             <input className="input" value={form.foro} onChange={set('foro')} /></div>
 
-          <div><label className="label">Nº apólice — Seguro incêndio</label>
-            <input className="input" value={form.apolice_incendio_numero} onChange={set('apolice_incendio_numero')} /></div>
-          <div><label className="label">Valor anual — Seguro incêndio (R$)</label>
-            <InputMoeda value={form.apolice_incendio_valor} onChange={v => setForm(f => ({...f, apolice_incendio_valor: v}))} /></div>
-
           {(parseFloat(form.valor_caucao) || 0) > 0 && (
             <div className="sm:col-span-2">
               <label className="label">Forma de recebimento da caução pelo locador</label>
@@ -921,38 +1078,110 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
             </div>
           )}
         </div>
+        </fieldset>
+
         <div className="flex gap-2 mt-4">
-          <button type="submit" disabled={salvando} className="btn btn-primary">
-            {salvando ? 'Salvando...' : inicial.id ? 'Salvar alterações' : 'Salvar contrato'}
-          </button>
-          <button type="button" className="btn" onClick={onCancelar}>Cancelar</button>
+          {!form.id ? (
+            <button type="submit" disabled={salvando} className="btn btn-primary">
+              {salvando ? 'Salvando...' : 'Salvar'}
+            </button>
+          ) : (
+            <>
+              <button type="submit" disabled={salvando || bloqueado} className="btn btn-primary">
+                {salvando ? 'Salvando...' : 'Salvar'}
+              </button>
+              <button type="button" style={{ background: '#ef4444', color: '#fff', border: 'none' }} className="btn"
+                onClick={() => setBloqueado(b => !b)}>
+                <Edit2 size={12} />Editar
+              </button>
+              <button type="button" style={{ background: '#22c55e', color: '#fff', border: 'none' }} className="btn"
+                disabled={!!popupPdf} onClick={() => onGerarPdf(form.id)}>
+                <FileDown size={12} />Contrato
+              </button>
+            </>
+          )}
         </div>
       </form>
 
+      {form.id && (
+        <div className="card mt-4" style={{ background: '#0d1117' }}>
+          <h3 style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-1">Kit de documentos</h3>
+          <p style={{ color: '#8b9ab4' }} className="text-xs mb-4">Documentos assinados, guardados pra consulta futura.</p>
+          {loadingKit ? (
+            <p style={{ color: '#8b9ab4' }} className="text-sm text-center py-4">Carregando...</p>
+          ) : (
+            <div className="space-y-2">
+              {KIT_CATEGORIAS.filter(cat => !cat.somenteGarantia || cat.somenteGarantia === form.tipo_garantia).map(cat => {
+                const doc = documentos[cat.chave]
+                return (
+                  <div key={cat.chave} style={{ background: '#16243a', border: '0.5px solid #1e3a5f' }} className="flex items-center justify-between p-3 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      {doc ? <CheckCircle2 size={14} style={{ color: '#3fb950' }} /> : <Hourglass size={14} style={{ color: '#8b9ab4' }} />}
+                      <span style={{ color: '#f4f4f3' }} className="text-sm">{cat.label}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {doc && <a href={doc.url} target="_blank" rel="noopener noreferrer" style={{ color: '#5b9bf5' }} className="btn btn-sm text-xs">Ver</a>}
+                      <label style={{ color: '#5b9bf5', border: '0.5px solid #1e3a5f' }} className="btn btn-sm text-xs cursor-pointer">
+                        <Upload size={11} />{uploadandoKit === cat.chave ? 'Enviando...' : doc ? 'Substituir' : 'Enviar'}
+                        <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png"
+                          onChange={e => { const f = e.target.files?.[0]; if (f) uploadKit(cat.chave, f); e.target.value = '' }} />
+                      </label>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {popupPdf && (
+        <div style={{ background: 'rgba(0,0,0,0.6)' }} className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {popupPdf === 'processando' && (
+            <div style={{ background: '#16243a', border: '0.5px solid #1e3a5f', color: '#5b9bf5' }}
+              className="rounded-2xl px-10 py-8 shadow-2xl flex flex-col items-center gap-4">
+              <Hourglass size={40} className="animate-spin" />
+              <span className="text-lg font-semibold">Gerando contrato...</span>
+            </div>
+          )}
+          {popupPdf === 'sucesso' && (
+            <div style={{ background: '#1a2e1f', border: '0.5px solid #2d4a35', color: '#3fb950' }}
+              className="rounded-2xl px-10 py-8 shadow-2xl flex flex-col items-center gap-4">
+              <CheckCircle2 size={40} />
+              <span className="text-lg font-semibold">Contrato gerado com sucesso</span>
+            </div>
+          )}
+        </div>
+      )}
+
       {modalCadastro && (
         <ModalClienteCompleto
-          tipoParte={modalCadastro}
+          tipoParte={modalCadastro.startsWith('locatario') ? 'locatario' : modalCadastro.startsWith('locador') ? 'locador' : 'fiador'}
           onFechar={() => setModalCadastro(null)}
-          onSalvar={(cliente) => aoCriarCliente(
-            modalCadastro === 'locatario' ? 'locatario_id' : modalCadastro === 'locador' ? 'locador_id' : 'fiador_id',
-            cliente,
-          )}
+          onSalvar={(cliente) => aoCriarCliente(modalCadastro, cliente)}
         />
       )}
 
       {modalSelecionarCliente && (
         <ModalSelecionarCliente
           clientes={clientes}
-          titulo={modalSelecionarCliente === 'locatario' ? 'locatário' : modalSelecionarCliente === 'locador' ? 'locador' : 'fiador'}
+          titulo={
+            modalSelecionarCliente === 'locatario_id' || modalSelecionarCliente === 'locatarios_adicionais' ? 'locatário'
+            : modalSelecionarCliente === 'locador_id' || modalSelecionarCliente === 'locadores_adicionais' ? 'locador'
+            : 'fiador'
+          }
           onFechar={() => setModalSelecionarCliente(null)}
           onSelecionar={(cliente) => {
-            const campo = modalSelecionarCliente === 'locatario' ? 'locatario_id' : modalSelecionarCliente === 'locador' ? 'locador_id' : 'fiador_id'
-            setForm(f => ({ ...f, [campo]: cliente.id }))
+            if (modalSelecionarCliente === 'locatarios_adicionais' || modalSelecionarCliente === 'locadores_adicionais') {
+              adicionarExtra(modalSelecionarCliente, cliente.id)
+            } else {
+              setForm(f => ({ ...f, [modalSelecionarCliente]: cliente.id }))
+            }
           }}
           onAdicionarNovo={() => {
-            const tipo = modalSelecionarCliente
+            const campo = modalSelecionarCliente
             setModalSelecionarCliente(null)
-            setModalCadastro(tipo)
+            setModalCadastro(campo)
           }}
         />
       )}
@@ -1025,8 +1254,19 @@ async function gerarContratoPdf(contratoId: string, onEstado: (e: 'processando' 
   const { data: org } = await supabase.from('organizations').select('*').eq('id', ORG_ID).single()
   if (!org) { alert('Não foi possível carregar os dados da imobiliária.'); return }
 
-  const locadores: Parte[] = [clienteParaParte(c.locador)]
-  const locatarios: Parte[] = [clienteParaParte(c.locatario)]
+  let locatariosExtras: any[] = []
+  let locadoresExtras: any[] = []
+  if (c.locatarios_adicionais?.length) {
+    const { data } = await supabase.from('clientes').select('*').in('id', c.locatarios_adicionais)
+    locatariosExtras = data || []
+  }
+  if (c.locadores_adicionais?.length) {
+    const { data } = await supabase.from('clientes').select('*').in('id', c.locadores_adicionais)
+    locadoresExtras = data || []
+  }
+
+  const locadores: Parte[] = [clienteParaParte(c.locador), ...locadoresExtras.map(clienteParaParte)]
+  const locatarios: Parte[] = [clienteParaParte(c.locatario), ...locatariosExtras.map(clienteParaParte)]
   const fiadores: Parte[] = c.tipo_garantia === 'fiador' && c.fiador ? [clienteParaParte(c.fiador)] : []
   const descricaoImovel = descricaoImovelAuto(c.imovel)
   const foro = c.foro || 'Santana, São Paulo, SP'
@@ -1180,13 +1420,17 @@ async function gerarContratoPdf(contratoId: string, onEstado: (e: 'processando' 
   const parcelasNumPdf = parseInt(form.parcelas_caucao) || 1
   if (form.tipo_garantia === 'fiador') {
     const f = fiadores[0]
+    const enderecoImovelGarantia = [form.fiador_imovel_endereco, form.fiador_imovel_numero, form.fiador_imovel_complemento, form.fiador_imovel_bairro, form.fiador_imovel_cidade, form.fiador_imovel_estado].filter(Boolean).join(', ')
+    const textoImovelGarantia = enderecoImovelGarantia
+      ? ` Em garantia desta fiança, o(a) FIADOR(A) oferece o imóvel situado à ${enderecoImovelGarantia}${form.fiador_imovel_cep ? `, CEP ${form.fiador_imovel_cep}` : ''}${form.fiador_imovel_matricula ? `, matrícula nº ${form.fiador_imovel_matricula}` : ''}${form.fiador_imovel_iptu ? `, IPTU nº ${form.fiador_imovel_iptu}` : ''}.`
+      : ''
     if (f?.nome) {
       const fiadoresTexto = fiadores.filter(fi => fi.nome)
         .map(fi => `${fi.nome.toUpperCase()}, ${fi.nacionalidade}, ${ESTADO_CIVIL_LABEL[fi.estado_civil] || fi.estado_civil}, ${fi.profissao}, portador(a) do RG nº ${fi.rg} e inscrito(a) no CPF sob nº ${fi.cpf}, residente à ${fi.endereco}`)
         .join('; e ')
-      clausula('7ª', `O presente contrato será garantido por fiança, prestada por ${fiadoresTexto}, doravante denominado(a) ${fiadores.length > 1 ? 'FIADORES' : 'FIADOR(A)'}, que se responsabiliza(m) solidária e integralmente por todas as obrigações assumidas pelos LOCATÁRIOS neste contrato, inclusive aluguéis, encargos, multas e demais despesas, até a efetiva entrega das chaves.`)
+      clausula('7ª', `O presente contrato será garantido por fiança, prestada por ${fiadoresTexto}, doravante denominado(a) ${fiadores.length > 1 ? 'FIADORES' : 'FIADOR(A)'}, que se responsabiliza(m) solidária e integralmente por todas as obrigações assumidas pelos LOCATÁRIOS neste contrato, inclusive aluguéis, encargos, multas e demais despesas, até a efetiva entrega das chaves.${textoImovelGarantia}`)
     } else {
-      clausula('7ª', `O presente contrato será garantido por fiança, cujo(s) fiador(es) responsabiliza(m)-se solidária e integralmente por todas as obrigações assumidas pelos LOCATÁRIOS neste contrato, conforme qualificação a ser anexada a este instrumento.`)
+      clausula('7ª', `O presente contrato será garantido por fiança, cujo(s) fiador(es) responsabiliza(m)-se solidária e integralmente por todas as obrigações assumidas pelos LOCATÁRIOS neste contrato, conforme qualificação a ser anexada a este instrumento.${textoImovelGarantia}`)
     }
   } else if (form.tipo_garantia === 'titulo_capitalizacao') {
     clausula('7ª', `O presente contrato será garantido por título de capitalização, vinculado em favor do LOCADOR pelo valor correspondente a, no mínimo, ${caucaoValPdf > 0 ? formatVal(caucaoValPdf) : '3 (três) aluguéis'}, permanecendo caução até a efetiva entrega das chaves e quitação de todas as obrigações do presente contrato.`)
@@ -1298,11 +1542,11 @@ async function gerarContratoPdf(contratoId: string, onEstado: (e: 'processando' 
   addRodape()
 
   onEstado('processando')
-  await new Promise(resolve => setTimeout(resolve, 2000))
+  await new Promise(resolve => setTimeout(resolve, 5000))
   onEstado('sucesso')
   await new Promise(resolve => setTimeout(resolve, 2000))
 
-  doc.save(`contrato-${form.numero}-${form.data_inicio}.pdf`)
+  window.open(doc.output('bloburl') as unknown as string, '_blank')
   onEstado(null)
 }
 
@@ -1337,140 +1581,13 @@ async function confirmarEGerarPdf(contratoId: string, onEstado: (e: 'processando
  * Tela de consulta (somente leitura) de um contrato: mostra os dados, o kit de documentos
  * assinados pra upload/consulta, e só libera edição ao clicar em "Editar" no rodapé.
  */
-function ContratoDetalhe({ contrato, onFechar, onEditar, onGerarPdf, popupEstado }: {
-  contrato: Contrato
-  onFechar: () => void
-  onEditar: () => void
-  onGerarPdf: () => void
-  popupEstado: 'processando' | 'sucesso' | null
-}) {
-  const [documentos, setDocumentos] = useState<Record<string, Documento | null>>({})
-  const [uploadando, setUploadando] = useState<string | null>(null)
-  const [loadingDocs, setLoadingDocs] = useState(true)
-
-  useEffect(() => { carregarKit() }, [contrato.id])
-
-  async function carregarKit() {
-    setLoadingDocs(true)
-    const { data: files } = await supabase.storage.from('documentos').list(`contratos/${contrato.id}/kit`)
-    const mapa: Record<string, Documento | null> = {}
-    for (const cat of KIT_CATEGORIAS) {
-      const arquivo = files?.find(f => f.name.startsWith(cat.chave))
-      mapa[cat.chave] = arquivo ? {
-        nome: arquivo.name,
-        url: supabase.storage.from('documentos').getPublicUrl(`contratos/${contrato.id}/kit/${arquivo.name}`).data.publicUrl,
-        tipo: arquivo.name.split('.').pop() || '',
-        created_at: arquivo.created_at || '',
-      } : null
-    }
-    setDocumentos(mapa)
-    setLoadingDocs(false)
-  }
-
-  async function uploadKit(chave: string, file: File) {
-    setUploadando(chave)
-    const ext = file.name.split('.').pop()
-    const path = `contratos/${contrato.id}/kit/${chave}.${ext}`
-    const { error } = await supabase.storage.from('documentos').upload(path, file, { upsert: true })
-    if (error) alert('Erro ao enviar: ' + error.message)
-    await carregarKit()
-    setUploadando(null)
-  }
-
-  const categoriasVisiveis = KIT_CATEGORIAS.filter(cat => !cat.somenteGarantia || cat.somenteGarantia === contrato.tipo_garantia)
-
-  return (
-    <div className="card mb-6">
-      <div className="flex items-center justify-between mb-4">
-        <h2 style={{ color: '#f4f4f3' }} className="text-sm font-semibold">Contrato #{contrato.numero}</h2>
-        <button onClick={onFechar} className="btn btn-sm"><X size={13} /></button>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
-        {[
-          ['Imóvel', getTitulo(contrato.imovel)],
-          ['Locatário', getNome(contrato.locatario)],
-          ['Locador', getNome(contrato.locador)],
-          ['Valor mensal', formatVal(contrato.valor_atual || contrato.valor_mensal)],
-          ['Início', formatDate(contrato.data_inicio)],
-          ['Vencimento', formatDate(contrato.data_fim)],
-          ['Índice de reajuste', (contrato.indice_reajuste||'').toUpperCase()],
-          ['Garantia', contrato.tipo_garantia || '—'],
-          ['Status', statusLabel[statusContrato(contrato.data_fim, contrato.status)] || contrato.status],
-        ].map(([label, valor]) => (
-          <div key={label as string}>
-            <p style={{ color: '#8b9ab4' }} className="text-xs">{label}</p>
-            <p style={{ color: '#f4f4f3' }} className="text-sm font-medium">{valor}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="card mb-4" style={{ background: '#0d1117' }}>
-        <h3 style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-1">Kit de documentos</h3>
-        <p style={{ color: '#8b9ab4' }} className="text-xs mb-4">Documentos assinados, guardados pra consulta futura.</p>
-        {loadingDocs ? (
-          <p style={{ color: '#8b9ab4' }} className="text-sm text-center py-4">Carregando...</p>
-        ) : (
-          <div className="space-y-2">
-            {categoriasVisiveis.map(cat => {
-              const doc = documentos[cat.chave]
-              return (
-                <div key={cat.chave} style={{ background: '#16243a', border: '0.5px solid #1e3a5f' }} className="flex items-center justify-between p-3 rounded-lg">
-                  <div className="flex items-center gap-2">
-                    {doc ? <CheckCircle2 size={14} style={{ color: '#3fb950' }} /> : <Hourglass size={14} style={{ color: '#8b9ab4' }} />}
-                    <span style={{ color: '#f4f4f3' }} className="text-sm">{cat.label}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {doc && <a href={doc.url} target="_blank" rel="noopener noreferrer" style={{ color: '#5b9bf5' }} className="btn btn-sm text-xs">Ver</a>}
-                    <label style={{ color: '#5b9bf5', border: '0.5px solid #1e3a5f' }} className="btn btn-sm text-xs cursor-pointer">
-                      <Upload size={11} />{uploadando === cat.chave ? 'Enviando...' : doc ? 'Substituir' : 'Enviar'}
-                      <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png"
-                        onChange={e => { const f = e.target.files?.[0]; if (f) uploadKit(cat.chave, f); e.target.value = '' }} />
-                    </label>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
-
-      <div className="flex gap-2">
-        <button className="btn btn-sm" style={{ background: '#22c55e', color: '#fff' }} onClick={onGerarPdf} disabled={!!popupEstado}>
-          <FileDown size={12} />Gerar Contrato (PDF)
-        </button>
-        <button className="btn btn-sm" onClick={onEditar}><Edit2 size={12} />Editar</button>
-      </div>
-
-      {popupEstado && (
-        <div style={{ background: 'rgba(0,0,0,0.6)' }} className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          {popupEstado === 'processando' && (
-            <div style={{ background: '#16243a', border: '0.5px solid #1e3a5f', color: '#5b9bf5' }}
-              className="rounded-2xl px-10 py-8 shadow-2xl flex flex-col items-center gap-4">
-              <Hourglass size={40} className="animate-spin" />
-              <span className="text-lg font-semibold">Processando...</span>
-            </div>
-          )}
-          {popupEstado === 'sucesso' && (
-            <div style={{ background: '#1a2e1f', border: '0.5px solid #2d4a35', color: '#3fb950' }}
-              className="rounded-2xl px-10 py-8 shadow-2xl flex flex-col items-center gap-4">
-              <CheckCircle2 size={40} />
-              <span className="text-lg font-semibold">Contrato Gerado</span>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
 export default function ContratosPage() {
   const [contratos, setContratos] = useState<Contrato[]>([])
   const [imoveis, setImoveis] = useState<SelectOpt[]>([])
   const [clientes, setClientes] = useState<SelectOpt[]>([])
   const [loading, setLoading] = useState(true)
   const [formInicial, setFormInicial] = useState<Record<string,string>|null>(null)
-  const [visualizando, setVisualizando] = useState<Contrato | null>(null)
+  const [formSomenteLeitura, setFormSomenteLeitura] = useState(false)
   const [popupPdf, setPopupPdf] = useState<'processando' | 'sucesso' | null>(null)
   const [sucesso, setSucesso] = useState('')
   const [erroExclusao, setErroExclusao] = useState('')
@@ -1504,14 +1621,17 @@ export default function ContratosPage() {
       .filter(n => !isNaN(n))
     const proximo = numerosDoAno.length > 0 ? Math.max(...numerosDoAno) + 1 : 1
     const numeroGerado = `${String(proximo).padStart(3, '0')}/${anoAtual}`
+    setFormSomenteLeitura(false)
     setFormInicial({ ...formVazio, numero: numeroGerado })
   }
 
-  function abrirEdicao(c: Contrato) {
-    setFormInicial({
+  function dadosFormDoContrato(c: Contrato): Record<string,string> {
+    return {
       id: c.id, numero: c.numero||'', tipo: c.tipo||'locacao_residencial',
       imovel_id: c.imovel_id||'', locatario_id: c.locatario_id||'', locador_id: c.locador_id||'',
       fiador_id: c.fiador_id||'',
+      locatarios_adicionais: (c.locatarios_adicionais||[]).join(','),
+      locadores_adicionais: (c.locadores_adicionais||[]).join(','),
       taxa_administracao: c.taxa_administracao?.toString() || '10',
       honorarios_aplicavel: c.honorarios_aplicavel ? '1' : '',
       valor_honorarios: c.valor_honorarios?.toString() || '',
@@ -1536,7 +1656,26 @@ export default function ContratosPage() {
       banco_recebimento_caucao: c.banco_recebimento_caucao || '',
       agencia_recebimento_caucao: c.agencia_recebimento_caucao || '',
       conta_recebimento_caucao: c.conta_recebimento_caucao || '',
-    })
+      fiador_imovel_cep: c.fiador_imovel_cep || '',
+      fiador_imovel_endereco: c.fiador_imovel_endereco || '',
+      fiador_imovel_numero: c.fiador_imovel_numero || '',
+      fiador_imovel_complemento: c.fiador_imovel_complemento || '',
+      fiador_imovel_bairro: c.fiador_imovel_bairro || '',
+      fiador_imovel_cidade: c.fiador_imovel_cidade || '',
+      fiador_imovel_estado: c.fiador_imovel_estado || '',
+      fiador_imovel_matricula: c.fiador_imovel_matricula || '',
+      fiador_imovel_iptu: c.fiador_imovel_iptu || '',
+    }
+  }
+
+  function abrirEdicao(c: Contrato) {
+    setFormSomenteLeitura(false)
+    setFormInicial(dadosFormDoContrato(c))
+  }
+
+  function abrirConsulta(c: Contrato) {
+    setFormSomenteLeitura(true)
+    setFormInicial(dadosFormDoContrato(c))
   }
 
   async function salvar(dados: Record<string,string>) {
@@ -1548,6 +1687,8 @@ export default function ContratosPage() {
       numero: dados.numero, tipo: dados.tipo,
       imovel_id: dados.imovel_id, locatario_id: dados.locatario_id, locador_id: dados.locador_id,
       fiador_id: dados.tipo_garantia === 'fiador' ? (dados.fiador_id || null) : null,
+      locatarios_adicionais: (dados.locatarios_adicionais || '').split(',').filter(Boolean),
+      locadores_adicionais: (dados.locadores_adicionais || '').split(',').filter(Boolean),
       data_inicio: dados.data_inicio, data_fim: dados.data_fim,
       valor_mensal: parseFloat(dados.valor_mensal),
       valor_atual: parseFloat(dados.valor_mensal),
@@ -1577,6 +1718,15 @@ export default function ContratosPage() {
       banco_recebimento_caucao: dados.banco_recebimento_caucao || null,
       agencia_recebimento_caucao: dados.agencia_recebimento_caucao || null,
       conta_recebimento_caucao: dados.conta_recebimento_caucao || null,
+      fiador_imovel_cep: dados.tipo_garantia === 'fiador' ? (dados.fiador_imovel_cep || null) : null,
+      fiador_imovel_endereco: dados.tipo_garantia === 'fiador' ? (dados.fiador_imovel_endereco || null) : null,
+      fiador_imovel_numero: dados.tipo_garantia === 'fiador' ? (dados.fiador_imovel_numero || null) : null,
+      fiador_imovel_complemento: dados.tipo_garantia === 'fiador' ? (dados.fiador_imovel_complemento || null) : null,
+      fiador_imovel_bairro: dados.tipo_garantia === 'fiador' ? (dados.fiador_imovel_bairro || null) : null,
+      fiador_imovel_cidade: dados.tipo_garantia === 'fiador' ? (dados.fiador_imovel_cidade || null) : null,
+      fiador_imovel_estado: dados.tipo_garantia === 'fiador' ? (dados.fiador_imovel_estado || null) : null,
+      fiador_imovel_matricula: dados.tipo_garantia === 'fiador' ? (dados.fiador_imovel_matricula || null) : null,
+      fiador_imovel_iptu: dados.tipo_garantia === 'fiador' ? (dados.fiador_imovel_iptu || null) : null,
       organization_id: ORG_ID,
     }
 
@@ -1692,8 +1842,8 @@ export default function ContratosPage() {
 
     setSucesso(dados.id ? 'Contrato atualizado!' : `Contrato criado! ${!dados.id ? `${mesesContrato(dados.data_inicio, dados.data_fim)} cobranças geradas.` : ''}${caucaoVal > 0 && parcelasNum > 1 ? ` Caução parcelado em ${parcelasNum}x lançado no financeiro.` : ''}`)
     await buscarTudo()
-    setFormInicial(null)
     setTimeout(() => setSucesso(''), 4000)
+    return contratoId
   }
 
   async function excluir(id: string, numero: string) {
@@ -1758,20 +1908,13 @@ export default function ContratosPage() {
             <FormContrato key={formInicial.id||'novo'} inicial={formInicial}
               imoveis={imoveis} clientes={clientes}
               onSalvar={salvar} onCancelar={() => setFormInicial(null)}
-              onClienteCriado={recarregarClientes} />
+              onClienteCriado={recarregarClientes}
+              somenteLeituraInicial={formSomenteLeitura}
+              popupPdf={popupPdf}
+              onGerarPdf={(id) => confirmarEGerarPdf(id, setPopupPdf)} />
           )}
 
-          {visualizando !== null && formInicial === null && (
-            <ContratoDetalhe
-              contrato={visualizando}
-              onFechar={() => setVisualizando(null)}
-              onEditar={() => { abrirEdicao(visualizando); setVisualizando(null) }}
-              onGerarPdf={() => confirmarEGerarPdf(visualizando.id, setPopupPdf)}
-              popupEstado={popupPdf}
-            />
-          )}
-
-          {vencendo.length > 0 && !formInicial && !visualizando && (
+          {vencendo.length > 0 && !formInicial && (
             <div style={{ background: '#2e2515', border: '0.5px solid #4a3a1f' }} className="rounded-xl p-4 mb-4">
               <div className="flex items-center gap-2 mb-2">
                 <AlertTriangle size={14} style={{ color: '#f59e0b' }} />
@@ -1811,7 +1954,7 @@ export default function ContratosPage() {
                     const dias = diasRestantes(c.data_fim)
                     return (
                       <tr key={c.id} style={{ borderBottom: '0.5px solid #1c2128', cursor: 'pointer' }} className="hover:bg-[#161b22]"
-                        onClick={() => setVisualizando(c)}>
+                        onClick={() => abrirConsulta(c)}>
                         <td style={{ color: '#8b8d98' }} className="px-2.5 py-2.5 text-xs font-mono whitespace-nowrap">#{c.numero}</td>
                         <td style={{ color: '#f4f4f3' }} className="px-2.5 py-2.5 font-medium text-sm whitespace-nowrap">{getTitulo(c.imovel)}</td>
                         <td style={{ color: '#c3c2b7' }} className="px-2.5 py-2.5 text-sm whitespace-nowrap">{getNome(c.locatario)}</td>
