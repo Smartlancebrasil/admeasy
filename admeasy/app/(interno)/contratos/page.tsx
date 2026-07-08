@@ -1046,13 +1046,13 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
           {(parseFloat(form.valor_caucao) || 0) > 0 && (
             <div className="sm:col-span-2">
               <label className="label">Forma de recebimento da caução pelo locador</label>
-              <div className="flex gap-2 mb-2">
+              <div style={{ background: '#0d1117', border: '0.5px solid #2a2f3a' }} className="inline-flex rounded-lg p-0.5 mb-2">
                 {[['pix', 'PIX'], ['transferencia', 'Transferência bancária']].map(([valor, label]) => (
                   <button key={valor} type="button" onClick={() => setForm(f => ({...f, forma_recebimento_caucao: valor}))}
                     style={form.forma_recebimento_caucao === valor
-                      ? { background: '#2563eb', color: '#fff', border: '0.5px solid #2563eb' }
-                      : { border: '0.5px solid #2a2f3a', color: '#a8aab5' }}
-                    className="flex-1 py-2 rounded-lg text-xs font-medium transition-all">
+                      ? { background: '#1e3a5f', color: '#f4f4f3' }
+                      : { background: 'transparent', color: '#8b9ab4' }}
+                    className="px-4 py-1.5 rounded-md text-xs font-medium transition-all">
                     {label}
                   </button>
                 ))}
@@ -1906,6 +1906,7 @@ export default function ContratosPage() {
             </div>
           )}
 
+          {!formInicial && (
           <div className="card p-0 overflow-hidden overflow-x-auto">
             {loading ? (
               <div style={{ color: '#8b8d98' }} className="text-center py-12 text-sm">Carregando...</div>
@@ -1947,7 +1948,7 @@ export default function ContratosPage() {
                         <td className="px-2.5 py-2.5 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                           <div className="flex gap-1.5">
                             <button className="btn btn-sm flex-shrink-0" onClick={() => abrirEdicao(c)}><Edit2 size={12} />Editar</button>
-                            <button className="btn btn-sm whitespace-nowrap flex-shrink-0" style={{ background: '#22c55e', color: '#fff', padding: '4px 8px' }} onClick={() => confirmarEGerarPdf(c.id, setPopupPdf)}><FileDown size={12} />Gerar Contrato</button>
+                            <button className="btn btn-sm flex-shrink-0" style={{ background: 'transparent', color: '#8b9ab4', border: '1px solid #2a2f3a' }} onClick={() => abrirEdicao(c)}>Visualizar</button>
                             <button className="btn btn-sm flex-shrink-0" style={{ color: '#ef4444' }} onClick={() => excluir(c.id, c.numero)}><X size={12} /></button>
                           </div>
                         </td>
@@ -1958,6 +1959,7 @@ export default function ContratosPage() {
               </table>
             )}
           </div>
+          )}
         </div>
       </div>
     </AppLayout>
