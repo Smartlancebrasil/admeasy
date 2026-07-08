@@ -310,12 +310,12 @@ export default function RescisaoPage() {
 
   return (
     <AppLayout>
-      <div style={{ background: '#0d1117', minHeight: '100vh' }} className="flex-1 overflow-y-auto p-6">
+      <div style={{ background: '#0d1117', minHeight: '100vh' }} className="flex-1 overflow-y-auto p-4 sm:p-6">
         <div className="max-w-[1600px] mx-auto">
 
           <h1 style={{ color: '#f4f4f3' }} className="text-lg font-medium mb-5">Calculadora de rescisão</h1>
 
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="card">
               <h2 style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-4 flex items-center gap-2">
                 <Calculator size={15} style={{ color: '#5b9bf5' }} />Selecione o contrato
@@ -333,12 +333,12 @@ export default function RescisaoPage() {
                       <div key={c.id} onClick={() => { setContratoSel(c); setEditandoCaucao(false); setCaucaoEditado('') }}
                         style={sel ? { border: '0.5px solid #2563eb', background: '#16243a' } : { border: '0.5px solid #2a2f3a' }}
                         className="p-3 rounded-lg cursor-pointer transition-all hover:border-gray-500">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div style={{ color: '#f4f4f3' }} className="text-sm font-medium">#{c.numero} — {getTitulo(c.imovel)}</div>
-                            <div style={{ color: '#8b8d98' }} className="text-xs">{getNome(c.locatario)}</div>
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                          <div className="min-w-0">
+                            <div style={{ color: '#f4f4f3' }} className="text-sm font-medium truncate">#{c.numero} — {getTitulo(c.imovel)}</div>
+                            <div style={{ color: '#8b8d98' }} className="text-xs truncate">{getNome(c.locatario)}</div>
                           </div>
-                          <div className="text-right">
+                          <div className="sm:text-right flex-shrink-0">
                             <div style={{ color: '#f4f4f3' }} className="text-sm font-semibold">{formatVal(c.valor_atual || c.valor_mensal)}</div>
                             <div style={{ color: dias < 0 ? '#ef4444' : dias < 30 ? '#f59e0b' : '#8b8d98' }} className="text-xs">
                               {dias < 0 ? `${Math.abs(dias)}d vencido` : `${dias}d restantes`}
@@ -427,7 +427,7 @@ export default function RescisaoPage() {
 
                       <div>
                         <label className="label">Danos físicos (R$)</label>
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <input className="input" type="number" step="0.01" min="0"
                             value={danosFisicos} onChange={e => setDanosFisicos(e.target.value)}
                             placeholder="0,00" />
@@ -446,7 +446,7 @@ export default function RescisaoPage() {
 
                       <div>
                         <label className="label">Outros (R$)</label>
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <input className="input" type="number" step="0.01" min="0"
                             value={outros} onChange={e => setOutros(e.target.value)}
                             placeholder="0,00" />
@@ -521,7 +521,7 @@ export default function RescisaoPage() {
 
                       <div style={{ borderTop: '0.5px solid #2a2f3a' }} className="pt-4">
                         <p style={{ color: '#8b8d98' }} className="text-xs font-semibold mb-3">Testemunhas (para o PDF)</p>
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <div>
                             <label className="label">Testemunha 1 — Nome</label>
                             <input className="input" value={testemunha1Nome} onChange={e => setTestemunha1Nome(e.target.value)} />

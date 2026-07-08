@@ -169,7 +169,7 @@ export default function ReajustePage() {
 
   return (
     <AppLayout>
-      <div style={{ background: '#0d1117', minHeight: '100vh' }} className="flex-1 overflow-y-auto p-6">
+      <div style={{ background: '#0d1117', minHeight: '100vh' }} className="flex-1 overflow-y-auto p-4 sm:p-6">
         <div className="max-w-[1600px] mx-auto">
 
           <h1 style={{ color: '#f4f4f3' }} className="text-lg font-medium mb-5">Calculadora de reajuste</h1>
@@ -181,7 +181,7 @@ export default function ReajustePage() {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="card">
               <h2 style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-4 flex items-center gap-2">
                 <TrendingUp size={15} style={{ color: '#5b9bf5' }} />Selecione o contrato
@@ -199,12 +199,12 @@ export default function ReajustePage() {
                         onClick={() => selecionarContrato(c)}
                         style={sel ? { border: '0.5px solid #2563eb', background: '#16243a' } : { border: '0.5px solid #2a2f3a' }}
                         className="p-3 rounded-lg cursor-pointer transition-all hover:border-gray-500">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div style={{ color: '#f4f4f3' }} className="text-sm font-medium">#{c.numero} — {getTitulo(c.imovel)}</div>
-                            <div style={{ color: '#8b8d98' }} className="text-xs mt-0.5">{getNome(c.locatario)} · Índice: {(c.indice_reajuste || 'igpm').toUpperCase()}</div>
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                          <div className="min-w-0">
+                            <div style={{ color: '#f4f4f3' }} className="text-sm font-medium truncate">#{c.numero} — {getTitulo(c.imovel)}</div>
+                            <div style={{ color: '#8b8d98' }} className="text-xs mt-0.5 truncate">{getNome(c.locatario)} · Índice: {(c.indice_reajuste || 'igpm').toUpperCase()}</div>
                           </div>
-                          <div className="text-right">
+                          <div className="sm:text-right flex-shrink-0">
                             <div style={{ color: '#f4f4f3' }} className="text-sm font-semibold">{formatVal(c.valor_atual || c.valor_mensal)}</div>
                             <div style={{ color: '#8b8d98' }} className="text-xs">valor atual</div>
                           </div>
