@@ -242,52 +242,6 @@ function InputMoeda({ value, onChange, placeholder }: { value: string; onChange:
   )
 }
 
-const MESES_SELETOR = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
-
-// Seletor de data por dia/mês/ano (em vez do calendário nativo do navegador).
-// Facilita escolher datas retroativas (contratos antigos) sem precisar navegar
-// mês a mês num calendário. anoInicio/anoFim definem o intervalo de anos exibido.
-function SeletorData({ value, onChange, anoInicio = 2015, anoFim }: {
-  value: string
-  onChange: (v: string) => void
-  anoInicio?: number
-  anoFim?: number
-}) {
-  const anoMax = anoFim || (new Date().getFullYear() + 5)
-  const [ano, mes, dia] = value ? value.split('-').map(Number) : [undefined, undefined, undefined]
-
-  const anos = []
-  for (let a = anoMax; a >= anoInicio; a--) anos.push(a)
-
-  const diasNoMes = (ano && mes) ? new Date(ano, mes, 0).getDate() : 31
-  const dias = Array.from({ length: diasNoMes }, (_, i) => i + 1)
-
-  function atualizar(novoDia?: number, novoMes?: number, novoAno?: number) {
-    const d = novoDia ?? dia
-    const m = novoMes ?? mes
-    const a = novoAno ?? ano
-    if (!d || !m || !a) { onChange(''); return }
-    onChange(`${a}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`)
-  }
-
-  return (
-    <div className="grid grid-cols-3 gap-2">
-      <select className="input" value={dia || ''} onChange={e => atualizar(Number(e.target.value), undefined, undefined)}>
-        <option value="">Dia</option>
-        {dias.map(d => <option key={d} value={d}>{d}</option>)}
-      </select>
-      <select className="input" value={mes || ''} onChange={e => atualizar(undefined, Number(e.target.value), undefined)}>
-        <option value="">Mês</option>
-        {MESES_SELETOR.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
-      </select>
-      <select className="input" value={ano || ''} onChange={e => atualizar(undefined, undefined, Number(e.target.value))}>
-        <option value="">Ano</option>
-        {anos.map(a => <option key={a} value={a}>{a}</option>)}
-      </select>
-    </div>
-  )
-}
-
 const formVazio = {
   id:'', numero:'', tipo:'locacao_residencial',
   imovel_id:'', locatario_id:'', locador_id:'', taxa_administracao: '10',
@@ -749,8 +703,11 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
           </div>
 
           <div><label className="label">Data início *</label>
-            <SeletorData value={form.data_inicio}
-              onChange={novaData => {
+            <input className="input" type="date" required value={form.data_inicio}
+              min="2020-01-01"
+              style={{ colorScheme: 'dark' }}
+              onChange={e => {
+                const novaData = e.target.value
                 const mesInicio = novaData ? String(new Date(novaData + 'T00:00:00').getMonth() + 1) : form.mes_reajuste
                 setForm(f => ({
                   ...f,
