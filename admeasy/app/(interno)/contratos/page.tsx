@@ -1084,15 +1084,15 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
                       <div className="flex items-center gap-1.5 flex-shrink-0">
                         {doc ? (
                           <a href={doc.url} target="_blank" rel="noopener noreferrer" download
-                            style={{ background: '#22c55e', color: '#fff' }}
-                            className="p-1.5 rounded-md flex items-center justify-center" title="Baixar">
-                            <Download size={13} />
+                            style={{ background: '#f0fdf4', color: '#16a34a' }}
+                            className="text-xs px-2.5 py-1 rounded-md flex items-center gap-1 font-medium">
+                            <Download size={11} />Enviado
                           </a>
                         ) : (
                           <label
-                            style={{ color: '#5b9bf5', border: '0.5px solid #1e3a5f' }}
+                            style={{ color: '#8b9ab4', border: '0.5px solid #2a2f3a' }}
                             className="text-xs px-2.5 py-1 rounded-md cursor-pointer flex items-center gap-1 font-medium">
-                            <Upload size={10} />{uploadandoKit === cat.chave ? 'Enviando...' : 'Enviar'}
+                            <Upload size={10} />{uploadandoKit === cat.chave ? 'Enviando...' : 'Pendente'}
                             <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png"
                               onChange={e => { const f = e.target.files?.[0]; if (f) uploadKit(cat.chave, f); e.target.value = '' }} />
                           </label>
