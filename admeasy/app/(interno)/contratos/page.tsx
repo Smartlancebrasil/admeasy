@@ -4,9 +4,7 @@ import { useEffect, useState } from 'react'
 import AppLayout from '@/components/layout/AppLayout'
 import { supabase } from '@/lib/supabase'
 import { FileText, Plus, X, AlertTriangle, Edit2, FileDown, UserPlus, Upload, Trash2, Hourglass, CheckCircle2 } from 'lucide-react'
-import { useOrganization } from '@/lib/OrganizationContext'
 import { registrarLog } from '@/lib/logs'
-import { useRouter } from 'next/navigation'
 
 const ORG_ID = '00000000-0000-0000-0000-000000000001'
 
@@ -37,13 +35,23 @@ type Contrato = {
   imovel_id?: string
   locatario_id?: string
   locador_id?: string
+  fiador_id?: string
   taxa_administracao?: number
   honorarios_aplicavel?: boolean
   valor_honorarios?: number
+  foro?: string
+  apolice_incendio_numero?: string
+  apolice_incendio_valor?: number
+  forma_recebimento_caucao?: string
+  pix_recebimento_caucao?: string
+  banco_recebimento_caucao?: string
+  agencia_recebimento_caucao?: string
+  conta_recebimento_caucao?: string
   dados_qualificacao?: any
   imovel?: any
   locatario?: any
   locador?: any
+  fiador?: any
 }
 
 type Parte = {
@@ -51,23 +59,22 @@ type Parte = {
   estado_civil: string; endereco: string; nacionalidade: string
 }
 
-type ClienteCompleto = {
-  id: string; nome: string; cpf?: string; rg?: string; profissao?: string
-  estado_civil?: string; telefone?: string
-  endereco?: string; bairro?: string; cidade?: string; estado?: string
-}
-
 type Documento = { nome: string; url: string; tipo: string; created_at: string }
+
+// Categorias fixas do "kit" de documentos assinados, exibido na tela de
+// consulta (somente leitura) do contrato — depois de gerado o PDF.
+const KIT_CATEGORIAS: { chave: string; label: string; somenteGarantia?: string }[] = [
+  { chave: 'contrato_assinado', label: 'Contrato de locação assinado' },
+  { chave: 'laudo_vistoria', label: 'Laudo de vistoria assinado' },
+  { chave: 'termo_entrega_chaves', label: 'Termo de entrega de chaves' },
+  { chave: 'comprovante_caucao', label: 'Comprovante de pagamento da caução', somenteGarantia: 'caucao' },
+  { chave: 'apolice_seguro_fianca', label: 'Apólice do seguro fiança assinado', somenteGarantia: 'seguro_fianca' },
+]
 
 const ESTADO_CIVIL_LABEL: Record<string, string> = {
   solteiro: 'solteiro(a)', casado: 'casado(a)', divorciado: 'divorciado(a)',
   viuvo: 'viúvo(a)', separado: 'separado(a)', uniao_estavel: 'em união estável',
 }
-
-function partePadrao(): Parte {
-  return { nome: '', cpf: '', rg: '', profissao: '', estado_civil: 'solteiro', endereco: '', nacionalidade: 'brasileiro(a)' }
-}
-
 
 type SelectOpt = { id: string; titulo?: string; nome?: string; valor_aluguel?: number; valor_condominio?: number; valor_iptu?: number; taxa_administracao?: number; tipo?: string; categoria?: string; finalidade?: string; codigo?: string; endereco?: string; bairro?: string; cidade?: string; estado?: string; cpf?: string; rg?: string; profissao?: string; estado_civil?: string; telefone?: string; chave_pix?: string }
 
@@ -211,64 +218,6 @@ function dataExtenso(dateStr: string): string {
   return `${d.getDate()} de ${mesesL[d.getMonth()]} de ${d.getFullYear()}`
 }
 
-function ModalSelecionarParte({ clientes, titulo, onSelecionar, onCadastrarManual, onFechar }: {
-  clientes: ClienteCompleto[]; titulo: string; onSelecionar: (c: ClienteCompleto) => void; onCadastrarManual: () => void; onFechar: () => void
-}) {
-  const [busca, setBusca] = useState('')
-  const termo = busca.toLowerCase()
-  const filtrados = clientes.filter(c =>
-    c.nome.toLowerCase().includes(termo) ||
-    (c.cpf || '').includes(termo) ||
-    (c.telefone || '').includes(termo)
-  )
-
-  return (
-    <div style={{ background: 'rgba(0,0,0,0.7)' }} className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto" onClick={onFechar}>
-      <div style={{ background: '#0d1b2e', border: '0.5px solid #1e3a5f' }} className="rounded-2xl p-5 w-full max-w-lg my-6" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-4">
-          <h3 style={{ color: '#f4f4f3' }} className="text-sm font-semibold">Selecionar {titulo}</h3>
-          <button onClick={onFechar} style={{ color: '#8b9ab4' }}><X size={16} /></button>
-        </div>
-        <input
-          className="input mb-3"
-          autoFocus
-          value={busca}
-          onChange={e => setBusca(e.target.value)}
-          placeholder="Buscar por nome, CPF ou telefone..."
-        />
-        <button
-          type="button"
-          onClick={() => { onCadastrarManual(); onFechar() }}
-          style={{ background: '#1A7FFF' }}
-          className="w-full py-2.5 rounded-xl text-white text-sm font-semibold mb-3 flex items-center justify-center gap-2"
-        >
-          <Plus size={14} />Cadastrar novo {titulo.toLowerCase()}
-        </button>
-        <div style={{ maxHeight: '50vh', overflowY: 'auto' }} className="space-y-1.5">
-          {filtrados.length === 0 && (
-            <p style={{ color: '#8b9ab4' }} className="text-sm text-center py-6">Nenhum cliente encontrado.</p>
-          )}
-          {filtrados.map(c => (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => { onSelecionar(c); onFechar() }}
-              style={{ background: '#16243a', border: '0.5px solid #1e3a5f' }}
-              className="w-full text-left rounded-xl p-3 hover:opacity-80 transition-opacity"
-            >
-              <p style={{ color: '#f4f4f3' }} className="text-sm font-medium truncate">{c.nome}</p>
-              <p style={{ color: '#8b9ab4' }} className="text-xs truncate">
-                {[c.cpf, c.telefone].filter(Boolean).join(' · ') || 'Sem CPF/telefone cadastrado'}
-              </p>
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-
 function ModalSelecionarCliente({ clientes, titulo, onSelecionar, onAdicionarNovo, onFechar }: {
   clientes: SelectOpt[]; titulo: string; onSelecionar: (cliente: SelectOpt) => void; onAdicionarNovo: () => void; onFechar: () => void
 }) {
@@ -404,7 +353,7 @@ function InputMoeda({ value, onChange, placeholder }: { value: string; onChange:
 
 const formVazio = {
   id:'', numero:'', tipo:'locacao_residencial',
-  imovel_id:'', locatario_id:'', locador_id:'', taxa_administracao: '10',
+  imovel_id:'', locatario_id:'', locador_id:'', fiador_id:'', taxa_administracao: '10',
   honorarios_aplicavel: '', valor_honorarios: '',
   data_inicio:'', data_fim:'', duracao_meses:'',
   valor_mensal:'', valor_condominio:'', valor_iptu:'', valor_seguro_incendio:'', valor_seguro_fianca:'',
@@ -415,6 +364,11 @@ const formVazio = {
   multa_rescisao_locatario:'3', multa_rescisao_locador:'',
   aviso_previo_dias:'30', tipo_garantia:'',
   status:'ativo', observacoes:'',
+  // Campos usados só no texto do PDF do contrato (opcionais, ficam na própria tela principal)
+  foro: 'Santana, São Paulo, SP',
+  apolice_incendio_numero: '', apolice_incendio_valor: '',
+  forma_recebimento_caucao: 'pix',
+  pix_recebimento_caucao: '', banco_recebimento_caucao: '', agencia_recebimento_caucao: '', conta_recebimento_caucao: '',
 }
 
 const clienteFormVazio: Record<string, string> = {
@@ -439,7 +393,7 @@ const UFs_MODAL = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','
  * reaproveitando o mesmo endereco do titular (sem duplicidade).
  */
 function ModalClienteCompleto({ tipoParte, onSalvar, onFechar }: {
-  tipoParte: 'locatario' | 'locador'
+  tipoParte: 'locatario' | 'locador' | 'fiador'
   onSalvar: (cliente: { id: string; nome: string }) => void
   onFechar: () => void
 }) {
@@ -627,16 +581,16 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
   inicial: Record<string,string>
   imoveis: SelectOpt[]
   clientes: SelectOpt[]
-  onSalvar: (dados: Record<string,string>, irParaPdf?: boolean) => Promise<void>
+  onSalvar: (dados: Record<string,string>) => Promise<void>
   onCancelar: () => void
   onClienteCriado: () => Promise<void>
 }) {
   const [form, setForm] = useState(inicial)
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
-  const [modalCadastro, setModalCadastro] = useState<'locatario' | 'locador' | null>(null)
+  const [modalCadastro, setModalCadastro] = useState<'locatario' | 'locador' | 'fiador' | null>(null)
   const [modalImovel, setModalImovel] = useState(false)
-  const [modalSelecionarCliente, setModalSelecionarCliente] = useState<'locatario' | 'locador' | null>(null)
+  const [modalSelecionarCliente, setModalSelecionarCliente] = useState<'locatario' | 'locador' | 'fiador' | null>(null)
   const set = (c: string) => (e: React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) => setForm(f=>({...f,[c]:e.target.value}))
 
   const caucaoVal = parseFloat(form.valor_caucao) || 0
@@ -651,504 +605,16 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
     (form.tipo_garantia === 'seguro_fianca' ? (parseFloat(form.valor_seguro_fianca) || 0) : 0) +
     (parcelasNum > 1 ? valorParcela : 0)
 
-  const [irParaPdfFlag, setIrParaPdfFlag] = useState(false)
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault(); setSalvando(true); setErro('')
-    try { await onSalvar(form, irParaPdfFlag) } catch(err: any) { setErro(err.message) }
+    try { await onSalvar(form) } catch(err: any) { setErro(err.message) }
     setSalvando(false)
-    setIrParaPdfFlag(false)
   }
 
-  async function aoCriarCliente(campo: 'locatario_id' | 'locador_id', cliente: { id: string; nome: string }) {
+  async function aoCriarCliente(campo: 'locatario_id' | 'locador_id' | 'fiador_id', cliente: { id: string; nome: string }) {
     await onClienteCriado()
     setForm(f => ({ ...f, [campo]: cliente.id }))
     setModalCadastro(null)
-  }
-
-  // ── Qualificação para o contrato / gerar PDF (só aparece depois de salvo) ──
-  const { organizacao } = useOrganization()
-  const [org, setOrg] = useState<any>(null)
-  const [locadores, setLocadores] = useState<Parte[]>([partePadrao()])
-  const [locatarios, setLocatarios] = useState<Parte[]>([partePadrao()])
-  const [fiadores, setFiadores] = useState<Parte[]>([partePadrao()])
-  const [modalSelecionarParte, setModalSelecionarParte] = useState<{ tipo: 'Locador' | 'Locatário' | 'Fiador'; index: number } | null>(null)
-  const [numApoliceIncendio, setNumApoliceIncendio] = useState('')
-  const [valorApoliceIncendio, setValorApoliceIncendio] = useState('')
-  const [numApoliceSeguroFianca, setNumApoliceSeguroFianca] = useState('')
-  const [pixLocador, setPixLocador] = useState('')
-  const [formaRecebimento, setFormaRecebimento] = useState<'pix' | 'transferencia'>('pix')
-  const [bancoLocador, setBancoLocador] = useState('')
-  const [agenciaLocador, setAgenciaLocador] = useState('')
-  const [contaLocador, setContaLocador] = useState('')
-  const [descricaoImovel, setDescricaoImovel] = useState('')
-  const [foro, setForo] = useState('Santana, São Paulo, SP')
-  const [moradores, setMoradores] = useState('')
-  const [editandoParcelamento, setEditandoParcelamento] = useState(false)
-  const [documentos, setDocumentos] = useState<Documento[]>([])
-  const [uploadando, setUploadando] = useState(false)
-  const [salvandoQualificacao, setSalvandoQualificacao] = useState(false)
-  const [gerandoPdf, setGerandoPdf] = useState(false)
-  const [popupEstado, setPopupEstado] = useState<'processando' | 'sucesso' | null>(null)
-  const [loadingQualificacao, setLoadingQualificacao] = useState(true)
-  const [sucessoQualificacao, setSucessoQualificacao] = useState('')
-
-  useEffect(() => {
-    if (inicial.id && organizacao?.id) carregarQualificacao()
-  }, [inicial.id, organizacao?.id])
-
-  async function carregarQualificacao() {
-    setLoadingQualificacao(true)
-    const { data: c } = await supabase
-      .from('contratos')
-      .select('*, imovel:imoveis(*), locatario:clientes!contratos_locatario_id_fkey(*), locador:clientes!contratos_locador_id_fkey(*)')
-      .eq('id', inicial.id).single()
-
-    if (c) {
-      if (c.apolice_fianca) setNumApoliceSeguroFianca(c.apolice_fianca)
-      const loc = Array.isArray(c.locador) ? c.locador[0] : c.locador
-      const locat = Array.isArray(c.locatario) ? c.locatario[0] : c.locatario
-      if (loc) {
-        setLocadores([{
-          nome: loc.nome || '', cpf: loc.cpf || '', rg: loc.rg || '',
-          profissao: loc.profissao || '', estado_civil: loc.estado_civil || 'solteiro',
-          endereco: [loc.endereco, loc.numero, loc.bairro, loc.cidade].filter(Boolean).join(', '),
-          nacionalidade: loc.nacionalidade || 'brasileiro(a)',
-        }])
-        if (loc.chave_pix) setPixLocador(loc.chave_pix)
-      }
-      if (locat) setLocatarios([{
-        nome: locat.nome || '', cpf: locat.cpf || '', rg: locat.rg || '',
-        profissao: locat.profissao || '', estado_civil: locat.estado_civil || 'solteiro',
-        endereco: [locat.endereco, locat.numero, locat.bairro, locat.cidade].filter(Boolean).join(', '),
-        nacionalidade: locat.nacionalidade || 'brasileiro(a)',
-      }])
-      const im = Array.isArray(c.imovel) ? c.imovel[0] : c.imovel
-      if (im) {
-        const tiposLabel: Record<string, string> = {
-          apartamento: 'apartamento', casa: 'casa', sala_comercial: 'sala comercial', salao_comercial: 'salão comercial',
-          loja: 'loja', galpao: 'galpão', terreno: 'terreno', rural: 'imóvel rural',
-        }
-        let desc = `${tiposLabel[im.tipo] || 'imóvel'} situado à ${im.endereco || ''}, ${im.numero || ''}${im.complemento ? `, ${im.complemento}` : ''}, ${im.bairro || ''}, CEP ${im.cep || ''}, ${im.cidade || ''}/${im.estado || ''}`
-        if (im.descricao) desc += `. ${im.descricao}`
-        setDescricaoImovel(desc)
-      }
-
-      const dq = c.dados_qualificacao
-      if (dq) {
-        const locadorMesmaPessoa = !loc?.cpf || !dq.locadores?.[0]?.cpf || loc.cpf === dq.locadores[0].cpf
-        const locatarioMesmaPessoa = !locat?.cpf || !dq.locatarios?.[0]?.cpf || locat.cpf === dq.locatarios[0].cpf
-        if (dq.locadores?.length && locadorMesmaPessoa) setLocadores(dq.locadores)
-        if (dq.locatarios?.length && locatarioMesmaPessoa) setLocatarios(dq.locatarios)
-        if (dq.fiadores?.length) setFiadores(dq.fiadores)
-        if (dq.pixLocador !== undefined) setPixLocador(dq.pixLocador)
-        if (dq.formaRecebimento !== undefined) setFormaRecebimento(dq.formaRecebimento)
-        if (dq.bancoLocador !== undefined) setBancoLocador(dq.bancoLocador)
-        if (dq.agenciaLocador !== undefined) setAgenciaLocador(dq.agenciaLocador)
-        if (dq.contaLocador !== undefined) setContaLocador(dq.contaLocador)
-        if (dq.numApoliceIncendio !== undefined) setNumApoliceIncendio(dq.numApoliceIncendio)
-        if (dq.valorApoliceIncendio !== undefined) setValorApoliceIncendio(dq.valorApoliceIncendio)
-        if (dq.numApoliceSeguroFianca !== undefined) setNumApoliceSeguroFianca(dq.numApoliceSeguroFianca)
-        if (dq.descricaoImovel) setDescricaoImovel(dq.descricaoImovel)
-        if (dq.foro) setForo(dq.foro)
-        if (dq.moradores !== undefined) setMoradores(dq.moradores)
-      }
-    }
-
-    const { data: o } = await supabase.from('organizations').select('*').eq('id', organizacao!.id).single()
-    if (o) setOrg(o)
-
-    await carregarDocumentos()
-    setLoadingQualificacao(false)
-  }
-
-  async function carregarDocumentos() {
-    const { data: files } = await supabase.storage.from('documentos').list(`contratos/${inicial.id}`)
-    if (files) {
-      const docs = files.map(f => ({
-        nome: f.name,
-        url: supabase.storage.from('documentos').getPublicUrl(`contratos/${inicial.id}/${f.name}`).data.publicUrl,
-        tipo: f.name.split('.').pop() || '',
-        created_at: f.created_at || '',
-      }))
-      setDocumentos(docs)
-    }
-  }
-
-  async function uploadDocumento(file: File) {
-    setUploadando(true)
-    const path = `contratos/${inicial.id}/${Date.now()}_${file.name}`
-    const { error } = await supabase.storage.from('documentos').upload(path, file, { upsert: true })
-    if (!error) {
-      setSucessoQualificacao('Documento enviado!')
-      setTimeout(() => setSucessoQualificacao(''), 3000)
-      carregarDocumentos()
-    }
-    setUploadando(false)
-  }
-
-  async function excluirDocumento(nome: string) {
-    if (!confirm('Excluir este documento?')) return
-    await supabase.storage.from('documentos').remove([`contratos/${inicial.id}/${nome}`])
-    carregarDocumentos()
-  }
-
-  function setParte(arr: Parte[], setArr: (v: Parte[]) => void, idx: number, campo: keyof Parte, valor: string) {
-    setArr(arr.map((p, i) => i === idx ? { ...p, [campo]: valor } : p))
-  }
-
-  async function salvarQualificacao(): Promise<boolean> {
-    const { error: erroSalvar } = await supabase.from('contratos').update({
-      dados_qualificacao: {
-        locadores, locatarios, fiadores,
-        pixLocador, formaRecebimento, bancoLocador, agenciaLocador, contaLocador,
-        numApoliceIncendio, valorApoliceIncendio, numApoliceSeguroFianca,
-        descricaoImovel, foro, moradores,
-      },
-    }).eq('id', inicial.id)
-
-    if (erroSalvar) {
-      alert('Erro ao salvar: ' + erroSalvar.message)
-      return false
-    }
-    return true
-  }
-
-  async function salvarDadosQualificacao() {
-    setSalvandoQualificacao(true)
-    const ok = await salvarQualificacao()
-    setSalvandoQualificacao(false)
-    if (ok) {
-      setSucessoQualificacao('Dados salvos!')
-      setTimeout(() => setSucessoQualificacao(''), 3000)
-    }
-  }
-
-  function renderPartes(partes: Parte[], setPartes: (v: Parte[]) => void, titulo: string) {
-    return (
-      <div className="card mb-4">
-        <div className="flex items-center justify-between mb-4">
-          <h3 style={{ color: '#f4f4f3' }} className="text-sm font-semibold">{titulo}</h3>
-          <button type="button" onClick={() => setModalSelecionarParte({ tipo: titulo as 'Locador' | 'Locatário' | 'Fiador', index: -1 })}
-            style={{ color: '#5b9bf5', border: '0.5px solid #1e3a5f' }} className="btn btn-sm">
-            <Plus size={12} />Adicionar {titulo.toLowerCase()}
-          </button>
-        </div>
-        {partes.map((p, i) => (
-          <div key={i} style={i > 0 ? { borderTop: '0.5px solid #1e3a5f', paddingTop: '1rem', marginTop: '1rem' } : {}}>
-            <div className="flex items-center justify-between mb-2">
-              <span style={{ color: '#8b9ab4' }} className="text-xs font-medium">{partes.length > 1 ? `${titulo} ${i + 1}` : titulo}</span>
-              <div className="flex items-center gap-3">
-                {!p.nome && (
-                  <button type="button" onClick={() => setModalSelecionarParte({ tipo: titulo as 'Locador' | 'Locatário' | 'Fiador', index: i })}
-                    style={{ color: '#5b9bf5' }} className="text-xs font-medium hover:underline">
-                    Selecionar da lista
-                  </button>
-                )}
-                {partes.length > 1 && (
-                  <button onClick={() => setPartes(partes.filter((_, pi) => pi !== i))}
-                    style={{ color: '#8b9ab4' }} className="hover:text-red-500"><X size={13} /></button>
-                )}
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="col-span-2"><label className="label">Nome completo *</label>
-                <input className="input" value={p.nome} onChange={e => setParte(partes, setPartes, i, 'nome', e.target.value)} /></div>
-              <div><label className="label">Nacionalidade</label>
-                <input className="input" value={p.nacionalidade} onChange={e => setParte(partes, setPartes, i, 'nacionalidade', e.target.value)} /></div>
-              <div><label className="label">Estado civil</label>
-                <select className="input" value={p.estado_civil} onChange={e => setParte(partes, setPartes, i, 'estado_civil', e.target.value)}>
-                  {[
-                    ['solteiro', 'Solteiro(a)'], ['casado', 'Casado(a)'], ['divorciado', 'Divorciado(a)'],
-                    ['viuvo', 'Viúvo(a)'], ['separado', 'Separado(a)'], ['uniao_estavel', 'União estável'],
-                  ].map(([valor, label]) => <option key={valor} value={valor}>{label}</option>)}
-                </select></div>
-              <div><label className="label">Profissão</label>
-                <input className="input" value={p.profissao} onChange={e => setParte(partes, setPartes, i, 'profissao', e.target.value)} /></div>
-              <div><label className="label">RG</label>
-                <input className="input" value={p.rg} onChange={e => setParte(partes, setPartes, i, 'rg', e.target.value)} /></div>
-              <div><label className="label">CPF</label>
-                <input className="input" value={p.cpf} onChange={e => setParte(partes, setPartes, i, 'cpf', e.target.value)} /></div>
-              <div className="col-span-2"><label className="label">Endereço completo</label>
-                <input className="input" value={p.endereco} onChange={e => setParte(partes, setPartes, i, 'endereco', e.target.value)} placeholder="Rua, número, bairro, cidade/UF, CEP" /></div>
-            </div>
-          </div>
-        ))}
-      </div>
-    )
-  }
-
-  async function gerarPdf() {
-    if (!inicial.id || !org) return
-    setGerandoPdf(true)
-    await salvarQualificacao()
-
-    const tituloTipo: Record<string, string> = {
-      locacao_residencial: 'LOCAÇÃO RESIDENCIAL',
-      locacao_comercial: 'LOCAÇÃO COMERCIAL',
-      compra_venda: 'COMPRA E VENDA',
-    }
-    const tituloContrato = tituloTipo[form.tipo] || 'LOCAÇÃO'
-
-    const { default: jsPDF } = await import('jspdf')
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
-
-    const W = 210
-    const ML = 20
-    const MR = W - 20
-    const CW = MR - ML
-    let y = 20
-    let pagNum = 1
-
-    function addRodape() {
-      doc.setFontSize(7).setTextColor(130)
-      doc.text(`${org.nome} — CNPJ: ${org.cnpj || ''} — CRECI: ${org.creci || ''}`, W / 2, 288, { align: 'center' })
-      doc.text(`Página ${pagNum}`, MR, 288, { align: 'right' })
-      doc.setTextColor(0)
-    }
-    function novaPag() { addRodape(); doc.addPage(); pagNum++; y = 20 }
-    function checkY(n: number) { if (y + n > 275) novaPag() }
-    function titulo(texto: string) {
-      checkY(12)
-      doc.setFontSize(9).setFont('helvetica', 'bold')
-      doc.setFillColor(240, 240, 240)
-      doc.rect(ML, y - 3, CW, 7, 'F')
-      doc.text(texto, W / 2, y + 1, { align: 'center' })
-      doc.setFont('helvetica', 'normal')
-      y += 9
-    }
-    function clausula(num: string, texto: string) {
-      const numLinhas = doc.splitTextToSize(texto, CW).length
-      checkY(numLinhas * 5 + 8)
-      doc.setFontSize(9).setFont('helvetica', 'bold')
-      doc.text(`CLÁUSULA ${num} –`, ML, y)
-      y += 5
-      doc.setFont('helvetica', 'normal')
-      doc.text(texto, ML, y, { maxWidth: CW, align: 'justify' })
-      y += numLinhas * 5
-      y += 2
-    }
-    function paragrafo(texto: string, negrito = false) {
-      const numLinhas = doc.splitTextToSize(texto, CW).length
-      checkY(numLinhas * 5 + 3)
-      doc.setFontSize(9).setFont('helvetica', negrito ? 'bold' : 'normal')
-      doc.text(texto, ML, y, { maxWidth: CW, align: negrito ? 'left' : 'justify' })
-      y += numLinhas * 5
-      y += 1
-      doc.setFont('helvetica', 'normal')
-    }
-    function paragrafoRotulo(texto: string) {
-      const match = texto.match(/^(PARÁGRAFO[^:-]*[:-])\s*([\s\S]*)$/)
-      if (!match) { paragrafo(texto, false); return }
-      const [, rotulo, resto] = match
-      doc.setFontSize(9).setFont('helvetica', 'bold')
-      const rotuloLinhas = doc.splitTextToSize(rotulo, CW)
-      const larguraRotulo = doc.getTextWidth(rotuloLinhas[0])
-      doc.setFont('helvetica', 'normal')
-      const restoNaMesmaLinha = doc.splitTextToSize(resto, CW - larguraRotulo - 2)[0] || ''
-      const restoRestante = resto.slice(restoNaMesmaLinha.length).trim()
-      const numLinhasRestante = restoRestante ? doc.splitTextToSize(restoRestante, CW).length : 0
-      checkY(5 + numLinhasRestante * 5 + 3)
-      doc.setFont('helvetica', 'bold')
-      doc.text(rotulo, ML, y)
-      doc.setFont('helvetica', 'normal')
-      doc.text(restoNaMesmaLinha, ML + larguraRotulo + 1.5, y)
-      y += 5
-      if (restoRestante) {
-        doc.text(restoRestante, ML, y, { maxWidth: CW, align: 'justify' })
-        y += numLinhasRestante * 5
-      }
-      y += 1
-    }
-
-    if (org.logo_url) {
-      try {
-        const ext = org.logo_url.split('.').pop()?.toLowerCase().split('?')[0]
-        const formato = ext === 'png' ? 'PNG' : ext === 'webp' ? 'WEBP' : 'JPEG'
-        const logoW = 30, logoH = 16
-        doc.addImage(org.logo_url, formato, (W - logoW) / 2, y, logoW, logoH)
-        y += logoH + 9
-      } catch {}
-    }
-    doc.setFontSize(16).setFont('helvetica', 'bold')
-    doc.text(`CONTRATO DE ${tituloContrato}`, W / 2, y, { align: 'center' })
-    y += 10
-    doc.setDrawColor(0).line(ML, y, MR, y); y += 6
-
-    titulo('DO LOCADOR')
-    locadores.forEach(l => {
-      paragrafo(`${l.nome.toUpperCase()}, ${l.nacionalidade}, ${ESTADO_CIVIL_LABEL[l.estado_civil] || l.estado_civil}, ${l.profissao}, portador(a) da Cédula de identidade RG nº ${l.rg} e inscrito(a) no CPF/MF sob nº ${l.cpf}, residente e domiciliado(a) à ${l.endereco}, doravante denominado(a) LOCADOR(A).`)
-    })
-    y += 2
-
-    titulo('DO LOCATÁRIO')
-    locatarios.forEach(l => {
-      paragrafo(`${l.nome.toUpperCase()}, ${l.nacionalidade}, ${ESTADO_CIVIL_LABEL[l.estado_civil] || l.estado_civil}, ${l.profissao}, portador(a) da Cédula de identidade RG nº ${l.rg} e inscrito(a) no CPF sob nº ${l.cpf}, residente e domiciliado(a) à ${l.endereco}, doravante denominado(a) LOCATÁRIO(A).`)
-    })
-    if (moradores) paragrafo(`MORADORES ADICIONAIS: ${moradores}`)
-    y += 2
-
-    paragrafo('Têm entre si contratado, pelo presente instrumento e na melhor forma de direito, a locação do imóvel abaixo referido, sob as cláusulas e condições seguintes:')
-    y += 2
-
-    titulo('IMÓVEL OBJETO DA LOCAÇÃO')
-    paragrafo(`O imóvel objeto do presente instrumento: ${descricaoImovel}.`)
-    paragrafo('Ficam os LOCATÁRIO(A) cientificados de que deverão proceder à ligação e transferência junto à SABESP (água) e ENEL (Luz) imediatamente, após assinatura deste instrumento e antes de ter posse das chaves do imóvel, sob pena de ter o fornecimento do serviço interrompido.')
-    paragrafo('A NÃO TRANSFERÊNCIA SERÁ CONSIDERADA INFRAÇÃO CONTRATUAL.', true)
-    y += 2
-
-    const mesesQtd = mesesEntre(form.data_inicio, form.data_fim)
-    titulo('DOS PRAZOS')
-    clausula('1ª', `A presente locação é pelo prazo de ${mesesQtd} meses, a contar do dia ${dataExtenso(form.data_inicio)} e término em ${dataExtenso(form.data_fim)}.`)
-    clausula('2ª', `Vencido o prazo mencionado na CLÁUSULA 1ª e, pretendendo os LOCATÁRIOS entregarem as chaves do imóvel, deverão dar ciência à LOCADORA, POR ESCRITO, e com antecedência mínima de 30 (Trinta) dias de sua deliberação, ficando de qualquer modo, obrigados ao pagamento do aluguel e encargos até a efetiva rescisão do contrato.`)
-    const dataInicioObj = new Date(form.data_inicio + 'T00:00:00')
-    const diaInicioMes = dataInicioObj.getDate()
-    clausula('3ª', `A locação não iniciada no ${diaInicioMes}º (${diaOrdinalExtenso(diaInicioMes)}) dia do mês terá o acerto dos dias decorridos até o final do mesmo, se houver.`)
-
-    titulo('DO ALUGUEL')
-    const valorMensal = parseFloat(form.valor_mensal) || 0
-    const diaVencimento = new Date(form.data_inicio + 'T00:00:00').getDate()
-    let textoAluguel = `O aluguel mensal inicial é de ${formatVal(valorMensal)} (${valorExtenso(valorMensal)}), ficando ainda a cargo dos LOCATÁRIOS os demais encargos da locação`
-    if (form.valor_condominio) textoAluguel += `, o condomínio no valor de ${formatVal(parseFloat(form.valor_condominio))} (${valorExtenso(parseFloat(form.valor_condominio))})`
-    if (form.valor_iptu) textoAluguel += `, IPTU no valor de ${formatVal(parseFloat(form.valor_iptu))}`
-    textoAluguel += `, devendo ser pagos até o dia ${diaVencimento} (${diaExtenso(diaVencimento)}) do mês subsequente ao vencido, diretamente à ${org.nome}, na qualidade de ADMINISTRADORA, CNPJ: ${org.cnpj || ''}, CRECI ${org.creci || ''}, estabelecida à ${org.endereco || ''}, ${org.numero || ''} – ${org.bairro || ''} – ${org.cidade || ''}, através de boleto bancário, que posteriormente será repassado ao LOCADOR.`
-    clausula('4ª', textoAluguel)
-    paragrafoRotulo(`PARÁGRAFO PRIMEIRO: O aluguel será reajustado anualmente na exata proporção da variação acumulada do Índice ${form.indice_reajuste?.toUpperCase() || 'IGP-M'}.`)
-    paragrafoRotulo(`PARÁGRAFO SEGUNDO: Esse mesmo critério de reajuste será sempre observado, independentemente de aviso ou interpelação, a cada período de 12 (doze) meses até quando finda ou rescinda a locação.`)
-    paragrafoRotulo(`PARÁGRAFO TERCEIRO: Em caso de variação negativa do índice adotado, o valor do aluguel será mantido, não sendo aplicado qualquer decréscimo.`)
-    clausula('5ª', `Os aluguéis que não forem pagos na data do vencimento terão acréscimo de 10% (DEZ POR CENTO) DE MULTA e, mais 2% (DOIS POR CENTO) AO MÊS DE JUROS DE MORA e ficarão sujeitos a correção monetária, com base na variação do IPCA do IBGE.`)
-    clausula('6ª', `Os aluguéis em atraso por mais de 30 (trinta) dias serão encaminhados ao Departamento Jurídico, ficando os LOCATÁRIOS sujeitos a todas as penalidades legais e contratuais, bem como à obrigação de ressarcir integralmente o LOCADOR por quaisquer despesas judiciais ou extrajudiciais.`)
-
-    titulo('DA GARANTIA')
-    const caucaoValPdf = parseFloat(form.valor_caucao) || 0
-    const parcelasNumPdf = parseInt(form.parcelas_caucao) || 1
-    if (form.tipo_garantia === 'fiador') {
-      const f = fiadores[0]
-      if (f?.nome) {
-        const fiadoresTexto = fiadores.filter(fi => fi.nome)
-          .map(fi => `${fi.nome.toUpperCase()}, ${fi.nacionalidade}, ${ESTADO_CIVIL_LABEL[fi.estado_civil] || fi.estado_civil}, ${fi.profissao}, portador(a) do RG nº ${fi.rg} e inscrito(a) no CPF sob nº ${fi.cpf}, residente à ${fi.endereco}`)
-          .join('; e ')
-        clausula('7ª', `O presente contrato será garantido por fiança, prestada por ${fiadoresTexto}, doravante denominado(a) ${fiadores.length > 1 ? 'FIADORES' : 'FIADOR(A)'}, que se responsabiliza(m) solidária e integralmente por todas as obrigações assumidas pelos LOCATÁRIOS neste contrato, inclusive aluguéis, encargos, multas e demais despesas, até a efetiva entrega das chaves.`)
-      } else {
-        clausula('7ª', `O presente contrato será garantido por fiança, cujo(s) fiador(es) responsabiliza(m)-se solidária e integralmente por todas as obrigações assumidas pelos LOCATÁRIOS neste contrato, conforme qualificação a ser anexada a este instrumento.`)
-      }
-    } else if (form.tipo_garantia === 'titulo_capitalizacao') {
-      clausula('7ª', `O presente contrato será garantido por título de capitalização, vinculado em favor do LOCADOR pelo valor correspondente a, no mínimo, ${caucaoValPdf > 0 ? formatVal(caucaoValPdf) : '3 (três) aluguéis'}, permanecendo caução até a efetiva entrega das chaves e quitação de todas as obrigações do presente contrato.`)
-    } else if (form.tipo_garantia === 'seguro_fianca' && numApoliceSeguroFianca) {
-      clausula('7ª', `O presente contrato será garantido por seguro fiança, Apólice nº ${numApoliceSeguroFianca}, no valor de ${form.valor_seguro_fianca ? formatVal(parseFloat(form.valor_seguro_fianca)) : 'conforme apólice'}.`)
-    } else if (form.tipo_garantia === 'caucao' || !form.tipo_garantia) {
-      if (caucaoValPdf > 0) {
-        let textoCaucao = `Fica acordado que o presente contrato será garantido por meio de caução no valor de ${formatVal(caucaoValPdf)} (${valorExtenso(caucaoValPdf)})`
-        if (parcelasNumPdf > 1) {
-          const parcVal = caucaoValPdf / parcelasNumPdf
-          textoCaucao += `, a ser pago em ${parcelasNumPdf} (${parcelasNumPdf === 2 ? 'duas' : parcelasNumPdf === 3 ? 'três' : parcelasNumPdf === 4 ? 'quatro' : 'cinco'}) parcelas de ${formatVal(parcVal)}`
-          const datas = []
-          for (let i = 0; i < parcelasNumPdf; i++) {
-            const d = new Date(form.data_inicio + 'T00:00:00')
-            d.setMonth(d.getMonth() + i)
-            datas.push(d.toLocaleDateString('pt-BR'))
-          }
-          textoCaucao += `, com vencimentos em: ${datas.join(', ')}`
-        } else {
-          textoCaucao += `, a ser pago à vista`
-        }
-        if (formaRecebimento === 'pix' && pixLocador) {
-          textoCaucao += `, através de transferência via PIX: ${pixLocador} em nome de ${locadores[0]?.nome || 'LOCADOR'}`
-        } else if (formaRecebimento === 'transferencia' && (bancoLocador || contaLocador)) {
-          textoCaucao += `, através de transferência bancária para: Banco ${bancoLocador || '____'}, Agência ${agenciaLocador || '____'}, Conta ${contaLocador || '____'}, em nome de ${locadores[0]?.nome || 'LOCADOR'}`
-        }
-        textoCaucao += `.`
-        clausula('7ª', textoCaucao)
-      }
-    }
-
-    titulo('DAS OBRIGAÇÕES DOS LOCATÁRIOS')
-    clausula('8ª', `Os LOCATÁRIOS obrigam-se pela mais perfeita conservação do imóvel locado, mantendo-o sempre em perfeitas condições de habitabilidade, respondendo por todos os prejuízos provenientes de qualquer estrago ou má conservação.`)
-    clausula('9ª', `Os LOCATÁRIOS ficam obrigados a servir-se do imóvel para o uso convencionado, qual seja sua residência e de sua família, não podendo cedê-lo ou sublocá-lo no todo ou em parte, nem transferir o presente contrato sem autorização expressa e por escrito do LOCADOR.`)
-    clausula('10ª', `Os LOCATÁRIOS ficam obrigados a comunicar por escrito à ADMINISTRADORA, o surgimento de qualquer dano ou defeito que a este incumba à reparação.`)
-    clausula('11ª', `Caberá aos LOCATÁRIOS o cumprimento, dentro dos prazos legais, de quaisquer multas ou intimações por infrações das leis, portarias ou regulamentos vigentes.`)
-
-    titulo('DA UTILIZAÇÃO DO IMÓVEL')
-    clausula('12ª', `A presente locação destina-se restritivamente ao uso do imóvel para fins ${form.tipo === 'locacao_comercial' ? 'comerciais' : 'residenciais'}, não podendo os LOCATÁRIOS transferir, sublocar, ceder ou emprestar ou usá-lo de forma diferente do previsto, salvo autorização expressa do LOCADOR.`)
-    paragrafoRotulo(`PARÁGRAFO PRIMEIRO – Vistorias. Faculta ao LOCADOR a realização de vistorias esporádicas no imóvel, em dia e hora a serem combinados, a fim de averiguar o estado de conservação do imóvel.`)
-    paragrafoRotulo(`PARÁGRAFO SEGUNDO – Devolução. Finda ou rescindida a locação, os LOCATÁRIOS obrigam-se a devolverem o imóvel nas mesmas condições em que recebeu.`)
-
-    titulo('DO CONSERTO, REPARO E MANUTENÇÃO')
-    clausula('13ª', `Os LOCATÁRIOS precisam comunicar previamente à ADMINISTRADORA, todo e qualquer conserto, reparo ou manutenção que o imóvel locado venha necessitar internamente.`)
-
-    titulo('DAS BENFEITORIAS')
-    clausula('14ª', `As benfeitorias necessárias e úteis serão indenizáveis, desde que autorizadas pelo LOCADOR, por escrito, e avisadas com antecedência.`)
-    clausula('15ª', `Se qualquer benfeitoria ou modificação for feita sem o consentimento prévio e por escrito do LOCADOR, este poderá exigir que tudo seja reposto no seu estado primitivo.`)
-
-    titulo('DO DIREITO DE PREFERÊNCIA')
-    clausula('16ª', `O LOCADOR, em qualquer tempo, poderá alienar o imóvel, mesmo durante a vigência do contrato de locação, devendo notificar os LOCATÁRIOS para que possam exercer seu direito de preferência na aquisição do imóvel, no prazo de 30 dias.`)
-
-    titulo('DA RESCISÃO DA LOCAÇÃO')
-    clausula('17ª', `Finda a locação, caberá aos LOCATÁRIOS entregar o imóvel locado em perfeitas condições de habitabilidade.`)
-    clausula('18ª', `A presente locação poderá ser rescindida, se assim convier ao LOCADOR, no caso de infração por parte dos LOCATÁRIOS de qualquer das cláusulas contratuais.`)
-    clausula('19ª', `Caso ocorra a devolução do imóvel antes do prazo de ${mesesQtd} meses, seja pela entrega voluntária ou por decisão judicial, facultará ao LOCADOR cobrar dos LOCATÁRIOS o pagamento de multa compensatória, proporcionalmente ao tempo de contrato não cumprido.`)
-    clausula('20ª', `Durante o prazo estipulado para a duração do contrato, não poderá o LOCADOR reaver o imóvel alugado, salvo se por mútuo acordo (Conforme art. 9º da Lei 8.245/91).`)
-
-    titulo('DA RESTITUIÇÃO DAS CHAVES')
-    clausula('21ª', `A restituição das chaves ao LOCADOR ou seus procuradores, só poderá ser feita pelos LOCATÁRIOS estando o imóvel nas condições em que foi locado.`)
-    clausula('22ª', `Para entrega do imóvel, ficarão os LOCATÁRIOS obrigados a acompanhar o laudo de vistoria rescisório e apresentar todos os recibos de condomínio e IPTU devidamente quitados.`)
-
-    titulo('DO SEGURO')
-    let textoSeguro = `Os LOCATÁRIOS farão um seguro do imóvel contra incêndio em companhia de sua livre escolha, durante todo o prazo da locação, correndo por conta dos LOCATÁRIOS todas as despesas decorrentes`
-    if (numApoliceIncendio) textoSeguro += `. Apólice nº ${numApoliceIncendio}${valorApoliceIncendio ? ', valor: ' + formatVal(parseFloat(valorApoliceIncendio)) : ''}`
-    clausula('27ª', textoSeguro + '.')
-
-    titulo('DAS DISPOSIÇÕES FINAIS')
-    clausula('28ª', `As partes contratantes obrigam-se por si, seus herdeiros e sucessores ao fiel cumprimento de todas as cláusulas e condições ora pactuadas.`)
-    clausula('29ª', `É expressamente vedado qualquer depósito em conta do LOCADOR sem prévia autorização da ADMINISTRADORA.`)
-    clausula('30ª', `Os LOCATÁRIOS declaram estar cientes de que serão integralmente responsáveis pelo pagamento de quaisquer multas ou penalidades decorrentes de sua conduta durante a vigência da locação.`)
-    clausula('31ª', `Não será facultativa a nenhuma das partes o direito de arrependimento, devendo ambas as partes cumprir fielmente o disposto nas cláusulas aqui avençadas.`)
-    paragrafoRotulo(`PARÁGRAFO ÚNICO – FORO. Elegem a Comarca de ${foro} como foro para dirimir quaisquer questões, desistindo de qualquer outro, por mais privilegiado que seja.`)
-
-    checkY(80)
-    y += 5
-    doc.setDrawColor(200).line(ML, y, MR, y); y += 8
-    doc.setFontSize(9)
-    doc.text(`${org.cidade || 'São Paulo'}, ${dataExtenso(new Date().toISOString().split('T')[0])}`, MR, y, { align: 'right' })
-    y += 14
-
-    const colW = (MR - ML - 5) / 2
-    const assinaturas = [
-      ...locadores.map((l, i) => ({ label: i === 0 ? 'LOCADOR(A)' : `LOCADOR(A) ${i + 1}`, nome: l.nome })),
-      ...locatarios.map((l, i) => ({ label: i === 0 ? 'LOCATÁRIO(A)' : `LOCATÁRIO(A) ${i + 1}`, nome: l.nome })),
-      { label: 'ADMINISTRADORA', nome: org.nome },
-      { label: 'TESTEMUNHA 1', nome: '' },
-      { label: 'TESTEMUNHA 2', nome: '' },
-    ]
-    for (let i = 0; i < assinaturas.length; i += 2) {
-      checkY(22)
-      const a1 = assinaturas[i]; const a2 = assinaturas[i + 1]
-      doc.setDrawColor(0).line(ML, y, ML + colW, y)
-      if (a2) doc.line(ML + colW + 5, y, MR, y)
-      y += 4
-      doc.setFontSize(8)
-      doc.text(a1.label, ML, y)
-      doc.setFontSize(7).setTextColor(100)
-      doc.text(a1.nome, ML, y + 4)
-      if (a2) {
-        doc.setFontSize(8).setTextColor(0)
-        doc.text(a2.label, ML + colW + 5, y)
-        doc.setFontSize(7).setTextColor(100)
-        doc.text(a2.nome, ML + colW + 5, y + 4)
-      }
-      doc.setTextColor(0)
-      y += 18
-    }
-    addRodape()
-
-    setPopupEstado('processando')
-    await new Promise(resolve => setTimeout(resolve, 3000))
-    setPopupEstado('sucesso')
-    await new Promise(resolve => setTimeout(resolve, 3000))
-
-    doc.save(`contrato-${form.numero}-${form.data_inicio}.pdf`)
-    setPopupEstado(null)
-    setGerandoPdf(false)
   }
 
   return (
@@ -1275,6 +741,17 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
               })}
             </div>
           </div>
+
+          {form.tipo_garantia === 'fiador' && (
+            <div className="sm:col-span-2">
+              <label className="label">Fiador *</label>
+              <button type="button" onClick={() => setModalSelecionarCliente('fiador')}
+                style={{ background: '#060D1C', border: '0.5px solid #1e3a5f', color: form.fiador_id ? '#f4f4f3' : '#5b5e6b' }}
+                className="input text-left">
+                {form.fiador_id ? clientes.find(c => c.id === form.fiador_id)?.nome : 'Clique para selecionar ou cadastrar'}
+              </button>
+            </div>
+          )}
 
           {form.tipo_garantia === 'caucao' && (
             <div className="sm:col-span-2">
@@ -1405,6 +882,44 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
             </select></div>
           <div className="sm:col-span-2"><label className="label">Observações</label>
             <textarea className="input" rows={2} value={form.observacoes} onChange={set('observacoes')} /></div>
+
+          <div className="sm:col-span-2 mt-2" style={{ borderTop: '0.5px solid #1e3a5f', paddingTop: '1rem' }}>
+            <p style={{ color: '#8b9ab4' }} className="text-xs font-medium mb-3">Dados para o contrato (PDF) — opcional</p>
+          </div>
+
+          <div><label className="label">Foro eleito</label>
+            <input className="input" value={form.foro} onChange={set('foro')} /></div>
+
+          <div><label className="label">Nº apólice — Seguro incêndio</label>
+            <input className="input" value={form.apolice_incendio_numero} onChange={set('apolice_incendio_numero')} /></div>
+          <div><label className="label">Valor anual — Seguro incêndio (R$)</label>
+            <InputMoeda value={form.apolice_incendio_valor} onChange={v => setForm(f => ({...f, apolice_incendio_valor: v}))} /></div>
+
+          {(parseFloat(form.valor_caucao) || 0) > 0 && (
+            <div className="sm:col-span-2">
+              <label className="label">Forma de recebimento da caução pelo locador</label>
+              <div className="flex gap-2 mb-2">
+                {[['pix', 'PIX'], ['transferencia', 'Transferência bancária']].map(([valor, label]) => (
+                  <button key={valor} type="button" onClick={() => setForm(f => ({...f, forma_recebimento_caucao: valor}))}
+                    style={form.forma_recebimento_caucao === valor
+                      ? { background: '#2563eb', color: '#fff', border: '0.5px solid #2563eb' }
+                      : { border: '0.5px solid #2a2f3a', color: '#a8aab5' }}
+                    className="flex-1 py-2 rounded-lg text-xs font-medium transition-all">
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {form.forma_recebimento_caucao === 'transferencia' ? (
+                <div className="grid grid-cols-3 gap-2">
+                  <input className="input" value={form.banco_recebimento_caucao} onChange={set('banco_recebimento_caucao')} placeholder="Banco" />
+                  <input className="input" value={form.agencia_recebimento_caucao} onChange={set('agencia_recebimento_caucao')} placeholder="Agência" />
+                  <input className="input" value={form.conta_recebimento_caucao} onChange={set('conta_recebimento_caucao')} placeholder="Conta" />
+                </div>
+              ) : (
+                <input className="input" value={form.pix_recebimento_caucao} onChange={set('pix_recebimento_caucao')} placeholder="Chave PIX (em branco usa a do cadastro do locador)" />
+              )}
+            </div>
+          )}
         </div>
         <div className="flex gap-2 mt-4">
           <button type="submit" disabled={salvando} className="btn btn-primary">
@@ -1414,151 +929,25 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
         </div>
       </form>
 
-      {inicial.id && (
-        <div style={{ borderTop: '2px solid #1e3a5f' }} className="mt-6 pt-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 style={{ color: '#f4f4f3' }} className="text-sm font-semibold">Qualificação e geração do contrato</h2>
-            {sucessoQualificacao && <span style={{ color: '#3fb950' }} className="text-xs">{sucessoQualificacao}</span>}
-          </div>
-
-          {loadingQualificacao ? (
-            <p style={{ color: '#8b8d98' }} className="text-sm text-center py-8">Carregando dados de qualificação...</p>
-          ) : (
-            <>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-                {renderPartes(locadores, setLocadores, 'Locador')}
-                {renderPartes(locatarios, setLocatarios, 'Locatário')}
-              </div>
-              {form.tipo_garantia === 'fiador' && renderPartes(fiadores, setFiadores, 'Fiador')}
-
-              <div className="card mb-4">
-                <label className="label">Moradores adicionais (para cadastro/biometria)</label>
-                <textarea className="input" rows={2} value={moradores} onChange={e => setMoradores(e.target.value)}
-                  placeholder="Nome — CPF: 000.000.000-00" />
-              </div>
-
-              <div className="card mb-4">
-                <h3 style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-4">Descrição do imóvel</h3>
-                <textarea className="input" rows={3} value={descricaoImovel} onChange={e => setDescricaoImovel(e.target.value)}
-                  placeholder="Ex: apartamento situado à Rua X, nº 00, Bairro, CEP, contendo 2 dormitórios..." />
-              </div>
-
-              {(parseFloat(form.valor_caucao) || 0) > 0 && (
-                <div className="card mb-4">
-                  <h3 style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-4">Recebimento da caução</h3>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="label">Forma de recebimento pelo locador</label>
-                      <div className="flex gap-2 mb-2">
-                        {[['pix', 'PIX'], ['transferencia', 'Transferência bancária']].map(([valor, label]) => (
-                          <button key={valor} type="button" onClick={() => setFormaRecebimento(valor as 'pix' | 'transferencia')}
-                            style={formaRecebimento === valor
-                              ? { background: '#2563eb', color: '#fff', border: '0.5px solid #2563eb' }
-                              : { border: '0.5px solid #2a2f3a', color: '#a8aab5' }}
-                            className="flex-1 py-2 rounded-lg text-xs font-medium transition-all">
-                            {label}
-                          </button>
-                        ))}
-                      </div>
-                      {formaRecebimento === 'pix' ? (
-                        <input className="input" value={pixLocador} onChange={e => setPixLocador(e.target.value)} placeholder="CPF, CNPJ ou chave PIX" />
-                      ) : (
-                        <div className="grid grid-cols-3 gap-2">
-                          <input className="input" value={bancoLocador} onChange={e => setBancoLocador(e.target.value)} placeholder="Banco" />
-                          <input className="input" value={agenciaLocador} onChange={e => setAgenciaLocador(e.target.value)} placeholder="Agência" />
-                          <input className="input" value={contaLocador} onChange={e => setContaLocador(e.target.value)} placeholder="Conta" />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div className="card mb-4">
-                <h3 style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-4">Apólices e seguros</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div><label className="label">Nº Apólice — Seguro incêndio</label>
-                    <input className="input" value={numApoliceIncendio} onChange={e => setNumApoliceIncendio(e.target.value)} /></div>
-                  <div><label className="label">Valor anual — Seguro incêndio</label>
-                    <input className="input" type="number" step="0.01" value={valorApoliceIncendio} onChange={e => setValorApoliceIncendio(e.target.value)} placeholder="0,00" /></div>
-                  {form.tipo_garantia === 'seguro_fianca' && (
-                    <div><label className="label">Nº Apólice — Seguro fiança</label>
-                      <input className="input" value={numApoliceSeguroFianca} onChange={e => setNumApoliceSeguroFianca(e.target.value)} /></div>
-                  )}
-                </div>
-              </div>
-
-              <div className="card mb-4">
-                <label className="label">Foro eleito</label>
-                <input className="input" value={foro} onChange={e => setForo(e.target.value)} />
-              </div>
-
-              <div className="card mb-4">
-                <h3 style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-4">Documentos do contrato</h3>
-                <p style={{ color: '#8b9ab4' }} className="text-xs mb-3">Apólices, comprovantes de caução, RGs, CPFs e demais documentos.</p>
-                <label style={{ border: '1.5px dashed #1e3a5f' }} className="flex flex-col items-center justify-center w-full h-24 rounded-lg cursor-pointer hover:border-blue-500 transition-all mb-4">
-                  <Upload size={20} style={{ color: '#8b9ab4' }} className="mb-1" />
-                  <span style={{ color: '#8b9ab4' }} className="text-xs">{uploadando ? 'Enviando...' : 'Clique para enviar documento (PDF, JPG, PNG)'}</span>
-                  <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                    onChange={e => { const f = e.target.files?.[0]; if (f) uploadDocumento(f); e.target.value = '' }} />
-                </label>
-                {documentos.length === 0 ? (
-                  <p style={{ color: '#8b9ab4' }} className="text-xs text-center py-4">Nenhum documento anexado ainda</p>
-                ) : (
-                  <div className="space-y-2">
-                    {documentos.map((d, i) => (
-                      <div key={i} style={{ background: '#16243a', border: '0.5px solid #1e3a5f' }} className="flex items-center justify-between p-2 rounded-lg">
-                        <div className="flex items-center gap-2">
-                          <span style={{ background: '#0d1b2e', color: '#5b9bf5' }} className="text-xs px-1.5 py-0.5 rounded uppercase font-medium">{d.tipo}</span>
-                          <span style={{ color: '#f4f4f3' }} className="text-xs">{d.nome}</span>
-                        </div>
-                        <div className="flex gap-2">
-                          <a href={d.url} target="_blank" rel="noopener noreferrer" style={{ color: '#5b9bf5' }} className="btn btn-sm text-xs">Ver</a>
-                          <button onClick={() => excluirDocumento(d.nome)} style={{ color: '#ef4444' }} className="btn btn-sm">
-                            <Trash2 size={11} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="flex gap-2 mb-6">
-                <button type="button" onClick={salvarDadosQualificacao} disabled={salvandoQualificacao || gerandoPdf}
-                  style={{ background: '#3fb950', color: '#fff', border: 'none' }}
-                  className="btn flex-1 justify-center">
-                  {salvandoQualificacao ? 'Salvando...' : 'Salvar qualificação'}
-                </button>
-                <button type="button" onClick={gerarPdf} disabled={gerandoPdf || salvandoQualificacao}
-                  style={{ background: '#2563eb', color: '#fff', border: 'none' }}
-                  className="btn flex-1 justify-center">
-                  {gerandoPdf ? 'Gerando...' : 'Finalizar Contrato (Gerar PDF)'}
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
       {modalCadastro && (
         <ModalClienteCompleto
           tipoParte={modalCadastro}
           onFechar={() => setModalCadastro(null)}
-          onSalvar={(cliente) => aoCriarCliente(modalCadastro === 'locatario' ? 'locatario_id' : 'locador_id', cliente)}
+          onSalvar={(cliente) => aoCriarCliente(
+            modalCadastro === 'locatario' ? 'locatario_id' : modalCadastro === 'locador' ? 'locador_id' : 'fiador_id',
+            cliente,
+          )}
         />
       )}
 
       {modalSelecionarCliente && (
         <ModalSelecionarCliente
           clientes={clientes}
-          titulo={modalSelecionarCliente === 'locatario' ? 'locatário' : 'locador'}
+          titulo={modalSelecionarCliente === 'locatario' ? 'locatário' : modalSelecionarCliente === 'locador' ? 'locador' : 'fiador'}
           onFechar={() => setModalSelecionarCliente(null)}
           onSelecionar={(cliente) => {
-            setForm(f => ({
-              ...f,
-              [modalSelecionarCliente === 'locatario' ? 'locatario_id' : 'locador_id']: cliente.id,
-            }))
+            const campo = modalSelecionarCliente === 'locatario' ? 'locatario_id' : modalSelecionarCliente === 'locador' ? 'locador_id' : 'fiador_id'
+            setForm(f => ({ ...f, [campo]: cliente.id }))
           }}
           onAdicionarNovo={() => {
             const tipo = modalSelecionarCliente
@@ -1583,42 +972,477 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
           }}
         />
       )}
+    </div>
+  )
+}
 
-      {modalSelecionarParte && (
-        <ModalSelecionarParte
-          clientes={clientes.map(c => ({ ...c, nome: c.nome || '' })) as ClienteCompleto[]}
-          titulo={modalSelecionarParte.tipo}
-          onFechar={() => setModalSelecionarParte(null)}
-          onCadastrarManual={() => {
-            const { tipo, index } = modalSelecionarParte
-            const arr = tipo === 'Locador' ? locadores : tipo === 'Locatário' ? locatarios : fiadores
-            const setArr = tipo === 'Locador' ? setLocadores : tipo === 'Locatário' ? setLocatarios : setFiadores
-            if (index === -1) {
-              const soUmVazio = arr.length === 1 && !arr[0].nome
-              setArr(soUmVazio ? arr : [...arr, partePadrao()])
-            }
-          }}
-          onSelecionar={(cliente) => {
-            const { tipo, index } = modalSelecionarParte
-            const arr = tipo === 'Locador' ? locadores : tipo === 'Locatário' ? locatarios : fiadores
-            const setArr = tipo === 'Locador' ? setLocadores : tipo === 'Locatário' ? setLocatarios : setFiadores
-            const enderecoCompleto = [cliente.endereco, cliente.bairro, cliente.cidade].filter(Boolean).join(', ')
-            const novaParte: Parte = {
-              nome: cliente.nome || '', cpf: cliente.cpf || '', rg: cliente.rg || '',
-              profissao: cliente.profissao || '', estado_civil: cliente.estado_civil || 'solteiro',
-              endereco: enderecoCompleto, nacionalidade: 'brasileiro(a)',
-            }
-            if (index === -1) {
-              const soUmVazio = arr.length === 1 && !arr[0].nome
-              setArr(soUmVazio ? [novaParte] : [...arr, novaParte])
-            } else {
-              setArr(arr.map((p, i) => i === index ? novaParte : p))
-            }
-          }}
-        />
-      )}
+function clienteParaParte(cli: any): Parte {
+  return {
+    nome: cli?.nome || '',
+    cpf: cli?.cpf || '',
+    rg: cli?.rg || '',
+    profissao: cli?.profissao || '',
+    estado_civil: cli?.estado_civil || 'solteiro',
+    endereco: [cli?.endereco, cli?.numero, cli?.bairro, cli?.cidade].filter(Boolean).join(', '),
+    nacionalidade: cli?.nacionalidade || 'brasileiro(a)',
+  }
+}
 
-      {(popupEstado === 'processando' || popupEstado === 'sucesso') && (
+function descricaoImovelAuto(im: any): string {
+  if (!im) return ''
+  const tiposLabel: Record<string, string> = {
+    apartamento: 'apartamento', casa: 'casa', sala_comercial: 'sala comercial', salao_comercial: 'salão comercial',
+    loja: 'loja', galpao: 'galpão', terreno: 'terreno', rural: 'imóvel rural',
+  }
+  let desc = `${tiposLabel[im.tipo] || 'imóvel'} situado à ${im.endereco || ''}, ${im.numero || ''}${im.complemento ? `, ${im.complemento}` : ''}, ${im.bairro || ''}, CEP ${im.cep || ''}, ${im.cidade || ''}/${im.estado || ''}`
+  if (im.descricao) desc += `. ${im.descricao}`
+  return desc
+}
+
+/** Retorna a lista de campos essenciais que faltam no cadastro de uma parte, para o aviso antes de gerar o PDF. */
+function camposFaltantes(cli: any, label: string): string[] {
+  if (!cli) return [`cadastro do ${label}`]
+  const faltando: string[] = []
+  if (!cli.cpf) faltando.push(`CPF do ${label}`)
+  if (!cli.rg) faltando.push(`RG do ${label}`)
+  if (!cli.endereco) faltando.push(`endereço do ${label}`)
+  return faltando
+}
+
+/**
+ * Busca os dados completos do contrato (imóvel, locatário, locador, fiador) direto do banco
+ * e monta o PDF do contrato — sem nenhuma tela intermediária de qualificação, usando sempre
+ * o que já está cadastrado. Chamada direto pelo botão "Gerar Contrato" da lista.
+ */
+async function gerarContratoPdf(contratoId: string, onEstado: (e: 'processando' | 'sucesso' | null) => void) {
+  const { data: c } = await supabase
+    .from('contratos')
+    .select('*, imovel:imoveis(*), locatario:clientes!contratos_locatario_id_fkey(*), locador:clientes!contratos_locador_id_fkey(*), fiador:clientes!contratos_fiador_id_fkey(*)')
+    .eq('id', contratoId).single()
+
+  if (!c) { alert('Não foi possível carregar os dados do contrato.'); return }
+
+  const { data: org } = await supabase.from('organizations').select('*').eq('id', ORG_ID).single()
+  if (!org) { alert('Não foi possível carregar os dados da imobiliária.'); return }
+
+  const locadores: Parte[] = [clienteParaParte(c.locador)]
+  const locatarios: Parte[] = [clienteParaParte(c.locatario)]
+  const fiadores: Parte[] = c.tipo_garantia === 'fiador' && c.fiador ? [clienteParaParte(c.fiador)] : []
+  const descricaoImovel = descricaoImovelAuto(c.imovel)
+  const foro = c.foro || 'Santana, São Paulo, SP'
+  const numApoliceIncendio = c.apolice_incendio_numero || ''
+  const valorApoliceIncendio = c.apolice_incendio_valor != null ? String(c.apolice_incendio_valor) : ''
+  const numApoliceSeguroFianca = c.apolice_fianca || ''
+  const formaRecebimento = c.forma_recebimento_caucao || 'pix'
+  const pixLocador = c.pix_recebimento_caucao || c.locador?.chave_pix || ''
+  const bancoLocador = c.banco_recebimento_caucao || ''
+  const agenciaLocador = c.agencia_recebimento_caucao || ''
+  const contaLocador = c.conta_recebimento_caucao || ''
+  const form = c // reaproveita os nomes de campo do contrato (numero, data_inicio, valor_mensal etc.)
+
+  const tituloTipo: Record<string, string> = {
+    locacao_residencial: 'LOCAÇÃO RESIDENCIAL',
+    locacao_comercial: 'LOCAÇÃO COMERCIAL',
+    compra_venda: 'COMPRA E VENDA',
+  }
+  const tituloContrato = tituloTipo[form.tipo] || 'LOCAÇÃO'
+
+  const { default: jsPDF } = await import('jspdf')
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+
+  const W = 210
+  const ML = 20
+  const MR = W - 20
+  const CW = MR - ML
+  let y = 20
+  let pagNum = 1
+
+  function addRodape() {
+    doc.setFontSize(7).setTextColor(130)
+    doc.text(`${org.nome} — CNPJ: ${org.cnpj || ''} — CRECI: ${org.creci || ''}`, W / 2, 288, { align: 'center' })
+    doc.text(`Página ${pagNum}`, MR, 288, { align: 'right' })
+    doc.setTextColor(0)
+  }
+  function novaPag() { addRodape(); doc.addPage(); pagNum++; y = 20 }
+  function checkY(n: number) { if (y + n > 275) novaPag() }
+  function titulo(texto: string) {
+    checkY(12)
+    doc.setFontSize(9).setFont('helvetica', 'bold')
+    doc.setFillColor(240, 240, 240)
+    doc.rect(ML, y - 3, CW, 7, 'F')
+    doc.text(texto, W / 2, y + 1, { align: 'center' })
+    doc.setFont('helvetica', 'normal')
+    y += 9
+  }
+  function clausula(num: string, texto: string) {
+    const numLinhas = doc.splitTextToSize(texto, CW).length
+    checkY(numLinhas * 5 + 8)
+    doc.setFontSize(9).setFont('helvetica', 'bold')
+    doc.text(`CLÁUSULA ${num} –`, ML, y)
+    y += 5
+    doc.setFont('helvetica', 'normal')
+    doc.text(texto, ML, y, { maxWidth: CW, align: 'justify' })
+    y += numLinhas * 5
+    y += 2
+  }
+  function paragrafo(texto: string, negrito = false) {
+    const numLinhas = doc.splitTextToSize(texto, CW).length
+    checkY(numLinhas * 5 + 3)
+    doc.setFontSize(9).setFont('helvetica', negrito ? 'bold' : 'normal')
+    doc.text(texto, ML, y, { maxWidth: CW, align: negrito ? 'left' : 'justify' })
+    y += numLinhas * 5
+    y += 1
+    doc.setFont('helvetica', 'normal')
+  }
+  function paragrafoRotulo(texto: string) {
+    const match = texto.match(/^(PARÁGRAFO[^:-]*[:-])\s*([\s\S]*)$/)
+    if (!match) { paragrafo(texto, false); return }
+    const [, rotulo, resto] = match
+    doc.setFontSize(9).setFont('helvetica', 'bold')
+    const rotuloLinhas = doc.splitTextToSize(rotulo, CW)
+    const larguraRotulo = doc.getTextWidth(rotuloLinhas[0])
+    doc.setFont('helvetica', 'normal')
+    const restoNaMesmaLinha = doc.splitTextToSize(resto, CW - larguraRotulo - 2)[0] || ''
+    const restoRestante = resto.slice(restoNaMesmaLinha.length).trim()
+    const numLinhasRestante = restoRestante ? doc.splitTextToSize(restoRestante, CW).length : 0
+    checkY(5 + numLinhasRestante * 5 + 3)
+    doc.setFont('helvetica', 'bold')
+    doc.text(rotulo, ML, y)
+    doc.setFont('helvetica', 'normal')
+    doc.text(restoNaMesmaLinha, ML + larguraRotulo + 1.5, y)
+    y += 5
+    if (restoRestante) {
+      doc.text(restoRestante, ML, y, { maxWidth: CW, align: 'justify' })
+      y += numLinhasRestante * 5
+    }
+    y += 1
+  }
+
+  if (org.logo_url) {
+    try {
+      const ext = org.logo_url.split('.').pop()?.toLowerCase().split('?')[0]
+      const formato = ext === 'png' ? 'PNG' : ext === 'webp' ? 'WEBP' : 'JPEG'
+      const logoW = 30, logoH = 16
+      doc.addImage(org.logo_url, formato, (W - logoW) / 2, y, logoW, logoH)
+      y += logoH + 9
+    } catch {}
+  }
+  doc.setFontSize(16).setFont('helvetica', 'bold')
+  doc.text(`CONTRATO DE ${tituloContrato}`, W / 2, y, { align: 'center' })
+  y += 10
+  doc.setDrawColor(0).line(ML, y, MR, y); y += 6
+
+  titulo('DO LOCADOR')
+  locadores.forEach(l => {
+    paragrafo(`${l.nome.toUpperCase()}, ${l.nacionalidade}, ${ESTADO_CIVIL_LABEL[l.estado_civil] || l.estado_civil}, ${l.profissao}, portador(a) da Cédula de identidade RG nº ${l.rg} e inscrito(a) no CPF/MF sob nº ${l.cpf}, residente e domiciliado(a) à ${l.endereco}, doravante denominado(a) LOCADOR(A).`)
+  })
+  y += 2
+
+  titulo('DO LOCATÁRIO')
+  locatarios.forEach(l => {
+    paragrafo(`${l.nome.toUpperCase()}, ${l.nacionalidade}, ${ESTADO_CIVIL_LABEL[l.estado_civil] || l.estado_civil}, ${l.profissao}, portador(a) da Cédula de identidade RG nº ${l.rg} e inscrito(a) no CPF sob nº ${l.cpf}, residente e domiciliado(a) à ${l.endereco}, doravante denominado(a) LOCATÁRIO(A).`)
+  })
+  y += 2
+
+  paragrafo('Têm entre si contratado, pelo presente instrumento e na melhor forma de direito, a locação do imóvel abaixo referido, sob as cláusulas e condições seguintes:')
+  y += 2
+
+  titulo('IMÓVEL OBJETO DA LOCAÇÃO')
+  paragrafo(`O imóvel objeto do presente instrumento: ${descricaoImovel}.`)
+  paragrafo('Ficam os LOCATÁRIO(A) cientificados de que deverão proceder à ligação e transferência junto à SABESP (água) e ENEL (Luz) imediatamente, após assinatura deste instrumento e antes de ter posse das chaves do imóvel, sob pena de ter o fornecimento do serviço interrompido.')
+  paragrafo('A NÃO TRANSFERÊNCIA SERÁ CONSIDERADA INFRAÇÃO CONTRATUAL.', true)
+  y += 2
+
+  const mesesQtd = mesesEntre(form.data_inicio, form.data_fim)
+  titulo('DOS PRAZOS')
+  clausula('1ª', `A presente locação é pelo prazo de ${mesesQtd} meses, a contar do dia ${dataExtenso(form.data_inicio)} e término em ${dataExtenso(form.data_fim)}.`)
+  clausula('2ª', `Vencido o prazo mencionado na CLÁUSULA 1ª e, pretendendo os LOCATÁRIOS entregarem as chaves do imóvel, deverão dar ciência à LOCADORA, POR ESCRITO, e com antecedência mínima de 30 (Trinta) dias de sua deliberação, ficando de qualquer modo, obrigados ao pagamento do aluguel e encargos até a efetiva rescisão do contrato.`)
+  const dataInicioObj = new Date(form.data_inicio + 'T00:00:00')
+  const diaInicioMes = dataInicioObj.getDate()
+  clausula('3ª', `A locação não iniciada no ${diaInicioMes}º (${diaOrdinalExtenso(diaInicioMes)}) dia do mês terá o acerto dos dias decorridos até o final do mesmo, se houver.`)
+
+  titulo('DO ALUGUEL')
+  const valorMensal = parseFloat(form.valor_mensal) || 0
+  const diaVencimento = new Date(form.data_inicio + 'T00:00:00').getDate()
+  let textoAluguel = `O aluguel mensal inicial é de ${formatVal(valorMensal)} (${valorExtenso(valorMensal)}), ficando ainda a cargo dos LOCATÁRIOS os demais encargos da locação`
+  if (form.valor_condominio) textoAluguel += `, o condomínio no valor de ${formatVal(parseFloat(form.valor_condominio))} (${valorExtenso(parseFloat(form.valor_condominio))})`
+  if (form.valor_iptu) textoAluguel += `, IPTU no valor de ${formatVal(parseFloat(form.valor_iptu))}`
+  textoAluguel += `, devendo ser pagos até o dia ${diaVencimento} (${diaExtenso(diaVencimento)}) do mês subsequente ao vencido, diretamente à ${org.nome}, na qualidade de ADMINISTRADORA, CNPJ: ${org.cnpj || ''}, CRECI ${org.creci || ''}, estabelecida à ${org.endereco || ''}, ${org.numero || ''} – ${org.bairro || ''} – ${org.cidade || ''}, através de boleto bancário, que posteriormente será repassado ao LOCADOR.`
+  clausula('4ª', textoAluguel)
+  paragrafoRotulo(`PARÁGRAFO PRIMEIRO: O aluguel será reajustado anualmente na exata proporção da variação acumulada do Índice ${form.indice_reajuste?.toUpperCase() || 'IGP-M'}.`)
+  paragrafoRotulo(`PARÁGRAFO SEGUNDO: Esse mesmo critério de reajuste será sempre observado, independentemente de aviso ou interpelação, a cada período de 12 (doze) meses até quando finda ou rescinda a locação.`)
+  paragrafoRotulo(`PARÁGRAFO TERCEIRO: Em caso de variação negativa do índice adotado, o valor do aluguel será mantido, não sendo aplicado qualquer decréscimo.`)
+  clausula('5ª', `Os aluguéis que não forem pagos na data do vencimento terão acréscimo de 10% (DEZ POR CENTO) DE MULTA e, mais 2% (DOIS POR CENTO) AO MÊS DE JUROS DE MORA e ficarão sujeitos a correção monetária, com base na variação do IPCA do IBGE.`)
+  clausula('6ª', `Os aluguéis em atraso por mais de 30 (trinta) dias serão encaminhados ao Departamento Jurídico, ficando os LOCATÁRIOS sujeitos a todas as penalidades legais e contratuais, bem como à obrigação de ressarcir integralmente o LOCADOR por quaisquer despesas judiciais ou extrajudiciais.`)
+
+  titulo('DA GARANTIA')
+  const caucaoValPdf = parseFloat(form.valor_caucao) || 0
+  const parcelasNumPdf = parseInt(form.parcelas_caucao) || 1
+  if (form.tipo_garantia === 'fiador') {
+    const f = fiadores[0]
+    if (f?.nome) {
+      const fiadoresTexto = fiadores.filter(fi => fi.nome)
+        .map(fi => `${fi.nome.toUpperCase()}, ${fi.nacionalidade}, ${ESTADO_CIVIL_LABEL[fi.estado_civil] || fi.estado_civil}, ${fi.profissao}, portador(a) do RG nº ${fi.rg} e inscrito(a) no CPF sob nº ${fi.cpf}, residente à ${fi.endereco}`)
+        .join('; e ')
+      clausula('7ª', `O presente contrato será garantido por fiança, prestada por ${fiadoresTexto}, doravante denominado(a) ${fiadores.length > 1 ? 'FIADORES' : 'FIADOR(A)'}, que se responsabiliza(m) solidária e integralmente por todas as obrigações assumidas pelos LOCATÁRIOS neste contrato, inclusive aluguéis, encargos, multas e demais despesas, até a efetiva entrega das chaves.`)
+    } else {
+      clausula('7ª', `O presente contrato será garantido por fiança, cujo(s) fiador(es) responsabiliza(m)-se solidária e integralmente por todas as obrigações assumidas pelos LOCATÁRIOS neste contrato, conforme qualificação a ser anexada a este instrumento.`)
+    }
+  } else if (form.tipo_garantia === 'titulo_capitalizacao') {
+    clausula('7ª', `O presente contrato será garantido por título de capitalização, vinculado em favor do LOCADOR pelo valor correspondente a, no mínimo, ${caucaoValPdf > 0 ? formatVal(caucaoValPdf) : '3 (três) aluguéis'}, permanecendo caução até a efetiva entrega das chaves e quitação de todas as obrigações do presente contrato.`)
+  } else if (form.tipo_garantia === 'seguro_fianca' && numApoliceSeguroFianca) {
+    clausula('7ª', `O presente contrato será garantido por seguro fiança, Apólice nº ${numApoliceSeguroFianca}, no valor de ${form.valor_seguro_fianca ? formatVal(parseFloat(form.valor_seguro_fianca)) : 'conforme apólice'}.`)
+  } else if (form.tipo_garantia === 'caucao' || !form.tipo_garantia) {
+    if (caucaoValPdf > 0) {
+      let textoCaucao = `Fica acordado que o presente contrato será garantido por meio de caução no valor de ${formatVal(caucaoValPdf)} (${valorExtenso(caucaoValPdf)})`
+      if (parcelasNumPdf > 1) {
+        const parcVal = caucaoValPdf / parcelasNumPdf
+        textoCaucao += `, a ser pago em ${parcelasNumPdf} (${parcelasNumPdf === 2 ? 'duas' : parcelasNumPdf === 3 ? 'três' : parcelasNumPdf === 4 ? 'quatro' : 'cinco'}) parcelas de ${formatVal(parcVal)}`
+        const datas = []
+        for (let i = 0; i < parcelasNumPdf; i++) {
+          const d = new Date(form.data_inicio + 'T00:00:00')
+          d.setMonth(d.getMonth() + i)
+          datas.push(d.toLocaleDateString('pt-BR'))
+        }
+        textoCaucao += `, com vencimentos em: ${datas.join(', ')}`
+      } else {
+        textoCaucao += `, a ser pago à vista`
+      }
+      if (formaRecebimento === 'pix' && pixLocador) {
+        textoCaucao += `, através de transferência via PIX: ${pixLocador} em nome de ${locadores[0]?.nome || 'LOCADOR'}`
+      } else if (formaRecebimento === 'transferencia' && (bancoLocador || contaLocador)) {
+        textoCaucao += `, através de transferência bancária para: Banco ${bancoLocador || '____'}, Agência ${agenciaLocador || '____'}, Conta ${contaLocador || '____'}, em nome de ${locadores[0]?.nome || 'LOCADOR'}`
+      }
+      textoCaucao += `.`
+      clausula('7ª', textoCaucao)
+    }
+  }
+
+  titulo('DAS OBRIGAÇÕES DOS LOCATÁRIOS')
+  clausula('8ª', `Os LOCATÁRIOS obrigam-se pela mais perfeita conservação do imóvel locado, mantendo-o sempre em perfeitas condições de habitabilidade, respondendo por todos os prejuízos provenientes de qualquer estrago ou má conservação.`)
+  clausula('9ª', `Os LOCATÁRIOS ficam obrigados a servir-se do imóvel para o uso convencionado, qual seja sua residência e de sua família, não podendo cedê-lo ou sublocá-lo no todo ou em parte, nem transferir o presente contrato sem autorização expressa e por escrito do LOCADOR.`)
+  clausula('10ª', `Os LOCATÁRIOS ficam obrigados a comunicar por escrito à ADMINISTRADORA, o surgimento de qualquer dano ou defeito que a este incumba à reparação.`)
+  clausula('11ª', `Caberá aos LOCATÁRIOS o cumprimento, dentro dos prazos legais, de quaisquer multas ou intimações por infrações das leis, portarias ou regulamentos vigentes.`)
+
+  titulo('DA UTILIZAÇÃO DO IMÓVEL')
+  clausula('12ª', `A presente locação destina-se restritivamente ao uso do imóvel para fins ${form.tipo === 'locacao_comercial' ? 'comerciais' : 'residenciais'}, não podendo os LOCATÁRIOS transferir, sublocar, ceder ou emprestar ou usá-lo de forma diferente do previsto, salvo autorização expressa do LOCADOR.`)
+  paragrafoRotulo(`PARÁGRAFO PRIMEIRO – Vistorias. Faculta ao LOCADOR a realização de vistorias esporádicas no imóvel, em dia e hora a serem combinados, a fim de averiguar o estado de conservação do imóvel.`)
+  paragrafoRotulo(`PARÁGRAFO SEGUNDO – Devolução. Finda ou rescindida a locação, os LOCATÁRIOS obrigam-se a devolverem o imóvel nas mesmas condições em que recebeu.`)
+
+  titulo('DO CONSERTO, REPARO E MANUTENÇÃO')
+  clausula('13ª', `Os LOCATÁRIOS precisam comunicar previamente à ADMINISTRADORA, todo e qualquer conserto, reparo ou manutenção que o imóvel locado venha necessitar internamente.`)
+
+  titulo('DAS BENFEITORIAS')
+  clausula('14ª', `As benfeitorias necessárias e úteis serão indenizáveis, desde que autorizadas pelo LOCADOR, por escrito, e avisadas com antecedência.`)
+  clausula('15ª', `Se qualquer benfeitoria ou modificação for feita sem o consentimento prévio e por escrito do LOCADOR, este poderá exigir que tudo seja reposto no seu estado primitivo.`)
+
+  titulo('DO DIREITO DE PREFERÊNCIA')
+  clausula('16ª', `O LOCADOR, em qualquer tempo, poderá alienar o imóvel, mesmo durante a vigência do contrato de locação, devendo notificar os LOCATÁRIOS para que possam exercer seu direito de preferência na aquisição do imóvel, no prazo de 30 dias.`)
+
+  titulo('DA RESCISÃO DA LOCAÇÃO')
+  clausula('17ª', `Finda a locação, caberá aos LOCATÁRIOS entregar o imóvel locado em perfeitas condições de habitabilidade.`)
+  clausula('18ª', `A presente locação poderá ser rescindida, se assim convier ao LOCADOR, no caso de infração por parte dos LOCATÁRIOS de qualquer das cláusulas contratuais.`)
+  clausula('19ª', `Caso ocorra a devolução do imóvel antes do prazo de ${mesesQtd} meses, seja pela entrega voluntária ou por decisão judicial, facultará ao LOCADOR cobrar dos LOCATÁRIOS o pagamento de multa compensatória, proporcionalmente ao tempo de contrato não cumprido.`)
+  clausula('20ª', `Durante o prazo estipulado para a duração do contrato, não poderá o LOCADOR reaver o imóvel alugado, salvo se por mútuo acordo (Conforme art. 9º da Lei 8.245/91).`)
+
+  titulo('DA RESTITUIÇÃO DAS CHAVES')
+  clausula('21ª', `A restituição das chaves ao LOCADOR ou seus procuradores, só poderá ser feita pelos LOCATÁRIOS estando o imóvel nas condições em que foi locado.`)
+  clausula('22ª', `Para entrega do imóvel, ficarão os LOCATÁRIOS obrigados a acompanhar o laudo de vistoria rescisório e apresentar todos os recibos de condomínio e IPTU devidamente quitados.`)
+
+  titulo('DO SEGURO')
+  let textoSeguro = `Os LOCATÁRIOS farão um seguro do imóvel contra incêndio em companhia de sua livre escolha, durante todo o prazo da locação, correndo por conta dos LOCATÁRIOS todas as despesas decorrentes`
+  if (numApoliceIncendio) textoSeguro += `. Apólice nº ${numApoliceIncendio}${valorApoliceIncendio ? ', valor: ' + formatVal(parseFloat(valorApoliceIncendio)) : ''}`
+  clausula('27ª', textoSeguro + '.')
+
+  titulo('DAS DISPOSIÇÕES FINAIS')
+  clausula('28ª', `As partes contratantes obrigam-se por si, seus herdeiros e sucessores ao fiel cumprimento de todas as cláusulas e condições ora pactuadas.`)
+  clausula('29ª', `É expressamente vedado qualquer depósito em conta do LOCADOR sem prévia autorização da ADMINISTRADORA.`)
+  clausula('30ª', `Os LOCATÁRIOS declaram estar cientes de que serão integralmente responsáveis pelo pagamento de quaisquer multas ou penalidades decorrentes de sua conduta durante a vigência da locação.`)
+  clausula('31ª', `Não será facultativa a nenhuma das partes o direito de arrependimento, devendo ambas as partes cumprir fielmente o disposto nas cláusulas aqui avençadas.`)
+  paragrafoRotulo(`PARÁGRAFO ÚNICO – FORO. Elegem a Comarca de ${foro} como foro para dirimir quaisquer questões, desistindo de qualquer outro, por mais privilegiado que seja.`)
+
+  checkY(80)
+  y += 5
+  doc.setDrawColor(200).line(ML, y, MR, y); y += 8
+  doc.setFontSize(9)
+  doc.text(`${org.cidade || 'São Paulo'}, ${dataExtenso(new Date().toISOString().split('T')[0])}`, MR, y, { align: 'right' })
+  y += 14
+
+  const colW = (MR - ML - 5) / 2
+  const assinaturas = [
+    ...locadores.map((l, i) => ({ label: i === 0 ? 'LOCADOR(A)' : `LOCADOR(A) ${i + 1}`, nome: l.nome })),
+    ...locatarios.map((l, i) => ({ label: i === 0 ? 'LOCATÁRIO(A)' : `LOCATÁRIO(A) ${i + 1}`, nome: l.nome })),
+    { label: 'ADMINISTRADORA', nome: org.nome },
+    { label: 'TESTEMUNHA 1', nome: '' },
+    { label: 'TESTEMUNHA 2', nome: '' },
+  ]
+  for (let i = 0; i < assinaturas.length; i += 2) {
+    checkY(22)
+    const a1 = assinaturas[i]; const a2 = assinaturas[i + 1]
+    doc.setDrawColor(0).line(ML, y, ML + colW, y)
+    if (a2) doc.line(ML + colW + 5, y, MR, y)
+    y += 4
+    doc.setFontSize(8)
+    doc.text(a1.label, ML, y)
+    doc.setFontSize(7).setTextColor(100)
+    doc.text(a1.nome, ML, y + 4)
+    if (a2) {
+      doc.setFontSize(8).setTextColor(0)
+      doc.text(a2.label, ML + colW + 5, y)
+      doc.setFontSize(7).setTextColor(100)
+      doc.text(a2.nome, ML + colW + 5, y + 4)
+    }
+    doc.setTextColor(0)
+    y += 18
+  }
+  addRodape()
+
+  onEstado('processando')
+  await new Promise(resolve => setTimeout(resolve, 2000))
+  onEstado('sucesso')
+  await new Promise(resolve => setTimeout(resolve, 2000))
+
+  doc.save(`contrato-${form.numero}-${form.data_inicio}.pdf`)
+  onEstado(null)
+}
+
+/**
+ * Confirma se faltam dados essenciais (CPF/RG/endereço) no cadastro do locador, locatário
+ * ou fiador antes de gerar o PDF; se faltar algo, mostra um aviso e deixa o usuário decidir
+ * se quer gerar mesmo assim.
+ */
+async function confirmarEGerarPdf(contratoId: string, onEstado: (e: 'processando' | 'sucesso' | null) => void) {
+  const { data: c } = await supabase
+    .from('contratos')
+    .select('tipo_garantia, locatario:clientes!contratos_locatario_id_fkey(*), locador:clientes!contratos_locador_id_fkey(*), fiador:clientes!contratos_fiador_id_fkey(*)')
+    .eq('id', contratoId).single()
+
+  if (!c) { alert('Não foi possível carregar os dados do contrato.'); return }
+
+  let faltando = [
+    ...camposFaltantes(c.locador, 'locador'),
+    ...camposFaltantes(c.locatario, 'locatário'),
+  ]
+  if (c.tipo_garantia === 'fiador') faltando = [...faltando, ...camposFaltantes(c.fiador, 'fiador')]
+
+  if (faltando.length > 0) {
+    const ok = confirm(`Faltam alguns dados no cadastro:\n\n${faltando.map(f => `• ${f}`).join('\n')}\n\nEsses trechos ficarão em branco no PDF. Deseja gerar mesmo assim?`)
+    if (!ok) return
+  }
+
+  await gerarContratoPdf(contratoId, onEstado)
+}
+
+/**
+ * Tela de consulta (somente leitura) de um contrato: mostra os dados, o kit de documentos
+ * assinados pra upload/consulta, e só libera edição ao clicar em "Editar" no rodapé.
+ */
+function ContratoDetalhe({ contrato, onFechar, onEditar, onGerarPdf, popupEstado }: {
+  contrato: Contrato
+  onFechar: () => void
+  onEditar: () => void
+  onGerarPdf: () => void
+  popupEstado: 'processando' | 'sucesso' | null
+}) {
+  const [documentos, setDocumentos] = useState<Record<string, Documento | null>>({})
+  const [uploadando, setUploadando] = useState<string | null>(null)
+  const [loadingDocs, setLoadingDocs] = useState(true)
+
+  useEffect(() => { carregarKit() }, [contrato.id])
+
+  async function carregarKit() {
+    setLoadingDocs(true)
+    const { data: files } = await supabase.storage.from('documentos').list(`contratos/${contrato.id}/kit`)
+    const mapa: Record<string, Documento | null> = {}
+    for (const cat of KIT_CATEGORIAS) {
+      const arquivo = files?.find(f => f.name.startsWith(cat.chave))
+      mapa[cat.chave] = arquivo ? {
+        nome: arquivo.name,
+        url: supabase.storage.from('documentos').getPublicUrl(`contratos/${contrato.id}/kit/${arquivo.name}`).data.publicUrl,
+        tipo: arquivo.name.split('.').pop() || '',
+        created_at: arquivo.created_at || '',
+      } : null
+    }
+    setDocumentos(mapa)
+    setLoadingDocs(false)
+  }
+
+  async function uploadKit(chave: string, file: File) {
+    setUploadando(chave)
+    const ext = file.name.split('.').pop()
+    const path = `contratos/${contrato.id}/kit/${chave}.${ext}`
+    const { error } = await supabase.storage.from('documentos').upload(path, file, { upsert: true })
+    if (error) alert('Erro ao enviar: ' + error.message)
+    await carregarKit()
+    setUploadando(null)
+  }
+
+  const categoriasVisiveis = KIT_CATEGORIAS.filter(cat => !cat.somenteGarantia || cat.somenteGarantia === contrato.tipo_garantia)
+
+  return (
+    <div className="card mb-6">
+      <div className="flex items-center justify-between mb-4">
+        <h2 style={{ color: '#f4f4f3' }} className="text-sm font-semibold">Contrato #{contrato.numero}</h2>
+        <button onClick={onFechar} className="btn btn-sm"><X size={13} /></button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+        {[
+          ['Imóvel', getTitulo(contrato.imovel)],
+          ['Locatário', getNome(contrato.locatario)],
+          ['Locador', getNome(contrato.locador)],
+          ['Valor mensal', formatVal(contrato.valor_atual || contrato.valor_mensal)],
+          ['Início', formatDate(contrato.data_inicio)],
+          ['Vencimento', formatDate(contrato.data_fim)],
+          ['Índice de reajuste', (contrato.indice_reajuste||'').toUpperCase()],
+          ['Garantia', contrato.tipo_garantia || '—'],
+          ['Status', statusLabel[statusContrato(contrato.data_fim, contrato.status)] || contrato.status],
+        ].map(([label, valor]) => (
+          <div key={label as string}>
+            <p style={{ color: '#8b9ab4' }} className="text-xs">{label}</p>
+            <p style={{ color: '#f4f4f3' }} className="text-sm font-medium">{valor}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="card mb-4" style={{ background: '#0d1117' }}>
+        <h3 style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-1">Kit de documentos</h3>
+        <p style={{ color: '#8b9ab4' }} className="text-xs mb-4">Documentos assinados, guardados pra consulta futura.</p>
+        {loadingDocs ? (
+          <p style={{ color: '#8b9ab4' }} className="text-sm text-center py-4">Carregando...</p>
+        ) : (
+          <div className="space-y-2">
+            {categoriasVisiveis.map(cat => {
+              const doc = documentos[cat.chave]
+              return (
+                <div key={cat.chave} style={{ background: '#16243a', border: '0.5px solid #1e3a5f' }} className="flex items-center justify-between p-3 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    {doc ? <CheckCircle2 size={14} style={{ color: '#3fb950' }} /> : <Hourglass size={14} style={{ color: '#8b9ab4' }} />}
+                    <span style={{ color: '#f4f4f3' }} className="text-sm">{cat.label}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {doc && <a href={doc.url} target="_blank" rel="noopener noreferrer" style={{ color: '#5b9bf5' }} className="btn btn-sm text-xs">Ver</a>}
+                    <label style={{ color: '#5b9bf5', border: '0.5px solid #1e3a5f' }} className="btn btn-sm text-xs cursor-pointer">
+                      <Upload size={11} />{uploadando === cat.chave ? 'Enviando...' : doc ? 'Substituir' : 'Enviar'}
+                      <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png"
+                        onChange={e => { const f = e.target.files?.[0]; if (f) uploadKit(cat.chave, f); e.target.value = '' }} />
+                    </label>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="flex gap-2">
+        <button className="btn btn-sm" style={{ background: '#22c55e', color: '#fff' }} onClick={onGerarPdf} disabled={!!popupEstado}>
+          <FileDown size={12} />Gerar Contrato (PDF)
+        </button>
+        <button className="btn btn-sm" onClick={onEditar}><Edit2 size={12} />Editar</button>
+      </div>
+
+      {popupEstado && (
         <div style={{ background: 'rgba(0,0,0,0.6)' }} className="fixed inset-0 z-50 flex items-center justify-center p-4">
           {popupEstado === 'processando' && (
             <div style={{ background: '#16243a', border: '0.5px solid #1e3a5f', color: '#5b9bf5' }}
@@ -1641,12 +1465,13 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
 }
 
 export default function ContratosPage() {
-  const router = useRouter()
   const [contratos, setContratos] = useState<Contrato[]>([])
   const [imoveis, setImoveis] = useState<SelectOpt[]>([])
   const [clientes, setClientes] = useState<SelectOpt[]>([])
   const [loading, setLoading] = useState(true)
   const [formInicial, setFormInicial] = useState<Record<string,string>|null>(null)
+  const [visualizando, setVisualizando] = useState<Contrato | null>(null)
+  const [popupPdf, setPopupPdf] = useState<'processando' | 'sucesso' | null>(null)
   const [sucesso, setSucesso] = useState('')
   const [erroExclusao, setErroExclusao] = useState('')
 
@@ -1686,6 +1511,7 @@ export default function ContratosPage() {
     setFormInicial({
       id: c.id, numero: c.numero||'', tipo: c.tipo||'locacao_residencial',
       imovel_id: c.imovel_id||'', locatario_id: c.locatario_id||'', locador_id: c.locador_id||'',
+      fiador_id: c.fiador_id||'',
       taxa_administracao: c.taxa_administracao?.toString() || '10',
       honorarios_aplicavel: c.honorarios_aplicavel ? '1' : '',
       valor_honorarios: c.valor_honorarios?.toString() || '',
@@ -1702,10 +1528,18 @@ export default function ContratosPage() {
       aviso_previo_dias: c.aviso_previo_dias?.toString()||'30',
       tipo_garantia: c.tipo_garantia||'caucao', status: c.status||'ativo',
       observacoes: c.observacoes||'',
+      foro: c.foro || 'Santana, São Paulo, SP',
+      apolice_incendio_numero: c.apolice_incendio_numero || '',
+      apolice_incendio_valor: c.apolice_incendio_valor?.toString() || '',
+      forma_recebimento_caucao: c.forma_recebimento_caucao || 'pix',
+      pix_recebimento_caucao: c.pix_recebimento_caucao || '',
+      banco_recebimento_caucao: c.banco_recebimento_caucao || '',
+      agencia_recebimento_caucao: c.agencia_recebimento_caucao || '',
+      conta_recebimento_caucao: c.conta_recebimento_caucao || '',
     })
   }
 
-  async function salvar(dados: Record<string,string>, irParaPdf?: boolean) {
+  async function salvar(dados: Record<string,string>) {
     const inicioDate = new Date(dados.data_inicio)
     const proximoReajuste = new Date(inicioDate)
     proximoReajuste.setFullYear(proximoReajuste.getFullYear() + 1)
@@ -1713,6 +1547,7 @@ export default function ContratosPage() {
     const payload = {
       numero: dados.numero, tipo: dados.tipo,
       imovel_id: dados.imovel_id, locatario_id: dados.locatario_id, locador_id: dados.locador_id,
+      fiador_id: dados.tipo_garantia === 'fiador' ? (dados.fiador_id || null) : null,
       data_inicio: dados.data_inicio, data_fim: dados.data_fim,
       valor_mensal: parseFloat(dados.valor_mensal),
       valor_atual: parseFloat(dados.valor_mensal),
@@ -1734,6 +1569,14 @@ export default function ContratosPage() {
       aviso_previo_dias: parseInt(dados.aviso_previo_dias),
       tipo_garantia: dados.tipo_garantia, status: dados.status,
       observacoes: dados.observacoes||null,
+      foro: dados.foro || 'Santana, São Paulo, SP',
+      apolice_incendio_numero: dados.apolice_incendio_numero || null,
+      apolice_incendio_valor: dados.apolice_incendio_valor ? parseFloat(dados.apolice_incendio_valor) : null,
+      forma_recebimento_caucao: dados.forma_recebimento_caucao || 'pix',
+      pix_recebimento_caucao: dados.pix_recebimento_caucao || null,
+      banco_recebimento_caucao: dados.banco_recebimento_caucao || null,
+      agencia_recebimento_caucao: dados.agencia_recebimento_caucao || null,
+      conta_recebimento_caucao: dados.conta_recebimento_caucao || null,
       organization_id: ORG_ID,
     }
 
@@ -1848,17 +1691,8 @@ export default function ContratosPage() {
     })
 
     setSucesso(dados.id ? 'Contrato atualizado!' : `Contrato criado! ${!dados.id ? `${mesesContrato(dados.data_inicio, dados.data_fim)} cobranças geradas.` : ''}${caucaoVal > 0 && parcelasNum > 1 ? ` Caução parcelado em ${parcelasNum}x lançado no financeiro.` : ''}`)
-    buscarTudo()
-
-    // Depois de criar um contrato novo, mantém a mesma tela aberta (agora em modo
-    // edição, com o id preenchido) para revelar logo abaixo a seção de qualificação
-    // e o botão de gerar o PDF — sem precisar navegar para outra tela.
-    if (!dados.id && contratoId) {
-      setFormInicial({ ...dados, id: contratoId })
-    } else {
-      setFormInicial(null)
-    }
-
+    await buscarTudo()
+    setFormInicial(null)
     setTimeout(() => setSucesso(''), 4000)
   }
 
@@ -1927,7 +1761,17 @@ export default function ContratosPage() {
               onClienteCriado={recarregarClientes} />
           )}
 
-          {vencendo.length > 0 && !formInicial && (
+          {visualizando !== null && formInicial === null && (
+            <ContratoDetalhe
+              contrato={visualizando}
+              onFechar={() => setVisualizando(null)}
+              onEditar={() => { abrirEdicao(visualizando); setVisualizando(null) }}
+              onGerarPdf={() => confirmarEGerarPdf(visualizando.id, setPopupPdf)}
+              popupEstado={popupPdf}
+            />
+          )}
+
+          {vencendo.length > 0 && !formInicial && !visualizando && (
             <div style={{ background: '#2e2515', border: '0.5px solid #4a3a1f' }} className="rounded-xl p-4 mb-4">
               <div className="flex items-center gap-2 mb-2">
                 <AlertTriangle size={14} style={{ color: '#f59e0b' }} />
@@ -1966,7 +1810,8 @@ export default function ContratosPage() {
                     const st = statusContrato(c.data_fim, c.status)
                     const dias = diasRestantes(c.data_fim)
                     return (
-                      <tr key={c.id} style={{ borderBottom: '0.5px solid #1c2128' }} className="hover:bg-[#161b22]">
+                      <tr key={c.id} style={{ borderBottom: '0.5px solid #1c2128', cursor: 'pointer' }} className="hover:bg-[#161b22]"
+                        onClick={() => setVisualizando(c)}>
                         <td style={{ color: '#8b8d98' }} className="px-2.5 py-2.5 text-xs font-mono whitespace-nowrap">#{c.numero}</td>
                         <td style={{ color: '#f4f4f3' }} className="px-2.5 py-2.5 font-medium text-sm whitespace-nowrap">{getTitulo(c.imovel)}</td>
                         <td style={{ color: '#c3c2b7' }} className="px-2.5 py-2.5 text-sm whitespace-nowrap">{getNome(c.locatario)}</td>
@@ -1981,10 +1826,10 @@ export default function ContratosPage() {
                         <td style={{ color: '#f4f4f3' }} className="px-2.5 py-2.5 font-medium text-sm whitespace-nowrap">{formatVal(c.valor_atual || c.valor_mensal)}</td>
                         <td style={{ color: '#8b8d98' }} className="px-2.5 py-2.5 text-xs uppercase">{c.indice_reajuste}</td>
                         <td className="px-2.5 py-2.5"><span className={statusBadge[st]||'badge badge-gray'}>{statusLabel[st]||st}</span></td>
-                        <td className="px-2.5 py-2.5 whitespace-nowrap">
+                        <td className="px-2.5 py-2.5 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                           <div className="flex gap-1.5">
                             <button className="btn btn-sm flex-shrink-0" onClick={() => abrirEdicao(c)}><Edit2 size={12} />Editar</button>
-                            <button className="btn btn-sm whitespace-nowrap flex-shrink-0" style={{ background: '#22c55e', color: '#fff', padding: '4px 8px' }} onClick={() => abrirEdicao(c)}><FileDown size={12} />Gerar Contrato</button>
+                            <button className="btn btn-sm whitespace-nowrap flex-shrink-0" style={{ background: '#22c55e', color: '#fff', padding: '4px 8px' }} onClick={() => confirmarEGerarPdf(c.id, setPopupPdf)}><FileDown size={12} />Gerar Contrato</button>
                             <button className="btn btn-sm flex-shrink-0" style={{ color: '#ef4444' }} onClick={() => excluir(c.id, c.numero)}><X size={12} /></button>
                           </div>
                         </td>
