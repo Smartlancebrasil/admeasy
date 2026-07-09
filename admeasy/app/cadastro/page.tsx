@@ -114,10 +114,9 @@ export default function CadastroPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-6 items-start">
 
-          {/* Coluna esquerda: planos + funcionalidades do plano selecionado */}
-          <div className="card">
-            {/* Ciclo de cobrança */}
-            <div className="flex justify-center mb-5">
+          {/* Coluna esquerda: tabela comparativa dos planos */}
+          <div className="card p-0 overflow-hidden">
+            <div className="flex justify-center py-5">
               <div style={{ background: '#0d1117', border: '0.5px solid #2a2f3a' }} className="inline-flex rounded-lg p-1">
                 {(['mensal', 'anual'] as const).map(c => (
                   <button key={c} type="button" onClick={() => setCiclo(c)}
@@ -129,51 +128,76 @@ export default function CadastroPage() {
               </div>
             </div>
 
-            {/* Abas de plano */}
-            <div className="grid grid-cols-3 gap-2 mb-5">
-              {planos.map(p => {
-                const sel = p.id === planoId
-                const precoMensalEquivalente = ciclo === 'anual' ? p.preco_anual_total / 12 : p.preco_mensal
-                return (
-                  <button key={p.id} type="button" onClick={() => setPlanoId(p.id)}
-                    style={sel ? { border: '1.5px solid #2563eb', background: '#16243a' } : { border: '0.5px solid #2a2f3a', background: 'transparent' }}
-                    className="rounded-xl p-3 text-center transition-all">
-                    <div style={{ color: '#f4f4f3' }} className="text-xs sm:text-sm font-semibold mb-1">{p.nome}</div>
-                    <div style={{ color: '#f4f4f3' }} className="text-base sm:text-lg font-bold">
-                      {formatVal(precoMensalEquivalente)}<span style={{ color: '#8b8d98' }} className="text-[10px] font-normal">/mês</span>
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
-
-            {planoSel && (
-              <div className="flex flex-wrap gap-x-4 gap-y-1 mb-5 text-xs" style={{ color: '#8b9ab4' }}>
-                <span>{planoSel.limite_imoveis ? `Até ${planoSel.limite_imoveis} imóveis` : 'Imóveis ilimitados'}</span>
-                <span>·</span>
-                <span>{planoSel.permite_multiplos_usuarios ? 'Vários usuários' : 'Usuário único'}</span>
-                <span>·</span>
-                <span>
-                  {ciclo === 'anual'
-                    ? `${formatVal(planoSel.preco_anual_total)}/ano à vista`
-                    : planoSel.taxa_implantacao > 0 ? `+ ${formatVal(planoSel.taxa_implantacao)} de implantação (10x no boleto)` : 'Sem taxa de implantação'}
-                </span>
-              </div>
-            )}
-
-            {/* Checklist de funcionalidades do plano selecionado */}
-            <div style={{ borderTop: '0.5px solid #2a2f3a' }} className="pt-4 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
-              {MODULOS_ORDEM.map(mod => {
-                const tem = planoSel?.modulos.includes(mod.chave)
-                return (
-                  <div key={mod.chave} className="flex items-center gap-2">
-                    {tem
-                      ? <Check size={14} style={{ color: '#3fb950' }} className="flex-shrink-0" />
-                      : <X size={14} style={{ color: '#3a3f4a' }} className="flex-shrink-0" />}
-                    <span style={{ color: tem ? '#c3c2b7' : '#5b5e6b' }} className="text-xs">{mod.label}</span>
-                  </div>
-                )
-              })}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr>
+                    <th style={{ borderBottom: '0.5px solid #2a2f3a' }} className="text-left px-4 py-4 align-bottom w-44"></th>
+                    {planos.map(p => {
+                      const sel = p.id === planoId
+                      const precoMensalEquivalente = ciclo === 'anual' ? p.preco_anual_total / 12 : p.preco_mensal
+                      return (
+                        <th key={p.id}
+                          style={{ borderBottom: '0.5px solid #2a2f3a', background: sel ? '#16243a' : 'transparent' }}
+                          className="px-3 py-4 text-center align-bottom min-w-[140px]">
+                          <button type="button" onClick={() => setPlanoId(p.id)} className="w-full text-center">
+                            <div className="flex items-center justify-center gap-1.5 mb-1">
+                              {sel && (
+                                <span style={{ background: '#2563eb' }} className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0">
+                                  <Check size={10} color="#fff" />
+                                </span>
+                              )}
+                              <span style={{ color: '#f4f4f3' }} className="font-semibold text-xs sm:text-sm">{p.nome}</span>
+                            </div>
+                            <div style={{ color: '#f4f4f3' }} className="text-base sm:text-lg font-bold">
+                              {formatVal(precoMensalEquivalente)}<span style={{ color: '#8b8d98' }} className="text-[10px] font-normal">/mês</span>
+                            </div>
+                            <div style={{ color: '#3fb950' }} className="text-[10px] min-h-[14px]">
+                              {ciclo === 'anual' ? `${formatVal(p.preco_anual_total)}/ano à vista` : '\u00A0'}
+                            </div>
+                            <div style={{ color: '#8b9ab4' }} className="text-[10px] mt-1">
+                              {p.taxa_implantacao > 0 ? `+ ${formatVal(p.taxa_implantacao)} implantação` : 'Sem implantação'}
+                            </div>
+                          </button>
+                        </th>
+                      )
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr style={{ borderBottom: '0.5px solid #1c2128' }}>
+                    <td style={{ color: '#c3c2b7' }} className="px-4 py-2.5 text-xs whitespace-nowrap">Limite de imóveis</td>
+                    {planos.map(p => (
+                      <td key={p.id} style={{ color: '#c3c2b7', background: p.id === planoId ? '#16243a' : 'transparent' }} className="px-3 py-2.5 text-xs text-center">
+                        {p.limite_imoveis ? `Até ${p.limite_imoveis}` : 'Ilimitado'}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr style={{ borderBottom: '0.5px solid #1c2128' }}>
+                    <td style={{ color: '#c3c2b7' }} className="px-4 py-2.5 text-xs whitespace-nowrap">Usuários</td>
+                    {planos.map(p => (
+                      <td key={p.id} style={{ color: '#c3c2b7', background: p.id === planoId ? '#16243a' : 'transparent' }} className="px-3 py-2.5 text-xs text-center">
+                        {p.permite_multiplos_usuarios ? 'Vários' : 'Único'}
+                      </td>
+                    ))}
+                  </tr>
+                  {MODULOS_ORDEM.map(mod => (
+                    <tr key={mod.chave} style={{ borderBottom: '0.5px solid #1c2128' }}>
+                      <td style={{ color: '#c3c2b7' }} className="px-4 py-2.5 text-xs whitespace-nowrap">{mod.label}</td>
+                      {planos.map(p => {
+                        const tem = p.modulos.includes(mod.chave)
+                        return (
+                          <td key={p.id} style={{ background: p.id === planoId ? '#16243a' : 'transparent' }} className="px-3 py-2.5 text-center">
+                            {tem
+                              ? <Check size={14} style={{ color: '#3fb950' }} className="mx-auto" />
+                              : <X size={14} style={{ color: '#3a3f4a' }} className="mx-auto" />}
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
 
