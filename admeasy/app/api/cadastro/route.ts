@@ -118,7 +118,10 @@ export async function POST(req: NextRequest) {
             currency: 'brl',
             unit_amount: valorCentavos,
             recurring: { interval: ciclo_cobranca === 'anual' ? 'year' : 'month' },
-            product_data: { name: `AdmEasy — Plano ${plano.nome} (${ciclo_cobranca})` },
+            product_data: {
+              name: `AdmEasy — Plano ${plano.nome} (${ciclo_cobranca})`,
+              description: `${plano.limite_imoveis ? `Até ${plano.limite_imoveis} imóveis` : 'Imóveis ilimitados'} · ${plano.permite_multiplos_usuarios ? 'Múltiplos usuários' : 'Usuário único'}${plano.taxa_implantacao > 0 ? ` · + ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(plano.taxa_implantacao)} de implantação` : ''}`,
+            },
           },
           quantity: 1,
         },
