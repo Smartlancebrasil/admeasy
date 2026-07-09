@@ -263,31 +263,6 @@ export default function CadastroPage() {
               </div>
             )}
 
-            {planoSel && (
-              <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-xl p-4 mb-5">
-                <div style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-3">O que está incluído no {planoSel.nome}</div>
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-2">
-                    {planoSel.permite_multiplos_usuarios
-                      ? <Check size={14} style={{ color: '#3fb950' }} className="flex-shrink-0" />
-                      : <X size={14} style={{ color: '#ef4444' }} className="flex-shrink-0" />}
-                    <span style={{ color: '#c3c2b7' }} className="text-xs">{planoSel.permite_multiplos_usuarios ? 'Múltiplos usuários' : 'Usuário único'}</span>
-                  </div>
-                  {MODULOS_ORDEM.map(mod => {
-                    const tem = planoSel.modulos.includes(mod.chave)
-                    return (
-                      <div key={mod.chave} className="flex items-center gap-2">
-                        {tem
-                          ? <Check size={14} style={{ color: '#3fb950' }} className="flex-shrink-0" />
-                          : <X size={14} style={{ color: '#ef4444' }} className="flex-shrink-0" />}
-                        <span style={{ color: tem ? '#c3c2b7' : '#8b8d98' }} className="text-xs">{mod.label}</span>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-
             <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-2xl p-6 sm:p-8">
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
