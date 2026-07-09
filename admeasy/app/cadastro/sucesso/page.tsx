@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { CheckCircle2, Check, X } from 'lucide-react'
@@ -34,7 +34,7 @@ function labelImoveis(p: Plano) {
   return p.limite_imoveis ? `até ${p.limite_imoveis} imóveis` : 'acima de 50 imóveis'
 }
 
-export default function CadastroSucessoPage() {
+function CadastroSucessoConteudo() {
   const params = useSearchParams()
   const orgId = params.get('org')
   const [plano, setPlano] = useState<Plano | null>(null)
@@ -94,5 +94,13 @@ export default function CadastroSucessoPage() {
         )}
       </div>
     </div>
+  )
+}
+
+export default function CadastroSucessoPage() {
+  return (
+    <Suspense fallback={null}>
+      <CadastroSucessoConteudo />
+    </Suspense>
   )
 }
