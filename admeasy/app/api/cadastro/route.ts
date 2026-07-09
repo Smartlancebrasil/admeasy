@@ -125,24 +125,9 @@ export async function POST(req: NextRequest) {
       },
     ]
 
-    // A implantação (quando o cliente opta por incluir) NÃO é cobrada agora —
-    // ela entra como "add_invoice_items", que o Stripe só lança na primeira
-    // fatura de verdade, junto com a mensalidade, depois que os 7 dias de
-    // teste acabarem. Hoje continua sendo R$ 0,00, mesmo marcando a opção.
-    const itensFaturaFutura: any[] = []
-    if (incluir_implantacao && plano.taxa_implantacao > 0) {
-      itensFaturaFutura.push({
-        price_data: {
-          currency: 'brl',
-          unit_amount: Math.round(plano.taxa_implantacao * 100),
-          product_data: {
-            name: 'Taxa de implantação',
-            description: 'Configuração inicial, treinamento e personalização do sistema — cobrada uma única vez, junto com a primeira mensalidade.',
-          },
-        },
-        quantity: 1,
-      })
-    }
+    // A implantação não é cobrada pelo Stripe aqui — fica só registrada como
+    // preferência do cliente (campo incluir_implantacao já salvo em
+    // organizations). A cobrança em si é feita à parte, manualmente.
 
     const checkoutSession = await stripe.checkout.sessions.create({
       mode: 'subscription',
@@ -151,7 +136,6 @@ export async function POST(req: NextRequest) {
       subscription_data: {
         trial_period_days: 7,
         metadata: { organization_id: org.id },
-        ...(itensFaturaFutura.length > 0 ? { add_invoice_items: itensFaturaFutura } : {}),
       },
       metadata: { organization_id: org.id },
       success_url: `${SITE_URL}/cadastro/sucesso?org=${org.id}`,
@@ -189,6 +173,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ sucesso: true, organization_id: org.id, checkout_url: checkoutSession.url })
   } catch (err: any) {
-    return NextResponse.json({ erro: 'Erro inesperado. Tente novamente.' }, { status: 500 })
+    console.error('Erro no cadastro:', err)
+    return NextResponse.json({ erro: `Erro inesperado: ${err?.message || 'tente novamente.'}` }, { status: 500 })
   }
 }
