@@ -43,7 +43,7 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <img src="/logo-admeasy.png" alt="AdmEasy" className="w-48 h-auto object-contain mx-auto" />
+          <img src="/logo-admeasy.png" alt="AdmEasy" className="w-28 h-auto object-contain mx-auto" />
         </div>
 
         {/* Card */}
