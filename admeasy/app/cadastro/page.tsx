@@ -105,152 +105,130 @@ export default function CadastroPage() {
 
   return (
     <div style={{ background: '#0d1117' }} className="min-h-screen py-10 px-4">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-6xl mx-auto">
         <div className="text-center mb-8">
           <img src="/logo-admeasy.png" alt="AdmEasy" className="w-28 h-auto object-contain mx-auto mb-4" />
           <h1 style={{ color: '#f4f4f3' }} className="text-2xl font-semibold">Comece a usar o Admeasy</h1>
           <p style={{ color: '#8b8d98' }} className="text-sm mt-1">Escolha seu plano e crie sua conta em poucos minutos.</p>
         </div>
 
-        {/* Ciclo de cobrança */}
-        <div className="flex justify-center mb-6">
-          <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="inline-flex rounded-lg p-1">
-            {(['mensal', 'anual'] as const).map(c => (
-              <button key={c} type="button" onClick={() => setCiclo(c)}
-                style={ciclo === c ? { background: '#2563eb', color: '#fff' } : { background: 'transparent', color: '#8b9ab4' }}
-                className="px-5 py-2 rounded-md text-sm font-medium transition-all">
-                {c === 'mensal' ? 'Mensal' : 'Anual (com desconto)'}
-              </button>
-            ))}
-          </div>
-        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-6 items-start">
 
-        {/* Planos — tabela comparativa */}
-        <div className="card p-0 overflow-hidden overflow-x-auto mb-10">
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr>
-                <th style={{ borderBottom: '0.5px solid #2a2f3a' }} className="text-left px-4 py-4 align-bottom w-48"></th>
-                {planos.map(p => {
-                  const sel = p.id === planoId
-                  const precoMensalEquivalente = ciclo === 'anual' ? p.preco_anual_total / 12 : p.preco_mensal
-                  return (
-                    <th key={p.id}
-                      style={{ borderBottom: '0.5px solid #2a2f3a', background: sel ? '#16243a' : 'transparent' }}
-                      className="px-4 py-4 text-center align-bottom min-w-[180px]">
-                      <button type="button" onClick={() => setPlanoId(p.id)} className="w-full text-center">
-                        <div className="flex items-center justify-center gap-1.5 mb-1">
-                          {sel && (
-                            <span style={{ background: '#2563eb' }} className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0">
-                              <Check size={10} color="#fff" />
-                            </span>
-                          )}
-                          <span style={{ color: '#f4f4f3' }} className="font-semibold">{p.nome}</span>
-                        </div>
-                        <div style={{ color: '#f4f4f3' }} className="text-lg font-bold">
-                          {formatVal(precoMensalEquivalente)}<span style={{ color: '#8b8d98' }} className="text-xs font-normal">/mês</span>
-                        </div>
-                        <div style={{ color: '#3fb950' }} className="text-[11px] min-h-[14px]">
-                          {ciclo === 'anual' ? `${formatVal(p.preco_anual_total)}/ano à vista` : '\u00A0'}
-                        </div>
-                        <div style={{ color: '#8b9ab4' }} className="text-[11px] mt-1">
-                          {p.taxa_implantacao > 0
-                            ? `+ ${formatVal(p.taxa_implantacao)} implantação`
-                            : 'Sem implantação'}
-                        </div>
-                      </button>
-                    </th>
-                  )
-                })}
-              </tr>
-            </thead>
-            <tbody>
-              <tr style={{ borderBottom: '0.5px solid #1c2128' }}>
-                <td style={{ color: '#c3c2b7' }} className="px-4 py-2.5 text-xs">Limite de imóveis</td>
-                {planos.map(p => (
-                  <td key={p.id} style={{ color: '#c3c2b7', background: p.id === planoId ? '#16243a' : 'transparent' }} className="px-4 py-2.5 text-xs text-center">
-                    {p.limite_imoveis ? `Até ${p.limite_imoveis}` : 'Ilimitado'}
-                  </td>
+          {/* Coluna esquerda: planos + funcionalidades do plano selecionado */}
+          <div className="card">
+            {/* Ciclo de cobrança */}
+            <div className="flex justify-center mb-5">
+              <div style={{ background: '#0d1117', border: '0.5px solid #2a2f3a' }} className="inline-flex rounded-lg p-1">
+                {(['mensal', 'anual'] as const).map(c => (
+                  <button key={c} type="button" onClick={() => setCiclo(c)}
+                    style={ciclo === c ? { background: '#2563eb', color: '#fff' } : { background: 'transparent', color: '#8b9ab4' }}
+                    className="px-5 py-2 rounded-md text-sm font-medium transition-all">
+                    {c === 'mensal' ? 'Mensal' : 'Anual (com desconto)'}
+                  </button>
                 ))}
-              </tr>
-              <tr style={{ borderBottom: '0.5px solid #1c2128' }}>
-                <td style={{ color: '#c3c2b7' }} className="px-4 py-2.5 text-xs">Usuários</td>
-                {planos.map(p => (
-                  <td key={p.id} style={{ color: '#c3c2b7', background: p.id === planoId ? '#16243a' : 'transparent' }} className="px-4 py-2.5 text-xs text-center">
-                    {p.permite_multiplos_usuarios ? 'Vários' : 'Único'}
-                  </td>
-                ))}
-              </tr>
-              {MODULOS_ORDEM.map(mod => (
-                <tr key={mod.chave} style={{ borderBottom: '0.5px solid #1c2128' }}>
-                  <td style={{ color: '#c3c2b7' }} className="px-4 py-2.5 text-xs">{mod.label}</td>
-                  {planos.map(p => {
-                    const tem = p.modulos.includes(mod.chave)
-                    return (
-                      <td key={p.id} style={{ background: p.id === planoId ? '#16243a' : 'transparent' }} className="px-4 py-2.5 text-center">
-                        {tem
-                          ? <Check size={14} style={{ color: '#3fb950' }} className="mx-auto" />
-                          : <X size={14} style={{ color: '#3a3f4a' }} className="mx-auto" />}
-                      </td>
-                    )
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </div>
+            </div>
 
-        {/* Formulário */}
-        <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-2xl p-6 sm:p-8 max-w-lg mx-auto">
-          <h2 style={{ color: '#f4f4f3' }} className="text-lg font-semibold mb-5">Crie sua conta</h2>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="label">Nome da imobiliária / seu nome comercial *</label>
-              <input className="input" required value={nomeOrg} onChange={e => setNomeOrg(e.target.value)} placeholder="Ex: Texas Imóveis" />
-            </div>
-            <div>
-              <label className="label">Seu nome completo *</label>
-              <input className="input" required value={nomeResponsavel} onChange={e => setNomeResponsavel(e.target.value)} />
-            </div>
-            <div>
-              <label className="label">E-mail *</label>
-              <input type="email" className="input" required value={email} onChange={e => setEmail(e.target.value)} />
-            </div>
-            <div>
-              <label className="label">Telefone / WhatsApp</label>
-              <input className="input" value={telefone} onChange={e => setTelefone(e.target.value)} placeholder="(00) 00000-0000" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="label">Senha *</label>
-                <input type="password" className="input" required value={senha} onChange={e => setSenha(e.target.value)} />
-              </div>
-              <div>
-                <label className="label">Confirmar senha *</label>
-                <input type="password" className="input" required value={confirmarSenha} onChange={e => setConfirmarSenha(e.target.value)} />
-              </div>
+            {/* Abas de plano */}
+            <div className="grid grid-cols-3 gap-2 mb-5">
+              {planos.map(p => {
+                const sel = p.id === planoId
+                const precoMensalEquivalente = ciclo === 'anual' ? p.preco_anual_total / 12 : p.preco_mensal
+                return (
+                  <button key={p.id} type="button" onClick={() => setPlanoId(p.id)}
+                    style={sel ? { border: '1.5px solid #2563eb', background: '#16243a' } : { border: '0.5px solid #2a2f3a', background: 'transparent' }}
+                    className="rounded-xl p-3 text-center transition-all">
+                    <div style={{ color: '#f4f4f3' }} className="text-xs sm:text-sm font-semibold mb-1">{p.nome}</div>
+                    <div style={{ color: '#f4f4f3' }} className="text-base sm:text-lg font-bold">
+                      {formatVal(precoMensalEquivalente)}<span style={{ color: '#8b8d98' }} className="text-[10px] font-normal">/mês</span>
+                    </div>
+                  </button>
+                )
+              })}
             </div>
 
             {planoSel && (
-              <div style={{ background: '#0d1117', border: '0.5px solid #2a2f3a', color: '#8b9ab4' }} className="rounded-lg p-3 text-xs">
-                Você está assinando o plano <strong style={{ color: '#f4f4f3' }}>{planoSel.nome}</strong>, ciclo <strong style={{ color: '#f4f4f3' }}>{ciclo}</strong>.
+              <div className="flex flex-wrap gap-x-4 gap-y-1 mb-5 text-xs" style={{ color: '#8b9ab4' }}>
+                <span>{planoSel.limite_imoveis ? `Até ${planoSel.limite_imoveis} imóveis` : 'Imóveis ilimitados'}</span>
+                <span>·</span>
+                <span>{planoSel.permite_multiplos_usuarios ? 'Vários usuários' : 'Usuário único'}</span>
+                <span>·</span>
+                <span>
+                  {ciclo === 'anual'
+                    ? `${formatVal(planoSel.preco_anual_total)}/ano à vista`
+                    : planoSel.taxa_implantacao > 0 ? `+ ${formatVal(planoSel.taxa_implantacao)} de implantação (10x no boleto)` : 'Sem taxa de implantação'}
+                </span>
               </div>
             )}
 
-            {erro && (
-              <div style={{ background: '#2e1717', border: '0.5px solid #4a2424', color: '#ef4444' }} className="text-sm px-3 py-2 rounded-lg">
-                {erro}
+            {/* Checklist de funcionalidades do plano selecionado */}
+            <div style={{ borderTop: '0.5px solid #2a2f3a' }} className="pt-4 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+              {MODULOS_ORDEM.map(mod => {
+                const tem = planoSel?.modulos.includes(mod.chave)
+                return (
+                  <div key={mod.chave} className="flex items-center gap-2">
+                    {tem
+                      ? <Check size={14} style={{ color: '#3fb950' }} className="flex-shrink-0" />
+                      : <X size={14} style={{ color: '#3a3f4a' }} className="flex-shrink-0" />}
+                    <span style={{ color: tem ? '#c3c2b7' : '#5b5e6b' }} className="text-xs">{mod.label}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Coluna direita: formulário */}
+          <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-2xl p-6 sm:sticky sm:top-10">
+            <h2 style={{ color: '#f4f4f3' }} className="text-lg font-semibold mb-5">Crie sua conta</h2>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="label">Nome da imobiliária / seu nome comercial *</label>
+                <input className="input" required value={nomeOrg} onChange={e => setNomeOrg(e.target.value)} placeholder="Ex: Texas Imóveis" />
               </div>
-            )}
+              <div>
+                <label className="label">Seu nome completo *</label>
+                <input className="input" required value={nomeResponsavel} onChange={e => setNomeResponsavel(e.target.value)} />
+              </div>
+              <div>
+                <label className="label">E-mail *</label>
+                <input type="email" className="input" required value={email} onChange={e => setEmail(e.target.value)} />
+              </div>
+              <div>
+                <label className="label">Telefone / WhatsApp</label>
+                <input className="input" value={telefone} onChange={e => setTelefone(e.target.value)} placeholder="(00) 00000-0000" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">Senha *</label>
+                  <input type="password" className="input" required value={senha} onChange={e => setSenha(e.target.value)} />
+                </div>
+                <div>
+                  <label className="label">Confirmar senha *</label>
+                  <input type="password" className="input" required value={confirmarSenha} onChange={e => setConfirmarSenha(e.target.value)} />
+                </div>
+              </div>
 
-            <button type="submit" disabled={enviando} className="btn btn-primary w-full justify-center py-2.5">
-              {enviando ? 'Criando sua conta...' : 'Criar minha conta'}
-            </button>
+              {planoSel && (
+                <div style={{ background: '#0d1117', border: '0.5px solid #2a2f3a', color: '#8b9ab4' }} className="rounded-lg p-3 text-xs">
+                  Você está assinando o plano <strong style={{ color: '#f4f4f3' }}>{planoSel.nome}</strong>, ciclo <strong style={{ color: '#f4f4f3' }}>{ciclo}</strong>.
+                </div>
+              )}
 
-            <p style={{ color: '#5b5e6b' }} className="text-xs text-center">
-              Já tem conta? <a href="/login" style={{ color: '#5b9bf5' }}>Entrar</a>
-            </p>
-          </form>
+              {erro && (
+                <div style={{ background: '#2e1717', border: '0.5px solid #4a2424', color: '#ef4444' }} className="text-sm px-3 py-2 rounded-lg">
+                  {erro}
+                </div>
+              )}
+
+              <button type="submit" disabled={enviando} className="btn btn-primary w-full justify-center py-2.5">
+                {enviando ? 'Criando sua conta...' : 'Criar minha conta'}
+              </button>
+
+              <p style={{ color: '#5b5e6b' }} className="text-xs text-center">
+                Já tem conta? <a href="/login" style={{ color: '#5b9bf5' }}>Entrar</a>
+              </p>
+            </form>
+          </div>
         </div>
       </div>
     </div>
