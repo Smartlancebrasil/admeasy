@@ -11,6 +11,31 @@ const supabaseAdmin = createClient(
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://admeasy.vercel.app'
 
+// Mesma lista/ordem usada em app/cadastro/page.tsx, pra montar o resumo
+// completo (texto puro — o Stripe não aceita ícones/HTML na descrição).
+const MODULOS_ORDEM: { chave: string; label: string }[] = [
+  { chave: 'imoveis', label: 'Cadastro de imóveis' },
+  { chave: 'contratos', label: 'Contratos' },
+  { chave: 'clientes', label: 'Clientes' },
+  { chave: 'financeiro', label: 'Financeiro' },
+  { chave: 'portal_locatario', label: 'Portal do locatário' },
+  { chave: 'reajuste', label: 'Reajuste de aluguel' },
+  { chave: 'rescisao', label: 'Cálculo de rescisão' },
+  { chave: 'demandas', label: 'Chamados' },
+  { chave: 'dashboard_bi', label: 'Dashboard BI executivo' },
+  { chave: 'fornecedores', label: 'Fornecedores' },
+  { chave: 'visitas', label: 'Visitas' },
+  { chave: 'vistorias', label: 'Vistorias' },
+  { chave: 'analise_cadastral', label: 'Análise de locatários' },
+  { chave: 'processos_judiciais', label: 'Processos judiciais' },
+]
+
+function montarChecklistTexto(plano: any): string {
+  return MODULOS_ORDEM
+    .map(mod => `${plano.modulos.includes(mod.chave) ? '✓' : '✗'} ${mod.label}`)
+    .join('  ·  ')
+}
+
 export async function POST(req: NextRequest) {
   try {
     const {
@@ -118,7 +143,7 @@ export async function POST(req: NextRequest) {
           recurring: { interval: ciclo_cobranca === 'anual' ? 'year' : 'month' },
           product_data: {
             name: `AdmEasy — Plano ${plano.nome} (${ciclo_cobranca})`,
-            description: `${plano.limite_imoveis ? `Até ${plano.limite_imoveis} imóveis` : 'Imóveis ilimitados'} · ${plano.permite_multiplos_usuarios ? 'Múltiplos usuários' : 'Usuário único'}`,
+            description: `${plano.limite_imoveis ? `Até ${plano.limite_imoveis} imóveis` : 'Imóveis ilimitados'} · ${plano.permite_multiplos_usuarios ? 'Múltiplos usuários' : 'Usuário único'}\n${montarChecklistTexto(plano)}`,
           },
         },
         quantity: 1,
