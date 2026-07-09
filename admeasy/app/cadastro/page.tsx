@@ -120,7 +120,7 @@ export default function CadastroPage() {
 
   return (
     <div style={{ background: '#0d1117' }} className="min-h-screen py-10 px-4">
-      <div className="max-w-5xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         <div className="text-center mb-8">
           <a href="/">
             <img src="/logo-admeasy.png" alt="AdmEasy" className="w-28 h-auto object-contain mx-auto mb-4" />
@@ -153,7 +153,7 @@ export default function CadastroPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
               {planos.map(p => {
                 const precoMensalEquivalente = ciclo === 'anual' ? p.preco_anual_total / 12 : p.preco_mensal
                 const destaque = p.id === 'corretor'
