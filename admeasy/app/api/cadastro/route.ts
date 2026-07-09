@@ -125,14 +125,19 @@ export async function POST(req: NextRequest) {
       },
     ]
 
+    // A implantação (quando o cliente opta por incluir) NÃO é cobrada agora —
+    // ela entra como "add_invoice_items", que o Stripe só lança na primeira
+    // fatura de verdade, junto com a mensalidade, depois que os 7 dias de
+    // teste acabarem. Hoje continua sendo R$ 0,00, mesmo marcando a opção.
+    const itensFaturaFutura: any[] = []
     if (incluir_implantacao && plano.taxa_implantacao > 0) {
-      linhasDoPedido.push({
+      itensFaturaFutura.push({
         price_data: {
           currency: 'brl',
           unit_amount: Math.round(plano.taxa_implantacao * 100),
           product_data: {
             name: 'Taxa de implantação',
-            description: 'Configuração inicial, treinamento e personalização do sistema — cobrada uma única vez.',
+            description: 'Configuração inicial, treinamento e personalização do sistema — cobrada uma única vez, junto com a primeira mensalidade.',
           },
         },
         quantity: 1,
@@ -146,6 +151,7 @@ export async function POST(req: NextRequest) {
       subscription_data: {
         trial_period_days: 7,
         metadata: { organization_id: org.id },
+        ...(itensFaturaFutura.length > 0 ? { add_invoice_items: itensFaturaFutura } : {}),
       },
       metadata: { organization_id: org.id },
       success_url: `${SITE_URL}/cadastro/sucesso?org=${org.id}`,
