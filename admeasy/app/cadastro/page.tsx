@@ -112,11 +112,64 @@ export default function CadastroPage() {
           <p style={{ color: '#8b8d98' }} className="text-sm mt-1">Escolha seu plano e crie sua conta em poucos minutos.</p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-6 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-[400px_1fr] gap-6 items-start">
 
-          {/* Coluna esquerda: tabela comparativa dos planos */}
-          <div className="card p-0 overflow-hidden">
-            <div className="flex justify-center py-5">
+          {/* Coluna esquerda: formulário */}
+          <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-2xl p-6 sm:sticky sm:top-10">
+            <h2 style={{ color: '#f4f4f3' }} className="text-lg font-semibold mb-5">Crie sua conta</h2>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="label">Nome da imobiliária / seu nome comercial *</label>
+                <input className="input" required value={nomeOrg} onChange={e => setNomeOrg(e.target.value)} placeholder="Ex: Texas Imóveis" />
+              </div>
+              <div>
+                <label className="label">Seu nome completo *</label>
+                <input className="input" required value={nomeResponsavel} onChange={e => setNomeResponsavel(e.target.value)} />
+              </div>
+              <div>
+                <label className="label">E-mail *</label>
+                <input type="email" className="input" required value={email} onChange={e => setEmail(e.target.value)} />
+              </div>
+              <div>
+                <label className="label">Telefone / WhatsApp</label>
+                <input className="input" value={telefone} onChange={e => setTelefone(e.target.value)} placeholder="(00) 00000-0000" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">Senha *</label>
+                  <input type="password" className="input" required value={senha} onChange={e => setSenha(e.target.value)} />
+                </div>
+                <div>
+                  <label className="label">Confirmar senha *</label>
+                  <input type="password" className="input" required value={confirmarSenha} onChange={e => setConfirmarSenha(e.target.value)} />
+                </div>
+              </div>
+
+              {planoSel && (
+                <div style={{ background: '#0d1117', border: '0.5px solid #2a2f3a', color: '#8b9ab4' }} className="rounded-lg p-3 text-xs">
+                  Você está assinando o plano <strong style={{ color: '#f4f4f3' }}>{planoSel.nome}</strong>, ciclo <strong style={{ color: '#f4f4f3' }}>{ciclo}</strong>.
+                </div>
+              )}
+
+              {erro && (
+                <div style={{ background: '#2e1717', border: '0.5px solid #4a2424', color: '#ef4444' }} className="text-sm px-3 py-2 rounded-lg">
+                  {erro}
+                </div>
+              )}
+
+              <button type="submit" disabled={enviando} className="btn btn-primary w-full justify-center py-2.5">
+                {enviando ? 'Criando sua conta...' : 'Criar minha conta'}
+              </button>
+
+              <p style={{ color: '#5b5e6b' }} className="text-xs text-center">
+                Já tem conta? <a href="/login" style={{ color: '#5b9bf5' }}>Entrar</a>
+              </p>
+            </form>
+          </div>
+
+          {/* Coluna direita: tabela comparativa dos planos, com a mesma altura do formulário */}
+          <div className="card p-0 overflow-hidden flex flex-col lg:h-[642px]">
+            <div className="flex justify-center py-5 flex-shrink-0">
               <div style={{ background: '#0d1117', border: '0.5px solid #2a2f3a' }} className="inline-flex rounded-lg p-1">
                 {(['mensal', 'anual'] as const).map(c => (
                   <button key={c} type="button" onClick={() => setCiclo(c)}
@@ -128,18 +181,18 @@ export default function CadastroPage() {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="overflow-auto flex-1">
               <table className="w-full text-sm border-collapse">
                 <thead>
                   <tr>
-                    <th style={{ borderBottom: '0.5px solid #2a2f3a' }} className="text-left px-4 py-4 align-bottom w-44"></th>
+                    <th style={{ borderBottom: '0.5px solid #2a2f3a', background: '#161b22' }} className="text-left px-4 py-4 align-bottom w-44 sticky top-0"></th>
                     {planos.map(p => {
                       const sel = p.id === planoId
                       const precoMensalEquivalente = ciclo === 'anual' ? p.preco_anual_total / 12 : p.preco_mensal
                       return (
                         <th key={p.id}
-                          style={{ borderBottom: '0.5px solid #2a2f3a', background: sel ? '#16243a' : 'transparent' }}
-                          className="px-3 py-4 text-center align-bottom min-w-[140px]">
+                          className="px-3 py-4 text-center align-bottom min-w-[140px] sticky top-0"
+                          style={{ borderBottom: '0.5px solid #2a2f3a', background: sel ? '#16243a' : '#161b22' }}>
                           <button type="button" onClick={() => setPlanoId(p.id)} className="w-full text-center">
                             <div className="flex items-center justify-center gap-1.5 mb-1">
                               {sel && (
@@ -199,59 +252,6 @@ export default function CadastroPage() {
                 </tbody>
               </table>
             </div>
-          </div>
-
-          {/* Coluna direita: formulário */}
-          <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-2xl p-6 sm:sticky sm:top-10">
-            <h2 style={{ color: '#f4f4f3' }} className="text-lg font-semibold mb-5">Crie sua conta</h2>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="label">Nome da imobiliária / seu nome comercial *</label>
-                <input className="input" required value={nomeOrg} onChange={e => setNomeOrg(e.target.value)} placeholder="Ex: Texas Imóveis" />
-              </div>
-              <div>
-                <label className="label">Seu nome completo *</label>
-                <input className="input" required value={nomeResponsavel} onChange={e => setNomeResponsavel(e.target.value)} />
-              </div>
-              <div>
-                <label className="label">E-mail *</label>
-                <input type="email" className="input" required value={email} onChange={e => setEmail(e.target.value)} />
-              </div>
-              <div>
-                <label className="label">Telefone / WhatsApp</label>
-                <input className="input" value={telefone} onChange={e => setTelefone(e.target.value)} placeholder="(00) 00000-0000" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label">Senha *</label>
-                  <input type="password" className="input" required value={senha} onChange={e => setSenha(e.target.value)} />
-                </div>
-                <div>
-                  <label className="label">Confirmar senha *</label>
-                  <input type="password" className="input" required value={confirmarSenha} onChange={e => setConfirmarSenha(e.target.value)} />
-                </div>
-              </div>
-
-              {planoSel && (
-                <div style={{ background: '#0d1117', border: '0.5px solid #2a2f3a', color: '#8b9ab4' }} className="rounded-lg p-3 text-xs">
-                  Você está assinando o plano <strong style={{ color: '#f4f4f3' }}>{planoSel.nome}</strong>, ciclo <strong style={{ color: '#f4f4f3' }}>{ciclo}</strong>.
-                </div>
-              )}
-
-              {erro && (
-                <div style={{ background: '#2e1717', border: '0.5px solid #4a2424', color: '#ef4444' }} className="text-sm px-3 py-2 rounded-lg">
-                  {erro}
-                </div>
-              )}
-
-              <button type="submit" disabled={enviando} className="btn btn-primary w-full justify-center py-2.5">
-                {enviando ? 'Criando sua conta...' : 'Criar minha conta'}
-              </button>
-
-              <p style={{ color: '#5b5e6b' }} className="text-xs text-center">
-                Já tem conta? <a href="/login" style={{ color: '#5b9bf5' }}>Entrar</a>
-              </p>
-            </form>
           </div>
         </div>
       </div>
