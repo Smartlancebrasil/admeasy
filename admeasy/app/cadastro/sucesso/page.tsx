@@ -1,57 +1,8 @@
 'use client'
 
-import { Suspense, useEffect, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
-import { CheckCircle2, Check, X } from 'lucide-react'
+import { CheckCircle2 } from 'lucide-react'
 
-type Plano = {
-  nome: string
-  limite_imoveis: number | null
-  permite_multiplos_usuarios: boolean
-  modulos: string[]
-}
-
-// Mesma lista/ordem usada em app/cadastro/page.tsx
-const MODULOS_ORDEM: { chave: string; label: string }[] = [
-  { chave: 'imoveis', label: 'Cadastro de imóveis' },
-  { chave: 'contratos', label: 'Contratos' },
-  { chave: 'clientes', label: 'Clientes' },
-  { chave: 'financeiro', label: 'Financeiro' },
-  { chave: 'portal_locatario', label: 'Portal do locatário' },
-  { chave: 'reajuste', label: 'Reajuste de aluguel' },
-  { chave: 'rescisao', label: 'Cálculo de rescisão' },
-  { chave: 'demandas', label: 'Chamados' },
-  { chave: 'dashboard_bi', label: 'Dashboard BI executivo' },
-  { chave: 'fornecedores', label: 'Fornecedores' },
-  { chave: 'visitas', label: 'Visitas' },
-  { chave: 'vistorias', label: 'Vistorias' },
-  { chave: 'analise_cadastral', label: 'Análise de locatários' },
-  { chave: 'processos_judiciais', label: 'Processos judiciais' },
-]
-
-function labelImoveis(p: Plano) {
-  return p.limite_imoveis ? `até ${p.limite_imoveis} imóveis` : 'acima de 50 imóveis'
-}
-
-function CadastroSucessoConteudo() {
-  const params = useSearchParams()
-  const orgId = params.get('org')
-  const [plano, setPlano] = useState<Plano | null>(null)
-
-  useEffect(() => {
-    if (!orgId) return
-    async function carregar() {
-      const { data } = await supabase
-        .from('organizations')
-        .select('plano:planos(nome, limite_imoveis, permite_multiplos_usuarios, modulos)')
-        .eq('id', orgId)
-        .single()
-      if (data?.plano) setPlano(data.plano as any)
-    }
-    carregar()
-  }, [orgId])
-
+export default function CadastroSucessoPage() {
   return (
     <div style={{ background: '#0d1117' }} className="min-h-screen flex items-center justify-center p-4 py-10">
       <div className="max-w-md w-full text-center">
@@ -66,41 +17,7 @@ function CadastroSucessoConteudo() {
             Entrar no AdmEasy
           </a>
         </div>
-
-        {plano && (
-          <div style={{ background: '#fff' }} className="rounded-2xl p-6 text-left">
-            <div style={{ color: '#0d1117' }} className="font-semibold text-lg mb-0.5">{plano.nome}</div>
-            <div style={{ color: '#6b7280' }} className="text-xs mb-4">{labelImoveis(plano)}</div>
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-2">
-                {plano.permite_multiplos_usuarios
-                  ? <Check size={14} style={{ color: '#16a34a' }} className="flex-shrink-0" />
-                  : <X size={14} style={{ color: '#dc2626' }} className="flex-shrink-0" />}
-                <span style={{ color: '#1f2937' }} className="text-xs">{plano.permite_multiplos_usuarios ? 'Múltiplos usuários' : 'Usuário único'}</span>
-              </div>
-              {MODULOS_ORDEM.map(mod => {
-                const tem = plano.modulos.includes(mod.chave)
-                return (
-                  <div key={mod.chave} className="flex items-center gap-2">
-                    {tem
-                      ? <Check size={14} style={{ color: '#16a34a' }} className="flex-shrink-0" />
-                      : <X size={14} style={{ color: '#dc2626' }} className="flex-shrink-0" />}
-                    <span style={{ color: tem ? '#1f2937' : '#9ca3af' }} className="text-xs">{mod.label}</span>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
       </div>
     </div>
-  )
-}
-
-export default function CadastroSucessoPage() {
-  return (
-    <Suspense fallback={null}>
-      <CadastroSucessoConteudo />
-    </Suspense>
   )
 }
