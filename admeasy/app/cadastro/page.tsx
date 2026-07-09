@@ -202,6 +202,9 @@ export default function CadastroPage() {
                               )}
                               <span style={{ color: '#f4f4f3' }} className="font-semibold text-xs sm:text-sm">{p.nome}</span>
                             </div>
+                            <div style={{ color: '#8b9ab4' }} className="text-[10px] mb-2">
+                              {p.limite_imoveis ? `até ${p.limite_imoveis} imóveis` : 'acima de 50 imóveis'}
+                            </div>
                             <div style={{ color: '#f4f4f3' }} className="text-base sm:text-lg font-bold">
                               {formatVal(precoMensalEquivalente)}<span style={{ color: '#8b8d98' }} className="text-[10px] font-normal">/mês</span>
                             </div>
@@ -222,7 +225,7 @@ export default function CadastroPage() {
                     <td style={{ color: '#c3c2b7' }} className="px-4 py-2.5 text-xs whitespace-nowrap">Limite de imóveis</td>
                     {planos.map(p => (
                       <td key={p.id} style={{ color: '#c3c2b7', background: p.id === planoId ? '#16243a' : 'transparent' }} className="px-3 py-2.5 text-xs text-center">
-                        {p.limite_imoveis ? `Até ${p.limite_imoveis}` : 'Ilimitado'}
+                        {p.limite_imoveis ? `Até ${p.limite_imoveis}` : 'Acima de 50'}
                       </td>
                     ))}
                   </tr>
