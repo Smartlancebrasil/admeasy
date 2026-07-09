@@ -90,7 +90,7 @@ export default function CadastroPage() {
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-8">
           <img src="/logo-admeasy.png" alt="AdmEasy" className="w-28 h-auto object-contain mx-auto mb-4" />
-          <h1 style={{ color: '#f4f4f3' }} className="text-2xl font-semibold">Comece a usar o AdmEasy</h1>
+          <h1 style={{ color: '#f4f4f3' }} className="text-2xl font-semibold">Comece a usar o Admeasy</h1>
           <p style={{ color: '#8b8d98' }} className="text-sm mt-1">Escolha seu plano e crie sua conta em poucos minutos.</p>
         </div>
 
@@ -108,38 +108,41 @@ export default function CadastroPage() {
         </div>
 
         {/* Planos */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10 items-stretch">
           {planos.map(p => {
             const sel = p.id === planoId
             const precoMensalEquivalente = ciclo === 'anual' ? p.preco_anual_total / 12 : p.preco_mensal
             return (
               <button key={p.id} type="button" onClick={() => setPlanoId(p.id)}
                 style={sel ? { border: '1.5px solid #2563eb', background: '#16243a' } : { border: '0.5px solid #2a2f3a', background: '#161b22' }}
-                className="text-left rounded-2xl p-5 transition-all relative">
+                className="text-left rounded-2xl p-5 transition-all relative flex flex-col h-full">
                 {sel && (
                   <div style={{ background: '#2563eb' }} className="absolute top-3 right-3 w-5 h-5 rounded-full flex items-center justify-center">
                     <Check size={12} color="#fff" />
                   </div>
                 )}
                 <div style={{ color: '#f4f4f3' }} className="font-semibold mb-1">{p.nome}</div>
-                <div style={{ color: '#8b8d98' }} className="text-xs mb-3">
+                <div style={{ color: '#8b8d98' }} className="text-xs mb-4">
                   {p.limite_imoveis ? `Até ${p.limite_imoveis} imóveis` : 'Imóveis ilimitados'}
                 </div>
+
                 <div style={{ color: '#f4f4f3' }} className="text-xl font-bold">
                   {formatVal(precoMensalEquivalente)}<span style={{ color: '#8b8d98' }} className="text-xs font-normal">/mês</span>
                 </div>
-                {ciclo === 'anual' && (
-                  <div style={{ color: '#3fb950' }} className="text-xs mt-0.5">{formatVal(p.preco_anual_total)}/ano à vista no cartão</div>
-                )}
-                {p.taxa_implantacao > 0 && (
-                  <div style={{ color: '#8b8d98' }} className="text-xs mt-2">
-                    + {formatVal(p.taxa_implantacao)} de implantação
-                    {ciclo === 'mensal' ? ` (10x no boleto)` : ` (no cartão)`}
+                <div style={{ color: '#3fb950' }} className="text-xs mt-0.5 min-h-[16px]">
+                  {ciclo === 'anual' ? `${formatVal(p.preco_anual_total)}/ano à vista no cartão` : ''}
+                </div>
+
+                <div style={{ borderTop: '0.5px solid #2a2f3a' }} className="mt-4 pt-3 space-y-1.5 flex-1">
+                  <div style={{ color: '#8b9ab4' }} className="text-xs">
+                    {p.taxa_implantacao > 0
+                      ? `+ ${formatVal(p.taxa_implantacao)} de implantação (${ciclo === 'mensal' ? '10x no boleto' : 'no cartão'})`
+                      : 'Sem taxa de implantação'}
                   </div>
-                )}
-                {p.permite_multiplos_usuarios && (
-                  <div style={{ color: '#5b9bf5' }} className="text-xs mt-2">✓ Múltiplos usuários</div>
-                )}
+                  <div style={{ color: p.permite_multiplos_usuarios ? '#5b9bf5' : '#8b9ab4' }} className="text-xs">
+                    {p.permite_multiplos_usuarios ? '✓ Múltiplos usuários' : 'Usuário único'}
+                  </div>
+                </div>
               </button>
             )
           })}
