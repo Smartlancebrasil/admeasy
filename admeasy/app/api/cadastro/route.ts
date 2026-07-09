@@ -21,6 +21,7 @@ export async function POST(req: NextRequest) {
       email,
       telefone,
       senha,
+      incluir_implantacao,
     } = await req.json()
 
     if (!plano_id || !nome_organizacao || !nome_responsavel || !email || !senha) {
@@ -66,8 +67,8 @@ export async function POST(req: NextRequest) {
         ciclo_cobranca,
         status_assinatura: 'trial',
         data_inicio_assinatura: hoje,
-        taxa_implantacao_parcelas_total: ciclo_cobranca === 'mensal' ? plano.taxa_implantacao_parcelas : (plano.taxa_implantacao > 0 ? 1 : 0),
-        taxa_implantacao_parcelas_pagas: 0,
+        taxa_implantacao_parcelas_total: incluir_implantacao ? 1 : (ciclo_cobranca === 'mensal' ? plano.taxa_implantacao_parcelas : (plano.taxa_implantacao > 0 ? 1 : 0)),
+        taxa_implantacao_parcelas_pagas: incluir_implantacao ? 1 : 0,
       })
       .select()
       .single()
@@ -109,23 +110,39 @@ export async function POST(req: NextRequest) {
       .update({ stripe_customer_id: customer.id })
       .eq('id', org.id)
 
+    const linhasDoPedido: any[] = [
+      {
+        price_data: {
+          currency: 'brl',
+          unit_amount: valorCentavos,
+          recurring: { interval: ciclo_cobranca === 'anual' ? 'year' : 'month' },
+          product_data: {
+            name: `AdmEasy — Plano ${plano.nome} (${ciclo_cobranca})`,
+            description: `${plano.limite_imoveis ? `Até ${plano.limite_imoveis} imóveis` : 'Imóveis ilimitados'} · ${plano.permite_multiplos_usuarios ? 'Múltiplos usuários' : 'Usuário único'}`,
+          },
+        },
+        quantity: 1,
+      },
+    ]
+
+    if (incluir_implantacao && plano.taxa_implantacao > 0) {
+      linhasDoPedido.push({
+        price_data: {
+          currency: 'brl',
+          unit_amount: Math.round(plano.taxa_implantacao * 100),
+          product_data: {
+            name: 'Taxa de implantação',
+            description: 'Configuração inicial, treinamento e personalização do sistema — cobrada uma única vez.',
+          },
+        },
+        quantity: 1,
+      })
+    }
+
     const checkoutSession = await stripe.checkout.sessions.create({
       mode: 'subscription',
       customer: customer.id,
-      line_items: [
-        {
-          price_data: {
-            currency: 'brl',
-            unit_amount: valorCentavos,
-            recurring: { interval: ciclo_cobranca === 'anual' ? 'year' : 'month' },
-            product_data: {
-              name: `AdmEasy — Plano ${plano.nome} (${ciclo_cobranca})`,
-              description: `${plano.limite_imoveis ? `Até ${plano.limite_imoveis} imóveis` : 'Imóveis ilimitados'} · ${plano.permite_multiplos_usuarios ? 'Múltiplos usuários' : 'Usuário único'}${plano.taxa_implantacao > 0 ? ` · + ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(plano.taxa_implantacao)} de implantação` : ''}`,
-            },
-          },
-          quantity: 1,
-        },
-      ],
+      line_items: linhasDoPedido,
       subscription_data: {
         trial_period_days: 7,
         metadata: { organization_id: org.id },

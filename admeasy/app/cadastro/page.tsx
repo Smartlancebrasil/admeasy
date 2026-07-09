@@ -55,6 +55,7 @@ export default function CadastroPage() {
   const [telefone, setTelefone] = useState('')
   const [senha, setSenha] = useState('')
   const [confirmarSenha, setConfirmarSenha] = useState('')
+  const [incluirImplantacao, setIncluirImplantacao] = useState(false)
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState('')
 
@@ -91,6 +92,7 @@ export default function CadastroPage() {
           email,
           telefone,
           senha,
+          incluir_implantacao: incluirImplantacao,
         }),
       })
       const dados = await res.json()
@@ -235,6 +237,29 @@ export default function CadastroPage() {
                   {formatVal(ciclo === 'anual' ? planoSel.preco_anual_total / 12 : planoSel.preco_mensal)}
                   <span style={{ color: '#8b8d98' }} className="text-xs font-normal">/mês</span>
                 </div>
+              </div>
+            )}
+
+            {planoSel && planoSel.taxa_implantacao > 0 && (
+              <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-xl p-4 mb-5">
+                <div style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-1">
+                  Taxa de implantação: {formatVal(planoSel.taxa_implantacao)}
+                </div>
+                <p style={{ color: '#8b9ab4' }} className="text-xs mb-3 leading-relaxed">
+                  Serve para cobrir os custos de configuração inicial e treinamento necessários para colocar seu negócio pra funcionar. Ela garante que o sistema fique seguro, personalizado e pronto para uso desde o primeiro dia.
+                </p>
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={incluirImplantacao}
+                    onChange={e => setIncluirImplantacao(e.target.checked)}
+                    className="mt-0.5"
+                  />
+                  <span style={{ color: '#c3c2b7' }} className="text-xs">
+                    Quero incluir a taxa de implantação agora, no cartão ({formatVal(planoSel.taxa_implantacao)} cobrados junto com o cadastro).
+                    Se deixar desmarcado, combinamos essa cobrança separadamente depois.
+                  </span>
+                </label>
               </div>
             )}
 
