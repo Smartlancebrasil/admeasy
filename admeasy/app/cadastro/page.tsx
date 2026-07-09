@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { Check } from 'lucide-react'
+import { Check, X } from 'lucide-react'
 
 type Plano = {
   id: string
@@ -16,6 +16,24 @@ type Plano = {
   modulos: string[]
   permite_multiplos_usuarios: boolean
 }
+
+// Ordem em que os módulos aparecem na tabela comparativa, com o rótulo em português
+const MODULOS_ORDEM: { chave: string; label: string }[] = [
+  { chave: 'imoveis', label: 'Cadastro de imóveis' },
+  { chave: 'contratos', label: 'Contratos' },
+  { chave: 'clientes', label: 'Clientes' },
+  { chave: 'financeiro', label: 'Financeiro' },
+  { chave: 'portal_locatario', label: 'Portal do locatário' },
+  { chave: 'reajuste', label: 'Reajuste de aluguel' },
+  { chave: 'rescisao', label: 'Cálculo de rescisão' },
+  { chave: 'demandas', label: 'Chamados' },
+  { chave: 'dashboard_bi', label: 'Dashboard BI executivo' },
+  { chave: 'fornecedores', label: 'Fornecedores' },
+  { chave: 'visitas', label: 'Visitas' },
+  { chave: 'vistorias', label: 'Vistorias' },
+  { chave: 'analise_cadastral', label: 'Análise de locatários' },
+  { chave: 'processos_judiciais', label: 'Processos judiciais' },
+]
 
 function formatVal(v: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
@@ -107,45 +125,79 @@ export default function CadastroPage() {
           </div>
         </div>
 
-        {/* Planos */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10 items-stretch">
-          {planos.map(p => {
-            const sel = p.id === planoId
-            const precoMensalEquivalente = ciclo === 'anual' ? p.preco_anual_total / 12 : p.preco_mensal
-            return (
-              <button key={p.id} type="button" onClick={() => setPlanoId(p.id)}
-                style={sel ? { border: '1.5px solid #2563eb', background: '#16243a' } : { border: '0.5px solid #2a2f3a', background: '#161b22' }}
-                className="text-left rounded-2xl p-5 transition-all relative flex flex-col h-full">
-                {sel && (
-                  <div style={{ background: '#2563eb' }} className="absolute top-3 right-3 w-5 h-5 rounded-full flex items-center justify-center">
-                    <Check size={12} color="#fff" />
-                  </div>
-                )}
-                <div style={{ color: '#f4f4f3' }} className="font-semibold mb-1">{p.nome}</div>
-                <div style={{ color: '#8b8d98' }} className="text-xs mb-4">
-                  {p.limite_imoveis ? `Até ${p.limite_imoveis} imóveis` : 'Imóveis ilimitados'}
-                </div>
-
-                <div style={{ color: '#f4f4f3' }} className="text-xl font-bold">
-                  {formatVal(precoMensalEquivalente)}<span style={{ color: '#8b8d98' }} className="text-xs font-normal">/mês</span>
-                </div>
-                <div style={{ color: '#3fb950' }} className="text-xs mt-0.5 min-h-[16px]">
-                  {ciclo === 'anual' ? `${formatVal(p.preco_anual_total)}/ano à vista no cartão` : ''}
-                </div>
-
-                <div style={{ borderTop: '0.5px solid #2a2f3a' }} className="mt-4 pt-3 space-y-1.5 flex-1">
-                  <div style={{ color: '#8b9ab4' }} className="text-xs">
-                    {p.taxa_implantacao > 0
-                      ? `+ ${formatVal(p.taxa_implantacao)} de implantação (${ciclo === 'mensal' ? '10x no boleto' : 'no cartão'})`
-                      : 'Sem taxa de implantação'}
-                  </div>
-                  <div style={{ color: p.permite_multiplos_usuarios ? '#5b9bf5' : '#8b9ab4' }} className="text-xs">
-                    {p.permite_multiplos_usuarios ? '✓ Múltiplos usuários' : 'Usuário único'}
-                  </div>
-                </div>
-              </button>
-            )
-          })}
+        {/* Planos — tabela comparativa */}
+        <div className="card p-0 overflow-hidden overflow-x-auto mb-10">
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr>
+                <th style={{ borderBottom: '0.5px solid #2a2f3a' }} className="text-left px-4 py-4 align-bottom w-48"></th>
+                {planos.map(p => {
+                  const sel = p.id === planoId
+                  const precoMensalEquivalente = ciclo === 'anual' ? p.preco_anual_total / 12 : p.preco_mensal
+                  return (
+                    <th key={p.id}
+                      style={{ borderBottom: '0.5px solid #2a2f3a', background: sel ? '#16243a' : 'transparent' }}
+                      className="px-4 py-4 text-center align-bottom min-w-[180px]">
+                      <button type="button" onClick={() => setPlanoId(p.id)} className="w-full text-center">
+                        <div className="flex items-center justify-center gap-1.5 mb-1">
+                          {sel && (
+                            <span style={{ background: '#2563eb' }} className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0">
+                              <Check size={10} color="#fff" />
+                            </span>
+                          )}
+                          <span style={{ color: '#f4f4f3' }} className="font-semibold">{p.nome}</span>
+                        </div>
+                        <div style={{ color: '#f4f4f3' }} className="text-lg font-bold">
+                          {formatVal(precoMensalEquivalente)}<span style={{ color: '#8b8d98' }} className="text-xs font-normal">/mês</span>
+                        </div>
+                        <div style={{ color: '#3fb950' }} className="text-[11px] min-h-[14px]">
+                          {ciclo === 'anual' ? `${formatVal(p.preco_anual_total)}/ano à vista` : '\u00A0'}
+                        </div>
+                        <div style={{ color: '#8b9ab4' }} className="text-[11px] mt-1">
+                          {p.taxa_implantacao > 0
+                            ? `+ ${formatVal(p.taxa_implantacao)} implantação`
+                            : 'Sem implantação'}
+                        </div>
+                      </button>
+                    </th>
+                  )
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              <tr style={{ borderBottom: '0.5px solid #1c2128' }}>
+                <td style={{ color: '#c3c2b7' }} className="px-4 py-2.5 text-xs">Limite de imóveis</td>
+                {planos.map(p => (
+                  <td key={p.id} style={{ color: '#c3c2b7', background: p.id === planoId ? '#16243a' : 'transparent' }} className="px-4 py-2.5 text-xs text-center">
+                    {p.limite_imoveis ? `Até ${p.limite_imoveis}` : 'Ilimitado'}
+                  </td>
+                ))}
+              </tr>
+              <tr style={{ borderBottom: '0.5px solid #1c2128' }}>
+                <td style={{ color: '#c3c2b7' }} className="px-4 py-2.5 text-xs">Usuários</td>
+                {planos.map(p => (
+                  <td key={p.id} style={{ color: '#c3c2b7', background: p.id === planoId ? '#16243a' : 'transparent' }} className="px-4 py-2.5 text-xs text-center">
+                    {p.permite_multiplos_usuarios ? 'Vários' : 'Único'}
+                  </td>
+                ))}
+              </tr>
+              {MODULOS_ORDEM.map(mod => (
+                <tr key={mod.chave} style={{ borderBottom: '0.5px solid #1c2128' }}>
+                  <td style={{ color: '#c3c2b7' }} className="px-4 py-2.5 text-xs">{mod.label}</td>
+                  {planos.map(p => {
+                    const tem = p.modulos.includes(mod.chave)
+                    return (
+                      <td key={p.id} style={{ background: p.id === planoId ? '#16243a' : 'transparent' }} className="px-4 py-2.5 text-center">
+                        {tem
+                          ? <Check size={14} style={{ color: '#3fb950' }} className="mx-auto" />
+                          : <X size={14} style={{ color: '#3a3f4a' }} className="mx-auto" />}
+                      </td>
+                    )
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
 
         {/* Formulário */}
