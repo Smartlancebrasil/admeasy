@@ -29,8 +29,9 @@ export async function POST(req: NextRequest) {
       const orgId = sub.metadata?.organization_id
       if (orgId) {
         const status = mapearStatus(sub.status)
-        const proximaCobranca = sub.current_period_end
-          ? new Date(sub.current_period_end * 1000).toISOString().split('T')[0]
+        const periodoFim = sub.items.data[0]?.current_period_end
+        const proximaCobranca = periodoFim
+          ? new Date(periodoFim * 1000).toISOString().split('T')[0]
           : null
 
         await supabaseAdmin
