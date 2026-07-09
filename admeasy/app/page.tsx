@@ -312,6 +312,13 @@ export default function PaginaInicial() {
               Agendar demonstração
             </button>
             <a
+              href="/cadastro"
+              style={{ color: COLORS.blue, background: `${COLORS.bg}80`, border: `1px solid ${COLORS.blue}` }}
+              className="text-sm font-semibold uppercase tracking-wide px-6 py-3.5 rounded-lg transition-all hover:-translate-y-0.5 hover:shadow-xl"
+            >
+              Assinar agora
+            </a>
+            <a
               href="#modulos"
               style={{ color: COLORS.text, background: `${COLORS.bg}80`, border: `1px solid ${COLORS.line}` }}
               className="text-sm font-semibold uppercase tracking-wide px-6 py-3.5 rounded-lg transition-all hover:-translate-y-0.5 hover:border-[#1E88FF]"
