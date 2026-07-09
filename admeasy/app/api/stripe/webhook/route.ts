@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
       const orgId = sub.metadata?.organization_id
       if (orgId) {
         const status = mapearStatus(sub.status)
-        const periodoFim = sub.items.data[0]?.current_period_end
+        const periodoFim = (sub.items.data[0] as any)?.current_period_end ?? (sub as any).current_period_end
         const proximaCobranca = periodoFim
           ? new Date(periodoFim * 1000).toISOString().split('T')[0]
           : null
@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
 
     case 'invoice.payment_failed': {
       const invoice = evento.data.object as Stripe.Invoice
-      const subId = invoice.subscription as string | null
+      const subId = ((invoice as any).subscription ?? (invoice as any).parent?.subscription_details?.subscription) as string | null
       if (subId) {
         const sub = await stripe.subscriptions.retrieve(subId)
         const orgId = sub.metadata?.organization_id
