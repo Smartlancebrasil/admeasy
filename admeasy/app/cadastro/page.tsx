@@ -40,7 +40,7 @@ function formatVal(v: number) {
 }
 
 function labelImoveis(p: Plano) {
-  return p.limite_imoveis ? `até ${p.limite_imoveis} imóveis` : 'acima de 50 imóveis'
+  return p.limite_imoveis ? `até ${p.limite_imoveis} imóveis` : 'acima de 100 imóveis'
 }
 
 export default function CadastroPage() {
