@@ -118,7 +118,7 @@ export async function POST(req: NextRequest) {
           recurring: { interval: ciclo_cobranca === 'anual' ? 'year' : 'month' },
           product_data: {
             name: `AdmEasy — Plano ${plano.nome} (${ciclo_cobranca})`,
-            description: `${plano.limite_imoveis ? `Até ${plano.limite_imoveis} imóveis` : 'Imóveis ilimitados'} · ${plano.permite_multiplos_usuarios ? 'Múltiplos usuários' : 'Usuário único'}`,
+            description: `${plano.limite_imoveis ? `Até ${plano.limite_imoveis} imóveis` : 'Imóveis ilimitados'} · ${plano.permite_multiplos_usuarios ? 'Múltiplos usuários' : 'Usuário único'}${incluir_implantacao && plano.taxa_implantacao > 0 ? ` · Implantação de ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(plano.taxa_implantacao)} combinada à parte` : ''}`,
           },
         },
         quantity: 1,
