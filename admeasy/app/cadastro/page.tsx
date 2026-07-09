@@ -99,9 +99,15 @@ export default function CadastroPage() {
         setEnviando(false)
         return
       }
-      // Cadastro concluído — loga automaticamente e manda pro dashboard
-      await supabase.auth.signInWithPassword({ email, password: senha })
-      router.push('/dashboard')
+      // Cadastro concluído — manda pro checkout do Stripe pra cadastrar o
+      // cartão (nada é cobrado agora, só depois dos 7 dias de teste grátis)
+      if (dados.checkout_url) {
+        window.location.href = dados.checkout_url
+      } else {
+        // fallback, caso o checkout não tenha sido criado por algum motivo
+        await supabase.auth.signInWithPassword({ email, password: senha })
+        router.push('/dashboard')
+      }
     } catch (err: any) {
       setErro('Não foi possível concluir o cadastro. Tente novamente.')
       setEnviando(false)

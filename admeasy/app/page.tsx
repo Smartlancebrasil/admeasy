@@ -4,7 +4,7 @@ import { Inter } from 'next/font/google'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { CreditCard, ArrowLeftRight, ShieldCheck, FileText, BarChart3 } from 'lucide-react'
+import { CreditCard, ArrowLeftRight, ShieldCheck, FileText, BarChart3, X } from 'lucide-react'
 
 const inter = Inter({ subsets: ['latin'], weight: ['400', '500', '600', '700'], variable: '--font-body' })
 
@@ -235,6 +235,7 @@ const artigos = [
 
 export default function PaginaInicial() {
   const [menuAberto, setMenuAberto] = useState(false)
+  const [barraVisivel, setBarraVisivel] = useState(true)
   useCalEmbed()
 
   return (
@@ -426,7 +427,7 @@ export default function PaginaInicial() {
       </section>
 
       {/* Footer */}
-      <footer style={{ borderTop: `1px solid ${COLORS.line}` }} className="py-10">
+      <footer style={{ borderTop: `1px solid ${COLORS.line}` }} className="py-10 pb-24">
         <div className="max-w-6xl mx-auto px-5 md:px-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div style={{ color: COLORS.muted }} className="text-xs">
             © {new Date().getFullYear()} AdmEasy — Gestão Inteligente de Locações, por Smartlance Brasil
@@ -438,6 +439,45 @@ export default function PaginaInicial() {
           </div>
         </div>
       </footer>
+
+      {/* Faixa fixa no rodapé */}
+      {barraVisivel && (
+        <div
+          style={{ background: '#0a1526', borderTop: `1px solid ${COLORS.line}` }}
+          className="fixed bottom-0 left-0 right-0 z-50 py-3 px-5"
+        >
+          <div className="max-w-6xl mx-auto flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <span style={{ color: COLORS.text }} className="text-sm font-semibold truncate">
+                Crie agora sua conta no AdmEasy
+              </span>
+              <span style={{ color: COLORS.muted }} className="text-xs hidden sm:inline truncate">
+                Teste grátis por 7 dias, sem compromisso.
+              </span>
+            </div>
+            <div className="flex items-center gap-3 flex-shrink-0">
+              <a
+                href="/cadastro"
+                style={{
+                  background: `linear-gradient(135deg, ${COLORS.blue} 0%, ${COLORS.blueSecondary} 100%)`,
+                  color: '#fff',
+                }}
+                className="text-xs font-semibold uppercase tracking-wide px-5 py-2.5 rounded-lg whitespace-nowrap"
+              >
+                Teste agora por 7 dias grátis
+              </a>
+              <button
+                onClick={() => setBarraVisivel(false)}
+                aria-label="Fechar"
+                style={{ color: COLORS.muted }}
+                className="hover:opacity-80"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
