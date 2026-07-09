@@ -43,11 +43,9 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div style={{ background: '#2563eb' }} className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-4">
-            <span className="text-3xl">🏢</span>
+          <div style={{ background: '#fff' }} className="inline-flex items-center justify-center rounded-2xl p-4 mb-2">
+            <img src="/logo-admeasy.png" alt="AdmEasy" className="w-40 h-40 object-contain" />
           </div>
-          <h1 style={{ color: '#f4f4f3' }} className="text-2xl font-semibold">AdmEasy</h1>
-          <p style={{ color: '#8b8d98' }} className="text-sm mt-1">Gestão imobiliária inteligente</p>
         </div>
 
         {/* Card */}
