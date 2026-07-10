@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import AppLayout from '@/components/layout/AppLayout'
 import { supabase } from '@/lib/supabase'
+import { useOrganization } from '@/lib/OrganizationContext'
 import { FileDown, ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 
@@ -29,20 +30,24 @@ type Org = { nome: string; logo_url?: string; cnpj?: string; creci?: string; cid
 
 export default function VistoriaDetalhePage() {
   const { id } = useParams()
+  const { organizacao } = useOrganization()
   const [vistoria, setVistoria] = useState<Vistoria | null>(null)
   const [org, setOrg] = useState<Org | null>(null)
   const [gerandoPdf, setGerandoPdf] = useState(false)
 
-  useEffect(() => { carregar() }, [id])
+  useEffect(() => {
+    if (organizacao?.id) carregar(organizacao.id)
+  }, [id, organizacao?.id])
 
-  async function carregar() {
+  async function carregar(orgId: string) {
     const { data } = await supabase
       .from('vistorias')
       .select('*, imovel:imoveis(endereco, numero, complemento, bairro, cidade, estado), vistoriador:vistoriadores(nome, crea, cpf)')
       .eq('id', id)
+      .eq('organization_id', orgId)
       .single()
     if (data) setVistoria(data)
-    const { data: o } = await supabase.from('organizations').select('*').eq('id', '00000000-0000-0000-0000-000000000001').single()
+    const { data: o } = await supabase.from('organizations').select('*').eq('id', orgId).single()
     if (o) setOrg(o)
   }
 

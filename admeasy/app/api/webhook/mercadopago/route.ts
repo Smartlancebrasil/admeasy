@@ -7,13 +7,9 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// Valida a assinatura do Mercado Pago (recomendado em produção).
-// Se MERCADOPAGO_WEBHOOK_SECRET não estiver configurado, a validação é pulada
-// (funciona, mas qualquer um poderia chamar essa rota fingindo ser o Mercado Pago).
-function validarAssinatura(req: NextRequest): boolean {
-  const secret = process.env.MERCADOPAGO_WEBHOOK_SECRET
-  if (!secret) return true
-
+// Valida a assinatura do Mercado Pago. MERCADOPAGO_WEBHOOK_SECRET é obrigatória —
+// sem ela, a chamada é rejeitada (nunca aceitamos webhook sem validar quem está chamando).
+function validarAssinatura(req: NextRequest, secret: string): boolean {
   const xSignature = req.headers.get('x-signature')
   const xRequestId = req.headers.get('x-request-id')
   if (!xSignature || !xRequestId) return false
@@ -37,7 +33,13 @@ function validarAssinatura(req: NextRequest): boolean {
 
 export async function POST(req: NextRequest) {
   try {
-    if (!validarAssinatura(req)) {
+    const secret = process.env.MERCADOPAGO_WEBHOOK_SECRET
+    if (!secret) {
+      console.error('Webhook Mercado Pago: MERCADOPAGO_WEBHOOK_SECRET não configurado — rejeitando chamada.')
+      return NextResponse.json({ erro: 'Webhook não autorizado.' }, { status: 401 })
+    }
+
+    if (!validarAssinatura(req, secret)) {
       console.warn('Webhook Mercado Pago: assinatura inválida.')
       return NextResponse.json({ erro: 'Assinatura inválida.' }, { status: 401 })
     }
@@ -75,24 +77,58 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true })
     }
 
-    if (pagamento.status === 'approved') {
-      const { error } = await supabaseAdmin
-        .from('cobrancas')
-        .update({
-          status_cobranca: 'pago',
-          data_pagamento: new Date().toISOString().split('T')[0],
-          mp_payment_id: String(paymentId),
-        })
-        .eq('id', cobrancaId)
-
-      if (error) {
-        console.error('Erro ao marcar cobrança como paga:', error)
-        return NextResponse.json({ erro: 'Erro ao atualizar cobrança.' }, { status: 500 })
-      }
-
-      console.log(`Cobrança ${cobrancaId} marcada como paga via webhook (payment ${paymentId}).`)
+    if (pagamento.status !== 'approved') {
+      return NextResponse.json({ ok: true })
     }
 
+    // Nunca confia só no metadata do webhook: busca a cobrança real no banco
+    // e valida referência, moeda, valor e organização antes de dar baixa.
+    const { data: cobranca, error: erroCobranca } = await supabaseAdmin
+      .from('cobrancas')
+      .select('id, organization_id, valor_total, valor_aluguel')
+      .eq('id', cobrancaId)
+      .maybeSingle()
+
+    if (erroCobranca || !cobranca) {
+      console.error('Webhook Mercado Pago: cobrança não encontrada para o pagamento.', { paymentId, cobrancaId })
+      return NextResponse.json({ erro: 'Cobrança não encontrada.' }, { status: 404 })
+    }
+
+    if (!cobranca.organization_id) {
+      console.error('Webhook Mercado Pago: cobrança sem organização vinculada.', { cobrancaId })
+      return NextResponse.json({ erro: 'Cobrança inválida.' }, { status: 422 })
+    }
+
+    if (pagamento.currency_id !== 'BRL') {
+      console.error('Webhook Mercado Pago: moeda do pagamento diverge do esperado.', { paymentId, cobrancaId, moeda: pagamento.currency_id })
+      return NextResponse.json({ erro: 'Moeda do pagamento não confere.' }, { status: 422 })
+    }
+
+    const valorEsperado = cobranca.valor_total > 0 ? cobranca.valor_total : (cobranca.valor_aluguel || 0)
+    const valorRecebido = Number(pagamento.transaction_amount) || 0
+    if (Math.abs(valorRecebido - valorEsperado) > 0.01) {
+      console.error('Webhook Mercado Pago: valor pago diverge do valor esperado da cobrança.', {
+        paymentId, cobrancaId, valorEsperado, valorRecebido,
+      })
+      return NextResponse.json({ erro: 'Valor do pagamento não confere com a cobrança.' }, { status: 422 })
+    }
+
+    const { error } = await supabaseAdmin
+      .from('cobrancas')
+      .update({
+        status_cobranca: 'pago',
+        data_pagamento: new Date().toISOString().split('T')[0],
+        mp_payment_id: String(paymentId),
+      })
+      .eq('id', cobrancaId)
+      .eq('organization_id', cobranca.organization_id)
+
+    if (error) {
+      console.error('Erro ao marcar cobrança como paga:', error)
+      return NextResponse.json({ erro: 'Erro ao atualizar cobrança.' }, { status: 500 })
+    }
+
+    console.log(`Cobrança ${cobrancaId} marcada como paga via webhook (payment ${paymentId}).`)
     return NextResponse.json({ ok: true })
   } catch (err: any) {
     console.error('Erro no webhook Mercado Pago:', err)

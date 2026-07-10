@@ -158,9 +158,8 @@ function FormCliente({
  * Também fica FORA do componente da página, pelo mesmo motivo do
  * FormCliente (evitar recriação e perda de foco a cada tecla digitada).
  */
-function ModalAcessoPortal({ cliente, organizationId, onFechar, onSucesso }: {
+function ModalAcessoPortal({ cliente, onFechar, onSucesso }: {
   cliente: Cliente
-  organizationId?: string
   onFechar: () => void
   onSucesso: () => void
 }) {
@@ -174,10 +173,13 @@ function ModalAcessoPortal({ cliente, organizationId, onFechar, onSucesso }: {
     setSalvando(true)
     setErro('')
     try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData?.session?.access_token
+      if (!token) throw new Error('Sessão expirada. Atualize a página e faça login novamente.')
       const res = await fetch('/api/portal/gerenciar-acesso', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clienteId: cliente.id, email, senha, organizationId }),
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ clienteId: cliente.id, email, senha }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Erro ao processar.')
@@ -255,11 +257,13 @@ export default function ClientesPage() {
   const [form, setForm] = useState<Record<string,string>>(formVazio)
   const [clienteAcesso, setClienteAcesso] = useState<Cliente | null>(null)
 
-  useEffect(() => { buscarClientes() }, [])
+  useEffect(() => {
+    if (organizacao?.id) buscarClientes(organizacao.id)
+  }, [organizacao?.id])
 
-  async function buscarClientes() {
+  async function buscarClientes(orgId: string) {
     setLoading(true)
-    const { data } = await supabase.from('clientes').select('*').order('nome')
+    const { data } = await supabase.from('clientes').select('*').eq('organization_id', orgId).order('nome')
     if (data) setClientes(data)
     setLoading(false)
   }
@@ -295,6 +299,7 @@ export default function ClientesPage() {
 
   async function salvar(e: React.FormEvent) {
     e.preventDefault()
+    if (!organizacao?.id) { setErro('Organização ainda não carregada. Aguarde e tente novamente.'); return }
     setSalvando(true)
     setErro('')
 
@@ -306,10 +311,10 @@ export default function ClientesPage() {
 
     let error
     if (editando) {
-      const res = await supabase.from('clientes').update(payload).eq('id', editando.id)
+      const res = await supabase.from('clientes').update(payload).eq('id', editando.id).eq('organization_id', organizacao.id)
       error = res.error
     } else {
-      const res = await supabase.from('clientes').insert([{ ...payload, tem_portal: false }])
+      const res = await supabase.from('clientes').insert([{ ...payload, organization_id: organizacao.id, tem_portal: false }])
       error = res.error
     }
 
@@ -318,16 +323,17 @@ export default function ClientesPage() {
     } else {
       setSucesso(editando ? 'Cliente atualizado!' : 'Cliente cadastrado!')
       fecharForm()
-      buscarClientes()
+      buscarClientes(organizacao.id)
       setTimeout(() => setSucesso(''), 3000)
     }
     setSalvando(false)
   }
 
   async function excluir(id: string) {
+    if (!organizacao?.id) return
     if (!confirm('Tem certeza que deseja excluir este cliente?')) return
-    await supabase.from('clientes').delete().eq('id', id)
-    buscarClientes()
+    await supabase.from('clientes').delete().eq('id', id).eq('organization_id', organizacao.id)
+    buscarClientes(organizacao.id)
   }
 
   const filtrados = clientes.filter(c =>
@@ -343,7 +349,7 @@ export default function ClientesPage() {
 
           <div className="flex items-center justify-between mb-5">
             <h1 style={{ color: '#f4f4f3' }} className="text-lg font-medium">Clientes e proprietários</h1>
-            <button className="btn btn-primary" onClick={abrirNovo}><UserPlus size={14} />Novo cliente</button>
+            <button className="btn btn-primary" onClick={abrirNovo} disabled={!organizacao?.id}><UserPlus size={14} />Novo cliente</button>
           </div>
 
           {sucesso && <div style={{ background: '#1a2e1f', border: '0.5px solid #2d4a35', color: '#3fb950' }} className="px-4 py-3 rounded-lg mb-4 text-sm">{sucesso}</div>}
@@ -362,9 +368,8 @@ export default function ClientesPage() {
           {clienteAcesso && (
             <ModalAcessoPortal
               cliente={clienteAcesso}
-              organizationId={organizacao?.id}
               onFechar={() => setClienteAcesso(null)}
-              onSucesso={() => { buscarClientes() }}
+              onSucesso={() => { if (organizacao?.id) buscarClientes(organizacao.id) }}
             />
           )}
 

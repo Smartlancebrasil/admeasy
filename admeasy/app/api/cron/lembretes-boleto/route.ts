@@ -59,8 +59,14 @@ function corpoEmailBoleto(nome: string, mesReferencia: string, valor: number, ve
 }
 
 export async function GET(req: NextRequest) {
+  const cronSecret = process.env.CRON_SECRET
+  if (!cronSecret) {
+    console.error('Cron de lembretes: CRON_SECRET não configurado — rejeitando execução.')
+    return NextResponse.json({ erro: 'Não autorizado.' }, { status: 401 })
+  }
+
   const auth = req.headers.get('authorization')
-  if (process.env.CRON_SECRET && auth !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (auth !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ erro: 'Não autorizado.' }, { status: 401 })
   }
 
@@ -110,10 +116,11 @@ export async function GET(req: NextRequest) {
             metadata: { cobranca_id: c.id, mes_referencia: c.mes_referencia },
           }
 
-          const idemBase = `${c.id}-${Date.now()}`
+          // Chave determinística (sem timestamp): reprocessar a mesma cobrança
+          // reaproveita o pagamento já criado em vez de duplicar.
           const [boletoRes, pixRes] = await Promise.all([
-            gerarPagamentoMP(payloadBase, 'bolbradesco', `boleto-cron-${idemBase}`),
-            gerarPagamentoMP(payloadBase, 'pix', `pix-cron-${idemBase}`),
+            gerarPagamentoMP(payloadBase, 'bolbradesco', `cobranca:${c.id}:boleto`),
+            gerarPagamentoMP(payloadBase, 'pix', `cobranca:${c.id}:pix`),
           ])
 
           if (!boletoRes.ok && !pixRes.ok) {
@@ -125,15 +132,32 @@ export async function GET(req: NextRequest) {
           const linhaDigitavel = boletoRes.ok ? (boletoRes.data.transaction_details?.barcode_content || '') : ''
           const pixCopiaCola = pixRes.ok ? (pixRes.data.point_of_interaction?.transaction_data?.qr_code || '') : ''
           const pixQrBase64 = pixRes.ok ? (pixRes.data.point_of_interaction?.transaction_data?.qr_code_base64 || '') : ''
+          const paymentId = boletoRes.ok ? boletoRes.data.id : pixRes.data.id
 
-          await supabaseAdmin.from('cobrancas').update({
-            mp_payment_id: boletoRes.ok ? boletoRes.data.id : pixRes.data.id,
+          const { error: erroPersistencia } = await supabaseAdmin.from('cobrancas').update({
+            mp_payment_id: paymentId,
             boleto_url: urlBoleto,
             boleto_linha_digitavel: linhaDigitavel,
             pix_qr_code: pixCopiaCola,
             pix_qr_code_base64: pixQrBase64,
             lembrete_7d_enviado_em: new Date().toISOString(),
           }).eq('id', c.id)
+
+          if (erroPersistencia) {
+            // O Mercado Pago já pode ter criado o(s) pagamento(s), mas não
+            // conseguimos salvar o link na cobrança — não envia o e-mail de
+            // boleto disponível com dado que não foi persistido. A chave de
+            // idempotência é determinística, então a próxima execução do
+            // cron recupera o mesmo pagamento; se o erro persistir, precisa
+            // de reconciliação manual (nunca logar token/chaves aqui).
+            console.error('Cron de lembretes: erro ao persistir boleto/pix na cobrança — pagamento pode já existir no Mercado Pago e precisar de reconciliação.', {
+              cobrancaId: c.id,
+              paymentId: paymentId ? String(paymentId) : null,
+              erro: erroPersistencia.message,
+            })
+            resultado.erros.push(`Cobrança ${c.id}: pagamento gerado, mas falhou ao salvar na cobrança.`)
+            continue
+          }
 
           await resend.emails.send({
             from: remetente,

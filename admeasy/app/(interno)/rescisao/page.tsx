@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import AppLayout from '@/components/layout/AppLayout'
 import { supabase } from '@/lib/supabase'
+import { useOrganization } from '@/lib/OrganizationContext'
 import { Calculator, Edit2, X, TrendingUp } from 'lucide-react'
 
 type Contrato = {
@@ -53,6 +54,7 @@ function dataExtenso(dateStr: string) {
 }
 
 export default function RescisaoPage() {
+  const { organizacao } = useOrganization()
   const [contratos, setContratos] = useState<Contrato[]>([])
   const [loading, setLoading] = useState(true)
   const [contratoSel, setContratoSel] = useState<Contrato | null>(null)
@@ -81,13 +83,16 @@ export default function RescisaoPage() {
   const [testemunha2Nome, setTestemunha2Nome] = useState('')
   const [testemunha2Cpf, setTestemunha2Cpf] = useState('')
 
-  useEffect(() => { buscarContratos() }, [])
+  useEffect(() => {
+    if (organizacao?.id) buscarContratos(organizacao.id)
+  }, [organizacao?.id])
 
-  async function buscarContratos() {
+  async function buscarContratos(orgId: string) {
     setLoading(true)
     const { data } = await supabase
       .from('contratos')
       .select(`*, imovel:imoveis(titulo, endereco, numero, bairro, cidade, estado), locatario:clientes!contratos_locatario_id_fkey(nome), locador:clientes!contratos_locador_id_fkey(nome)`)
+      .eq('organization_id', orgId)
       .in('status', ['ativo', 'pendente'])
       .order('numero')
     if (data) setContratos(data)
@@ -157,10 +162,10 @@ export default function RescisaoPage() {
   }
 
   async function gerarPdf() {
-    if (!contratoSel || !resultado) return
+    if (!contratoSel || !resultado || !organizacao?.id) return
     setGerandoPdf(true)
 
-    const { data: orgData } = await supabase.from('organizations').select('*').eq('id', '00000000-0000-0000-0000-000000000001').single()
+    const { data: orgData } = await supabase.from('organizations').select('*').eq('id', organizacao.id).single()
     const org: Org = orgData || { nome: 'Imobiliária' }
 
     const { default: jsPDF } = await import('jspdf')

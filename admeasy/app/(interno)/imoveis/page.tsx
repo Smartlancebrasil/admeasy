@@ -3,9 +3,8 @@
 import { useEffect, useState } from 'react'
 import AppLayout from '@/components/layout/AppLayout'
 import { supabase } from '@/lib/supabase'
+import { useOrganization } from '@/lib/OrganizationContext'
 import { Building2, Plus, Search, X, UserPlus, Edit2, Trash2 } from 'lucide-react'
-
-const ORG_ID = '00000000-0000-0000-0000-000000000001'
 
 type Imovel = {
   id: string
@@ -111,9 +110,10 @@ function InputMoeda({ value, onChange, placeholder }: { value: string; onChange:
  * Campos: nome, CPF, RG, estado civil, profissão, endereço completo, email, celular,
  * com opção de cadastrar o cônjuge (registro separado) quando "casado(a)".
  */
-function ModalProprietario({ onSalvar, onFechar }: {
+function ModalProprietario({ onSalvar, onFechar, organizationId }: {
   onSalvar: (cliente: { id: string; nome: string }) => void
   onFechar: () => void
+  organizationId: string
 }) {
   const [form, setForm] = useState<Record<string, string>>({ ...clienteFormVazio })
   const [cadastrarConjuge, setCadastrarConjuge] = useState(false)
@@ -134,7 +134,7 @@ function ModalProprietario({ onSalvar, onFechar }: {
     setSalvando(true)
     setErro('')
 
-    const payloadTitular = { ...form, organization_id: ORG_ID, tem_portal: false }
+    const payloadTitular = { ...form, organization_id: organizationId, tem_portal: false }
     const { data: titular, error: erroTitular } = await supabase
       .from('clientes').insert([payloadTitular]).select('id, nome').single()
 
@@ -147,7 +147,7 @@ function ModalProprietario({ onSalvar, onFechar }: {
         estado_civil: 'casado', tipo: form.tipo, status: 'ativo', tem_portal: false,
         endereco: form.endereco || null, bairro: form.bairro || null,
         cidade: form.cidade || null, estado: form.estado || null, cep: form.cep || null,
-        organization_id: ORG_ID,
+        organization_id: organizationId,
       }
       const { error: erroConjuge } = await supabase.from('clientes').insert([payloadConjuge])
       if (erroConjuge) { setSalvando(false); setErro('Proprietário salvo, mas erro ao salvar cônjuge: ' + erroConjuge.message); return }
@@ -245,6 +245,7 @@ function ModalProprietario({ onSalvar, onFechar }: {
 }
 
 export default function ImoveisPage() {
+  const { organizacao } = useOrganization()
   const [imoveis, setImoveis] = useState<Imovel[]>([])
   const [clientes, setClientes] = useState<{id: string, nome: string}[]>([])
   const [loading, setLoading] = useState(true)
@@ -270,31 +271,35 @@ export default function ImoveisPage() {
   })
 
   useEffect(() => {
-    buscarImoveis()
-    buscarProprietarios()
-  }, [])
+    if (organizacao?.id) {
+      buscarImoveis(organizacao.id)
+      buscarProprietarios(organizacao.id)
+    }
+  }, [organizacao?.id])
 
-  async function buscarImoveis() {
+  async function buscarImoveis(orgId: string) {
     setLoading(true)
     const { data, error } = await supabase
       .from('imoveis')
       .select('*')
+      .eq('organization_id', orgId)
       .order('created_at', { ascending: false })
     if (!error && data) setImoveis(data)
     setLoading(false)
   }
 
-  async function buscarProprietarios() {
+  async function buscarProprietarios(orgId: string) {
     const { data } = await supabase
       .from('clientes')
       .select('id, nome')
+      .eq('organization_id', orgId)
       .in('tipo', ['locador', 'vendedor'])
       .order('nome')
     if (data) setClientes(data)
   }
 
   async function aoCriarProprietario(cliente: { id: string; nome: string }) {
-    await buscarProprietarios()
+    if (organizacao?.id) await buscarProprietarios(organizacao.id)
     setForm(f => ({ ...f, proprietario_id: cliente.id }))
     setModalProprietario(false)
   }
@@ -371,16 +376,18 @@ export default function ImoveisPage() {
   }
 
   async function excluirImovel(id: string, titulo: string) {
+    if (!organizacao?.id) return
     if (!confirm(`Excluir o imóvel "${titulo}"? Esta ação não pode ser desfeita.`)) return
-    const { error } = await supabase.from('imoveis').delete().eq('id', id)
+    const { error } = await supabase.from('imoveis').delete().eq('id', id).eq('organization_id', organizacao.id)
     if (error) { alert('Erro ao excluir: ' + error.message); return }
     setSucesso('Imóvel excluído.')
-    buscarImoveis()
+    buscarImoveis(organizacao.id)
     setTimeout(() => setSucesso(''), 3000)
   }
 
   async function salvarImovel(e: React.FormEvent) {
     e.preventDefault()
+    if (!organizacao?.id) { setErro('Organização ainda não carregada. Aguarde e tente novamente.'); return }
     setSalvando(true)
     setErro('')
 
@@ -417,11 +424,11 @@ export default function ImoveisPage() {
       status: form.status,
       publicado_portal: form.publicado_portal,
       descricao: form.descricao,
-      ...(editandoId ? {} : { fotos: [] }),
+      ...(editandoId ? {} : { fotos: [], organization_id: organizacao.id }),
     }
 
     const { error } = editandoId
-      ? await supabase.from('imoveis').update(payload).eq('id', editandoId)
+      ? await supabase.from('imoveis').update(payload).eq('id', editandoId).eq('organization_id', organizacao.id)
       : await supabase.from('imoveis').insert([payload])
 
     if (error) {
@@ -429,7 +436,7 @@ export default function ImoveisPage() {
     } else {
       setSucesso(editandoId ? 'Imóvel atualizado com sucesso!' : 'Imóvel cadastrado com sucesso!')
       fecharForm()
-      buscarImoveis()
+      buscarImoveis(organizacao.id)
       setTimeout(() => setSucesso(''), 3000)
     }
     setSalvando(false)
@@ -672,10 +679,11 @@ export default function ImoveisPage() {
                 </div>
               </form>
 
-              {modalProprietario && (
+              {modalProprietario && organizacao?.id && (
                 <ModalProprietario
                   onFechar={() => setModalProprietario(false)}
                   onSalvar={aoCriarProprietario}
+                  organizationId={organizacao.id}
                 />
               )}
             </div>
