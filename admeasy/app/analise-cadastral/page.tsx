@@ -3,9 +3,8 @@
 import { useEffect, useState } from 'react'
 import AppLayout from '@/components/layout/AppLayout'
 import { supabase } from '@/lib/supabase'
+import { useOrganization } from '@/lib/OrganizationContext'
 import { Plus, X, Upload, Trash2, ExternalLink, CheckCircle, XCircle, Clock, Search, FileText, Eye, Copy } from 'lucide-react'
-
-const ORG_ID = '00000000-0000-0000-0000-000000000001'
 
 type Cliente = { id: string; nome: string; cpf?: string; telefone?: string; email?: string }
 type Contrato = { id: string; numero: string; imovel?: any }
@@ -34,6 +33,7 @@ const statusConfig: Record<string, { label: string; badge: string; icon: any; bg
 const DOCS_PADRAO = ['RG (frente e verso)', 'CPF', 'Comprovante de renda', 'Holerite', 'Extrato bancário 3 meses', 'Comprovante de endereço', 'Declaração IR', 'CTPS', 'Contrato social (PJ)']
 
 export default function AnaliseCadastralPage() {
+  const { organizacao } = useOrganization()
   const [analises, setAnalises] = useState<Analise[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [contratos, setContratos] = useState<Contrato[]>([])
@@ -55,17 +55,19 @@ export default function AnaliseCadastralPage() {
   const [score, setScore] = useState('')
   const [obsEdit, setObsEdit] = useState('')
 
-  useEffect(() => { carregar() }, [])
+  useEffect(() => {
+    if (organizacao?.id) carregar(organizacao.id)
+  }, [organizacao?.id])
 
-  async function carregar() {
+  async function carregar(orgId: string) {
     setLoading(true)
     const [an, cl, co] = await Promise.all([
       supabase.from('analises_cadastrais')
         .select('*, cliente:clientes(id, nome, cpf, telefone, email), contrato:contratos(id, numero, imovel:imoveis(titulo))')
-        .eq('organization_id', ORG_ID)
+        .eq('organization_id', orgId)
         .order('created_at', { ascending: false }),
-      supabase.from('clientes').select('id, nome, cpf, telefone, email').eq('organization_id', ORG_ID).order('nome'),
-      supabase.from('contratos').select('id, numero, imovel:imoveis(titulo)').eq('organization_id', ORG_ID).order('numero'),
+      supabase.from('clientes').select('id, nome, cpf, telefone, email').eq('organization_id', orgId).order('nome'),
+      supabase.from('contratos').select('id, numero, imovel:imoveis(titulo)').eq('organization_id', orgId).order('numero'),
     ])
     if (an.data) setAnalises(an.data)
     if (cl.data) setClientes(cl.data)
@@ -94,10 +96,11 @@ export default function AnaliseCadastralPage() {
   }
 
   async function criarAnalise() {
+    if (!organizacao?.id) return
     if (!clienteId) { alert('Selecione um cliente'); return }
     setSalvando(true)
     const { error } = await supabase.from('analises_cadastrais').insert([{
-      organization_id: ORG_ID,
+      organization_id: organizacao.id,
       cliente_id: clienteId,
       contrato_id: contratoId || null,
       observacoes: observacoes || null,
@@ -107,21 +110,21 @@ export default function AnaliseCadastralPage() {
     if (error) { alert('Erro: ' + error.message); return }
     setShowNova(false); setClienteId(''); setContratoId(''); setObservacoes('')
     setSucesso('Análise criada!'); setTimeout(() => setSucesso(''), 3000)
-    carregar()
+    carregar(organizacao.id)
   }
 
   async function salvarAnalise() {
-    if (!analiseAberta) return
+    if (!analiseAberta || !organizacao?.id) return
     setSalvando(true)
     await supabase.from('analises_cadastrais').update({
       status, parecer: parecer || null,
       score_smartbuscas: score || null,
       observacoes: obsEdit || null,
       updated_at: new Date().toISOString(),
-    }).eq('id', analiseAberta.id)
+    }).eq('id', analiseAberta.id).eq('organization_id', organizacao.id)
     setSalvando(false)
     setSucesso('Análise salva!'); setTimeout(() => setSucesso(''), 3000)
-    carregar()
+    carregar(organizacao.id)
     setAnaliseAberta(prev => prev ? { ...prev, status: status as any, parecer, score_smartbuscas: score, observacoes: obsEdit } : null)
   }
 
@@ -141,10 +144,11 @@ export default function AnaliseCadastralPage() {
   }
 
   async function excluirAnalise(id: string) {
+    if (!organizacao?.id) return
     if (!confirm('Excluir esta análise?')) return
-    await supabase.from('analises_cadastrais').delete().eq('id', id)
+    await supabase.from('analises_cadastrais').delete().eq('id', id).eq('organization_id', organizacao.id)
     if (analiseAberta?.id === id) setAnaliseAberta(null)
-    carregar()
+    carregar(organizacao.id)
   }
 
   function getVal(val: any, campo: string) {

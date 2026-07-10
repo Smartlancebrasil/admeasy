@@ -3,10 +3,9 @@
 import { useEffect, useState } from 'react'
 import AppLayout from '@/components/layout/AppLayout'
 import { supabase } from '@/lib/supabase'
+import { useOrganization } from '@/lib/OrganizationContext'
 import { FileText, Plus, X, AlertTriangle, Edit2, FileDown, UserPlus, Upload, Download, Trash2, Hourglass, CheckCircle2 } from 'lucide-react'
 import { registrarLog } from '@/lib/logs'
-
-const ORG_ID = '00000000-0000-0000-0000-000000000001'
 
 type Contrato = {
   id: string
@@ -403,10 +402,11 @@ const UFs_MODAL = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','
  * Se "casado(a)", habilita o cadastro do conjuge como registro separado em clientes,
  * reaproveitando o mesmo endereco do titular (sem duplicidade).
  */
-function ModalClienteCompleto({ tipoParte, onSalvar, onFechar }: {
+function ModalClienteCompleto({ tipoParte, onSalvar, onFechar, organizationId }: {
   tipoParte: 'locatario' | 'locador' | 'fiador'
   onSalvar: (cliente: { id: string; nome: string }) => void
   onFechar: () => void
+  organizationId: string
 }) {
   const [form, setForm] = useState<Record<string, string>>({ ...clienteFormVazio, tipo: tipoParte })
   const [cadastrarConjuge, setCadastrarConjuge] = useState(false)
@@ -465,7 +465,7 @@ function ModalClienteCompleto({ tipoParte, onSalvar, onFechar }: {
     const enderecoCompleto = [form.endereco, form.numero, form.complemento].filter(Boolean).join(', ')
     const { numero, complemento, ...formSemNumeroComplemento } = form
 
-    const payloadTitular = { ...formSemNumeroComplemento, endereco: enderecoCompleto, organization_id: ORG_ID, tem_portal: false }
+    const payloadTitular = { ...formSemNumeroComplemento, endereco: enderecoCompleto, organization_id: organizationId, tem_portal: false }
     const { data: titular, error: erroTitular } = await supabase
       .from('clientes').insert([payloadTitular]).select('id, nome').single()
 
@@ -479,7 +479,7 @@ function ModalClienteCompleto({ tipoParte, onSalvar, onFechar }: {
         // mesmo endereco do titular, para evitar duplicidade de cadastro
         endereco: enderecoCompleto || null, bairro: form.bairro || null,
         cidade: form.cidade || null, estado: form.estado || null, cep: form.cep || null,
-        organization_id: ORG_ID,
+        organization_id: organizationId,
       }
       const { error: erroConjuge } = await supabase.from('clientes').insert([payloadConjuge])
       if (erroConjuge) { setSalvando(false); setErro('Titular salvo, mas erro ao salvar cônjuge: ' + erroConjuge.message); return }
@@ -588,7 +588,7 @@ function ModalClienteCompleto({ tipoParte, onSalvar, onFechar }: {
   )
 }
 
-function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClienteCriado, popupPdf, onGerarPdf }: {
+function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClienteCriado, popupPdf, onGerarPdf, organizationId }: {
   inicial: Record<string,string>
   imoveis: SelectOpt[]
   clientes: SelectOpt[]
@@ -597,6 +597,7 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
   onClienteCriado: () => Promise<void>
   popupPdf: 'processando' | 'sucesso' | null
   onGerarPdf: (contratoId: string) => void
+  organizationId: string
 }) {
   const [form, setForm] = useState(inicial)
   const [salvando, setSalvando] = useState(false)
@@ -1145,6 +1146,7 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
           tipoParte={modalCadastro.startsWith('locatario') ? 'locatario' : modalCadastro.startsWith('locador') ? 'locador' : 'fiador'}
           onFechar={() => setModalCadastro(null)}
           onSalvar={(cliente) => aoCriarCliente(modalCadastro, cliente)}
+          organizationId={organizationId}
         />
       )}
 
@@ -1229,25 +1231,25 @@ function camposFaltantes(cli: any, label: string): string[] {
  * e monta o PDF do contrato — sem nenhuma tela intermediária de qualificação, usando sempre
  * o que já está cadastrado. Chamada direto pelo botão "Gerar Contrato" da lista.
  */
-async function gerarContratoPdf(contratoId: string, onEstado: (e: 'processando' | 'sucesso' | null) => void) {
+async function gerarContratoPdf(contratoId: string, organizationId: string, onEstado: (e: 'processando' | 'sucesso' | null) => void) {
   const { data: c } = await supabase
     .from('contratos')
     .select('*, imovel:imoveis(*), locatario:clientes!contratos_locatario_id_fkey(*), locador:clientes!contratos_locador_id_fkey(*), fiador:clientes!contratos_fiador_id_fkey(*)')
-    .eq('id', contratoId).single()
+    .eq('id', contratoId).eq('organization_id', organizationId).single()
 
   if (!c) { alert('Não foi possível carregar os dados do contrato.'); return }
 
-  const { data: org } = await supabase.from('organizations').select('*').eq('id', ORG_ID).single()
+  const { data: org } = await supabase.from('organizations').select('*').eq('id', organizationId).single()
   if (!org) { alert('Não foi possível carregar os dados da imobiliária.'); return }
 
   let locatariosExtras: any[] = []
   let locadoresExtras: any[] = []
   if (c.locatarios_adicionais?.length) {
-    const { data } = await supabase.from('clientes').select('*').in('id', c.locatarios_adicionais)
+    const { data } = await supabase.from('clientes').select('*').eq('organization_id', organizationId).in('id', c.locatarios_adicionais)
     locatariosExtras = data || []
   }
   if (c.locadores_adicionais?.length) {
-    const { data } = await supabase.from('clientes').select('*').in('id', c.locadores_adicionais)
+    const { data } = await supabase.from('clientes').select('*').eq('organization_id', organizationId).in('id', c.locadores_adicionais)
     locadoresExtras = data || []
   }
 
@@ -1541,11 +1543,11 @@ async function gerarContratoPdf(contratoId: string, onEstado: (e: 'processando' 
  * ou fiador antes de gerar o PDF; se faltar algo, mostra um aviso e deixa o usuário decidir
  * se quer gerar mesmo assim.
  */
-async function confirmarEGerarPdf(contratoId: string, onEstado: (e: 'processando' | 'sucesso' | null) => void) {
+async function confirmarEGerarPdf(contratoId: string, organizationId: string, onEstado: (e: 'processando' | 'sucesso' | null) => void) {
   const { data: c } = await supabase
     .from('contratos')
     .select('tipo_garantia, locatario:clientes!contratos_locatario_id_fkey(*), locador:clientes!contratos_locador_id_fkey(*), fiador:clientes!contratos_fiador_id_fkey(*)')
-    .eq('id', contratoId).single()
+    .eq('id', contratoId).eq('organization_id', organizationId).single()
 
   if (!c) { alert('Não foi possível carregar os dados do contrato.'); return }
 
@@ -1560,7 +1562,7 @@ async function confirmarEGerarPdf(contratoId: string, onEstado: (e: 'processando
     if (!ok) return
   }
 
-  await gerarContratoPdf(contratoId, onEstado)
+  await gerarContratoPdf(contratoId, organizationId, onEstado)
 }
 
 /**
@@ -1568,6 +1570,7 @@ async function confirmarEGerarPdf(contratoId: string, onEstado: (e: 'processando
  * assinados pra upload/consulta, e só libera edição ao clicar em "Editar" no rodapé.
  */
 export default function ContratosPage() {
+  const { organizacao } = useOrganization()
   const [contratos, setContratos] = useState<Contrato[]>([])
   const [imoveis, setImoveis] = useState<SelectOpt[]>([])
   const [clientes, setClientes] = useState<SelectOpt[]>([])
@@ -1577,14 +1580,16 @@ export default function ContratosPage() {
   const [sucesso, setSucesso] = useState('')
   const [erroExclusao, setErroExclusao] = useState('')
 
-  useEffect(() => { buscarTudo() }, [])
+  useEffect(() => {
+    if (organizacao?.id) buscarTudo(organizacao.id)
+  }, [organizacao?.id])
 
-  async function buscarTudo() {
+  async function buscarTudo(orgId: string) {
     setLoading(true)
     const [cont, imov, cli] = await Promise.all([
-      supabase.from('contratos').select(`*, imovel:imoveis(titulo), locatario:clientes!contratos_locatario_id_fkey(nome), locador:clientes!contratos_locador_id_fkey(nome)`).order('numero'),
-      supabase.from('imoveis').select('id, codigo, titulo, tipo, categoria, finalidade, endereco, bairro, valor_aluguel, valor_condominio, valor_iptu, taxa_administracao').order('titulo'),
-      supabase.from('clientes').select('id, nome, cpf, rg, profissao, estado_civil, telefone, endereco, bairro, cidade, estado, chave_pix, tipo').order('nome'),
+      supabase.from('contratos').select(`*, imovel:imoveis(titulo), locatario:clientes!contratos_locatario_id_fkey(nome), locador:clientes!contratos_locador_id_fkey(nome)`).eq('organization_id', orgId).order('numero'),
+      supabase.from('imoveis').select('id, codigo, titulo, tipo, categoria, finalidade, endereco, bairro, valor_aluguel, valor_condominio, valor_iptu, taxa_administracao').eq('organization_id', orgId).order('titulo'),
+      supabase.from('clientes').select('id, nome, cpf, rg, profissao, estado_civil, telefone, endereco, bairro, cidade, estado, chave_pix, tipo').eq('organization_id', orgId).order('nome'),
     ])
     if (cont.data) setContratos(cont.data)
     if (imov.data) setImoveis(imov.data)
@@ -1593,11 +1598,13 @@ export default function ContratosPage() {
   }
 
   async function recarregarClientes() {
-    const { data } = await supabase.from('clientes').select('id, nome, cpf, rg, profissao, estado_civil, telefone, endereco, bairro, cidade, estado, chave_pix, tipo').order('nome')
+    if (!organizacao?.id) return
+    const { data } = await supabase.from('clientes').select('id, nome, cpf, rg, profissao, estado_civil, telefone, endereco, bairro, cidade, estado, chave_pix, tipo').eq('organization_id', organizacao.id).order('nome')
     if (data) setClientes(data)
   }
 
   function abrirNovo() {
+    if (!organizacao?.id) return
     const anoAtual = new Date().getFullYear()
     const numerosDoAno = contratos
       .map(c => c.numero)
@@ -1656,6 +1663,7 @@ export default function ContratosPage() {
   }
 
   async function salvar(dados: Record<string,string>) {
+    if (!organizacao?.id) throw new Error('Organização ainda não carregada. Aguarde e tente novamente.')
     const inicioDate = new Date(dados.data_inicio)
     const proximoReajuste = new Date(inicioDate)
     proximoReajuste.setFullYear(proximoReajuste.getFullYear() + 1)
@@ -1703,14 +1711,14 @@ export default function ContratosPage() {
       fiador_imovel_estado: dados.tipo_garantia === 'fiador' ? (dados.fiador_imovel_estado || null) : null,
       fiador_imovel_matricula: dados.tipo_garantia === 'fiador' ? (dados.fiador_imovel_matricula || null) : null,
       fiador_imovel_iptu: dados.tipo_garantia === 'fiador' ? (dados.fiador_imovel_iptu || null) : null,
-      organization_id: ORG_ID,
+      organization_id: organizacao.id,
     }
 
     let contratoId = dados.id
     let error
 
     if (dados.id) {
-      const res = await supabase.from('contratos').update(payload).eq('id', dados.id)
+      const res = await supabase.from('contratos').update(payload).eq('id', dados.id).eq('organization_id', organizacao.id)
       error = res.error
     } else {
       const res = await supabase.from('contratos').insert([{...payload, data_assinatura: dados.data_inicio}]).select().single()
@@ -1730,7 +1738,7 @@ export default function ContratosPage() {
         const vencimento = new Date(dados.data_inicio + 'T00:00:00')
         vencimento.setMonth(vencimento.getMonth() + i)
         lancamentos.push({
-          organization_id: ORG_ID,
+          organization_id: organizacao.id,
           contrato_id: contratoId,
           cliente_id: dados.locatario_id,
           tipo: 'receita',
@@ -1780,7 +1788,7 @@ export default function ContratosPage() {
         const valorRepasse = (temHonorario && ehPrimeira) ? 0 : valorMensal - valorTaxaAdm
 
         cobrancas.push({
-          organization_id: ORG_ID,
+          organization_id: organizacao.id,
           contrato_id: contratoId,
           locatario_id: dados.locatario_id,
           locador_id: dados.locador_id,
@@ -1817,35 +1825,36 @@ export default function ContratosPage() {
     })
 
     setSucesso(dados.id ? 'Contrato atualizado!' : `Contrato criado! ${!dados.id ? `${mesesContrato(dados.data_inicio, dados.data_fim)} cobranças geradas.` : ''}${caucaoVal > 0 && parcelasNum > 1 ? ` Caução parcelado em ${parcelasNum}x lançado no financeiro.` : ''}`)
-    await buscarTudo()
+    await buscarTudo(organizacao.id)
     setTimeout(() => setSucesso(''), 4000)
     return contratoId
   }
 
   async function excluir(id: string, numero: string) {
+    if (!organizacao?.id) return
     if (!confirm(`Excluir contrato #${numero}?\n\nIsso também vai apagar todas as cobranças, lançamentos e demandas vinculados a ele. Essa ação não pode ser desfeita.`)) return
 
     setErroExclusao('')
 
-    const { error: erroCobrancas } = await supabase.from('cobrancas').delete().eq('contrato_id', id)
+    const { error: erroCobrancas } = await supabase.from('cobrancas').delete().eq('contrato_id', id).eq('organization_id', organizacao.id)
     if (erroCobrancas) {
       setErroExclusao(`Erro ao apagar cobranças do contrato: ${erroCobrancas.message}`)
       return
     }
 
-    const { error: erroLancamentos } = await supabase.from('lancamentos').delete().eq('contrato_id', id)
+    const { error: erroLancamentos } = await supabase.from('lancamentos').delete().eq('contrato_id', id).eq('organization_id', organizacao.id)
     if (erroLancamentos) {
       setErroExclusao(`Erro ao apagar lançamentos do contrato: ${erroLancamentos.message}`)
       return
     }
 
-    const { error: erroDemandas } = await supabase.from('demandas').delete().eq('contrato_id', id)
+    const { error: erroDemandas } = await supabase.from('demandas').delete().eq('contrato_id', id).eq('organization_id', organizacao.id)
     if (erroDemandas) {
       setErroExclusao(`Erro ao apagar demandas do contrato: ${erroDemandas.message}`)
       return
     }
 
-    const { error: erroContrato } = await supabase.from('contratos').delete().eq('id', id)
+    const { error: erroContrato } = await supabase.from('contratos').delete().eq('id', id).eq('organization_id', organizacao.id)
     if (erroContrato) {
       setErroExclusao(`Erro ao excluir contrato: ${erroContrato.message}`)
       return
@@ -1858,7 +1867,7 @@ export default function ContratosPage() {
     })
 
     setSucesso(`Contrato #${numero} excluído.`)
-    buscarTudo()
+    buscarTudo(organizacao.id)
     setTimeout(() => setSucesso(''), 4000)
   }
 
@@ -1874,19 +1883,20 @@ export default function ContratosPage() {
 
           <div className="flex items-center justify-between mb-5">
             <h1 style={{ color: '#f4f4f3' }} className="text-lg font-medium">Contratos</h1>
-            <button className="btn btn-primary" onClick={abrirNovo}><Plus size={14} />Novo contrato</button>
+            <button className="btn btn-primary" onClick={abrirNovo} disabled={!organizacao?.id}><Plus size={14} />Novo contrato</button>
           </div>
 
           {sucesso && <div style={{ background: '#1a2e1f', border: '0.5px solid #2d4a35', color: '#3fb950' }} className="px-4 py-3 rounded-lg mb-4 text-sm">{sucesso}</div>}
           {erroExclusao && <div style={{ background: '#2e1717', border: '0.5px solid #4a2424', color: '#ef4444' }} className="px-4 py-3 rounded-lg mb-4 text-sm">{erroExclusao}</div>}
 
-          {formInicial !== null && (
+          {formInicial !== null && organizacao?.id && (
             <FormContrato key={formInicial.id||'novo'} inicial={formInicial}
               imoveis={imoveis} clientes={clientes}
               onSalvar={salvar} onCancelar={() => setFormInicial(null)}
               onClienteCriado={recarregarClientes}
               popupPdf={popupPdf}
-              onGerarPdf={(id) => confirmarEGerarPdf(id, setPopupPdf)} />
+              onGerarPdf={(id) => confirmarEGerarPdf(id, organizacao.id, setPopupPdf)}
+              organizationId={organizacao.id} />
           )}
 
           {vencendo.length > 0 && !formInicial && (

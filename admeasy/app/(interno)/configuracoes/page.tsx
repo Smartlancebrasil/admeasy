@@ -3,9 +3,9 @@
 import { useEffect, useState } from 'react'
 import AppLayout from '@/components/layout/AppLayout'
 import { supabase } from '@/lib/supabase'
+import { useOrganization } from '@/lib/OrganizationContext'
 import { Save, Plus, X, Edit2, Building2, Users, Shield, UserPlus, Mail, Trash2, ExternalLink, CheckCircle2, Clock } from 'lucide-react'
 
-const ORG_ID = '00000000-0000-0000-0000-000000000001'
 const SUPABASE_AUTH_URL = 'https://supabase.com/dashboard/project/ckhcbiuwcfnbmlloduwj/auth/users'
 
 const UFs = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
@@ -106,6 +106,7 @@ function FormEditarConvite({ convite, onSalvar, onCancelar }: {
 }
 
 export default function ConfiguracoesPage() {
+  const { organizacao } = useOrganization()
   const [aba, setAba] = useState<'imobiliaria'|'vistoriadores'|'usuarios'>('imobiliaria')
   const [org, setOrg] = useState<Org>({})
   const [salvandoOrg, setSalvandoOrg] = useState(false)
@@ -121,28 +122,36 @@ export default function ConfiguracoesPage() {
   const [editandoUsuario, setEditandoUsuario] = useState<string|null>(null)
   const [editandoConvite, setEditandoConvite] = useState<string|null>(null)
 
-  useEffect(() => { carregarOrg(); carregarVistoriadores(); carregarUsuarios() }, [])
+  useEffect(() => {
+    if (organizacao?.id) {
+      carregarOrg(organizacao.id)
+      carregarVistoriadores(organizacao.id)
+      carregarUsuarios(organizacao.id)
+    }
+  }, [organizacao?.id])
 
-  async function carregarOrg() {
-    const { data } = await supabase.from('organizations').select('*').eq('id', ORG_ID).single()
+  async function carregarOrg(orgId: string) {
+    const { data } = await supabase.from('organizations').select('*').eq('id', orgId).single()
     if (data) setOrg(data)
   }
 
-  async function carregarVistoriadores() {
-    const { data } = await supabase.from('vistoriadores').select('*').eq('organization_id', ORG_ID).order('nome')
+  async function carregarVistoriadores(orgId: string) {
+    const { data } = await supabase.from('vistoriadores').select('*').eq('organization_id', orgId).order('nome')
     if (data) setVistoriadores(data)
   }
 
-  async function carregarUsuarios() {
-    const { data: us } = await supabase.from('users').select('*').eq('organization_id', ORG_ID).order('nome')
+  async function carregarUsuarios(orgId: string) {
+    const { data: us } = await supabase.from('users').select('*').eq('organization_id', orgId).order('nome')
     if (us) setUsuarios(us)
-    const { data: cv } = await supabase.from('convites').select('*').eq('organization_id', ORG_ID).order('created_at', {ascending:false})
+    const { data: cv } = await supabase.from('convites').select('*').eq('organization_id', orgId).order('created_at', {ascending:false})
     if (cv) setConvites(cv)
   }
 
   async function salvarOrg(e: React.FormEvent) {
-    e.preventDefault(); setSalvandoOrg(true)
-    const { error } = await supabase.from('organizations').update(org).eq('id', ORG_ID)
+    e.preventDefault()
+    if (!organizacao?.id) return
+    setSalvandoOrg(true)
+    const { error } = await supabase.from('organizations').update(org).eq('id', organizacao.id)
     if (error) {
       alert('Erro: ' + error.message)
       setSalvandoOrg(false)
@@ -153,65 +162,84 @@ export default function ConfiguracoesPage() {
   }
 
   async function salvarVistoriador(dados: Record<string,string>) {
-    const payload = { nome: dados.nome, cpf: dados.cpf||null, crea: dados.crea||null, telefone: dados.telefone||null, email: dados.email||null, organization_id: ORG_ID, ativo: true }
-    if (dados.id) { await supabase.from('vistoriadores').update(payload).eq('id', dados.id) }
+    if (!organizacao?.id) return
+    const payload = { nome: dados.nome, cpf: dados.cpf||null, crea: dados.crea||null, telefone: dados.telefone||null, email: dados.email||null, organization_id: organizacao.id, ativo: true }
+    if (dados.id) { await supabase.from('vistoriadores').update(payload).eq('id', dados.id).eq('organization_id', organizacao.id) }
     else { await supabase.from('vistoriadores').insert([payload]) }
-    setFormVist(null); carregarVistoriadores()
+    setFormVist(null); carregarVistoriadores(organizacao.id)
   }
 
   async function excluirVistoriador(id: string) {
+    if (!organizacao?.id) return
     if (!confirm('Excluir vistoriador?')) return
-    await supabase.from('vistoriadores').delete().eq('id', id)
-    carregarVistoriadores()
+    await supabase.from('vistoriadores').delete().eq('id', id).eq('organization_id', organizacao.id)
+    carregarVistoriadores(organizacao.id)
   }
 
   async function enviarConvite(e: React.FormEvent) {
-    e.preventDefault(); setEnviandoConvite(true)
+    e.preventDefault()
+    if (!organizacao?.id) return
+    setEnviandoConvite(true)
     const { data: userData } = await supabase.auth.getUser()
     await supabase.from('convites').insert([{
-      organization_id: ORG_ID, email: conviteForm.email,
+      organization_id: organizacao.id, email: conviteForm.email,
       perfil: conviteForm.perfil, nome: conviteForm.nome,
       criado_por: userData.user?.id,
     }])
     setSucessoConvite(`Cadastro de ${conviteForm.nome || conviteForm.email} registrado! Agora crie o login no Supabase com o mesmo e-mail.`)
     setConviteForm({ nome: '', email: '', perfil: 'corretor' })
     setShowConvite(false); setEnviandoConvite(false)
-    carregarUsuarios()
+    carregarUsuarios(organizacao.id)
     setTimeout(() => setSucessoConvite(''), 6000)
   }
 
   async function editarConvite(id: string, dados: { nome: string; perfil: string }) {
-    await supabase.from('convites').update(dados).eq('id', id)
+    if (!organizacao?.id) return
+    await supabase.from('convites').update(dados).eq('id', id).eq('organization_id', organizacao.id)
     setEditandoConvite(null)
-    carregarUsuarios()
+    carregarUsuarios(organizacao.id)
   }
 
   async function excluirConvite(id: string, nomeOuEmail: string) {
+    if (!organizacao?.id) return
     if (!confirm(`Excluir o cadastro de "${nomeOuEmail}"? Isso não afeta um login já criado no Supabase, apenas o registro pendente aqui.`)) return
-    await supabase.from('convites').delete().eq('id', id)
-    carregarUsuarios()
+    await supabase.from('convites').delete().eq('id', id).eq('organization_id', organizacao.id)
+    carregarUsuarios(organizacao.id)
   }
 
   async function alterarPerfil(userId: string, novoPerfil: string) {
-    await supabase.from('users').update({ perfil: novoPerfil }).eq('id', userId)
-    setEditandoUsuario(null); carregarUsuarios()
+    if (!organizacao?.id) return
+    await supabase.from('users').update({ perfil: novoPerfil }).eq('id', userId).eq('organization_id', organizacao.id)
+    setEditandoUsuario(null); carregarUsuarios(organizacao.id)
   }
 
   async function toggleAtivo(u: Usuario) {
-    await supabase.from('users').update({ ativo: !u.ativo }).eq('id', u.id)
-    carregarUsuarios()
+    if (!organizacao?.id) return
+    await supabase.from('users').update({ ativo: !u.ativo }).eq('id', u.id).eq('organization_id', organizacao.id)
+    carregarUsuarios(organizacao.id)
   }
 
   async function excluirUsuario(u: Usuario) {
+    if (!organizacao?.id) return
     if (!confirm(`Remover "${u.nome}" do sistema? O login dele no Supabase Auth NÃO é excluído automaticamente — você precisa removê-lo manualmente lá também, se quiser bloquear o acesso por completo.`)) return
-    await supabase.from('users').delete().eq('id', u.id)
-    carregarUsuarios()
+    await supabase.from('users').delete().eq('id', u.id).eq('organization_id', organizacao.id)
+    carregarUsuarios(organizacao.id)
   }
 
   const setOrg_ = (campo: string) => (e: React.ChangeEvent<HTMLInputElement|HTMLSelectElement>) =>
     setOrg(o => ({...o, [campo]: e.target.value}))
 
   const perfilInfo = (p: string) => perfis.find(x => x.value === p)
+
+  if (!organizacao?.id) {
+    return (
+      <AppLayout>
+        <div style={{ background: '#0d1117', minHeight: '100vh' }} className="flex-1 overflow-y-auto p-4 lg:p-6 flex items-center justify-center">
+          <span style={{ color: '#8b8d98' }} className="text-sm">Carregando organização...</span>
+        </div>
+      </AppLayout>
+    )
+  }
 
   return (
     <AppLayout>
@@ -311,9 +339,9 @@ export default function ConfiguracoesPage() {
                         <div>
                           <input type="file" accept="image/*" style={{ color: '#8b8d98' }} className="text-xs"
                             onChange={async (e) => {
-                              const file = e.target.files?.[0]; if (!file) return
+                              const file = e.target.files?.[0]; if (!file || !organizacao?.id) return
                               const ext = file.name.split('.').pop()
-                              const path = `logos/${ORG_ID}.${ext}`
+                              const path = `logos/${organizacao.id}.${ext}`
                               const { data } = await supabase.storage.from('documentos').upload(path, file, { upsert: true })
                               if (data) {
                                 const { data: url } = supabase.storage.from('documentos').getPublicUrl(path)
