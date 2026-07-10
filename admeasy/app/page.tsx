@@ -259,6 +259,7 @@ export default function PaginaInicial() {
           <nav className="hidden md:flex items-center gap-8 text-sm" style={{ color: COLORS.muted }}>
             <a href="#modulos" className="hover:opacity-80 transition-opacity">Como funciona</a>
             <a href="#recursos" className="hover:opacity-80 transition-opacity">Recursos</a>
+            <a href="/cadastro" className="hover:opacity-80 transition-opacity">Planos</a>
             <a href="#imobiliarias" className="hover:opacity-80 transition-opacity">Para imobiliárias</a>
             <a href="#blog" className="hover:opacity-80 transition-opacity">Blog</a>
           </nav>
@@ -281,6 +282,7 @@ export default function PaginaInicial() {
           <div style={{ borderTop: `1px solid ${COLORS.line}` }} className="md:hidden px-5 py-4 flex flex-col gap-4 text-sm">
             <a href="#modulos" style={{ color: COLORS.muted }} onClick={() => setMenuAberto(false)}>Como funciona</a>
             <a href="#recursos" style={{ color: COLORS.muted }} onClick={() => setMenuAberto(false)}>Recursos</a>
+            <a href="/cadastro" style={{ color: COLORS.muted }} onClick={() => setMenuAberto(false)}>Planos</a>
             <a href="#imobiliarias" style={{ color: COLORS.muted }} onClick={() => setMenuAberto(false)}>Para imobiliárias</a>
             <a href="#blog" style={{ color: COLORS.muted }} onClick={() => setMenuAberto(false)}>Blog</a>
             <Link href="/portal" style={{ color: COLORS.text, border: `1px solid ${COLORS.line}` }} className="text-center font-medium px-4 py-2.5 rounded-md">Área do inquilino</Link>
