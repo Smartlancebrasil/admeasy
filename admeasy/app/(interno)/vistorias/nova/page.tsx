@@ -62,8 +62,8 @@ function NovaVistoriaConteudo() {
   }, [organizacao?.id])
 
   useEffect(() => {
-    if (editId) carregarVistoriaParaEdicao(editId)
-  }, [editId])
+    if (editId && organizacao?.id) carregarVistoriaParaEdicao(editId, organizacao.id)
+  }, [editId, organizacao?.id])
 
   async function carregarDados(orgId: string) {
     const { data: imv } = await supabase.from('imoveis').select('id, endereco, numero, bairro, cidade, estado').eq('organization_id', orgId).order('endereco')
@@ -72,8 +72,11 @@ function NovaVistoriaConteudo() {
     if (vist) setVistoriadores(vist)
   }
 
-  async function carregarVistoriaParaEdicao(id: string) {
-    const { data } = await supabase.from('vistorias').select('*').eq('id', id).single()
+  async function carregarVistoriaParaEdicao(id: string, orgId: string) {
+    // Filtra também por organização: se a vistoria pertencer a outra
+    // organização, "data" vem vazio e é tratada como não encontrada (o
+    // formulário simplesmente não é preenchido, igual a um id inexistente).
+    const { data } = await supabase.from('vistorias').select('*').eq('id', id).eq('organization_id', orgId).single()
     if (data) {
       setImovelId(data.imovel_id || '')
       setVistoriadorId(data.vistoriador_id || '')
@@ -99,11 +102,12 @@ function NovaVistoriaConteudo() {
 
   async function aoSelecionarImovel(id: string) {
     setImovelId(id)
-    if (!id || editId) return
+    if (!id || editId || !organizacao?.id) return
     const { data: contrato } = await supabase
       .from('contratos')
       .select('locador_id, locatario_id, locador:clientes!locador_id(nome), locatario:clientes!locatario_id(nome)')
       .eq('imovel_id', id)
+      .eq('organization_id', organizacao.id)
       .eq('status', 'ativo')
       .single()
     if (contrato) {

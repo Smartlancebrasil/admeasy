@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import AppLayout from '@/components/layout/AppLayout'
 import { supabase } from '@/lib/supabase'
+import { useOrganization } from '@/lib/OrganizationContext'
 import { Plus, X, Edit2, Save, Truck, Star, Phone, Mail } from 'lucide-react'
 import { registrarLog } from '@/lib/logs'
 
@@ -146,22 +147,26 @@ function FormFornecedor({ inicial, onSalvar, onCancelar }: {
 }
 
 export default function FornecedoresPage() {
+  const { organizacao } = useOrganization()
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([])
   const [loading, setLoading] = useState(true)
   const [formInicial, setFormInicial] = useState<Record<string,string> | null>(null)
   const [sucesso, setSucesso] = useState('')
   const [filtroEsp, setFiltroEsp] = useState('todos')
 
-  useEffect(() => { buscar() }, [])
+  useEffect(() => {
+    if (organizacao?.id) buscar(organizacao.id)
+  }, [organizacao?.id])
 
-  async function buscar() {
+  async function buscar(orgId: string) {
     setLoading(true)
-    const { data } = await supabase.from('fornecedores').select('*').order('nome')
+    const { data } = await supabase.from('fornecedores').select('*').eq('organization_id', orgId).order('nome')
     if (data) setFornecedores(data)
     setLoading(false)
   }
 
   function abrirNovo() {
+    if (!organizacao?.id) return
     setFormInicial({...formVazio, id: ''})
   }
 
@@ -176,6 +181,7 @@ export default function FornecedoresPage() {
   }
 
   async function salvar(dados: Record<string,string>) {
+    if (!organizacao?.id) throw new Error('Organização ainda não carregada. Aguarde e tente novamente.')
     const payload = {
       nome: dados.nome, especialidade: dados.especialidade,
       cnpj_cpf: dados.cnpj_cpf||null, registro_profissional: dados.registro_profissional||null,
@@ -187,10 +193,10 @@ export default function FornecedoresPage() {
 
     let error
     if (dados.id) {
-      const res = await supabase.from('fornecedores').update(payload).eq('id', dados.id)
+      const res = await supabase.from('fornecedores').update(payload).eq('id', dados.id).eq('organization_id', organizacao.id)
       error = res.error
     } else {
-      const res = await supabase.from('fornecedores').insert([{...payload, total_servicos: 0}])
+      const res = await supabase.from('fornecedores').insert([{...payload, organization_id: organizacao.id, total_servicos: 0}])
       error = res.error
     }
     if (error) throw new Error(error.message)
@@ -204,15 +210,16 @@ export default function FornecedoresPage() {
 
     setFormInicial(null)
     setSucesso(dados.id ? 'Fornecedor atualizado!' : 'Fornecedor cadastrado!')
-    buscar()
+    buscar(organizacao.id)
     setTimeout(() => setSucesso(''), 3000)
   }
 
   async function excluir(id: string, nome: string) {
+    if (!organizacao?.id) return
     if (!confirm(`Excluir ${nome}?`)) return
-    await supabase.from('fornecedores').delete().eq('id', id)
+    await supabase.from('fornecedores').delete().eq('id', id).eq('organization_id', organizacao.id)
     await registrarLog({ acao: 'excluiu', modulo: 'fornecedor', registro_id: id, registro_nome: nome, descricao: `Excluiu o fornecedor ${nome}` })
-    buscar()
+    buscar(organizacao.id)
   }
 
   const filtrados = filtroEsp === 'todos' ? fornecedores : fornecedores.filter(f => f.especialidade === filtroEsp)
@@ -224,7 +231,7 @@ export default function FornecedoresPage() {
 
           <div className="flex items-center justify-between mb-5">
             <h1 style={{ color: '#f4f4f3' }} className="text-lg font-medium">Fornecedores</h1>
-            <button className="btn btn-primary" onClick={abrirNovo}><Plus size={14} />Cadastrar fornecedor</button>
+            <button className="btn btn-primary" onClick={abrirNovo} disabled={!organizacao?.id}><Plus size={14} />Cadastrar fornecedor</button>
           </div>
 
           {sucesso && <div style={{ background: '#1a2e1f', border: '0.5px solid #2d4a35', color: '#3fb950' }} className="px-4 py-3 rounded-lg mb-4 text-sm">{sucesso}</div>}

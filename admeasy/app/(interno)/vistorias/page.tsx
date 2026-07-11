@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import AppLayout from '@/components/layout/AppLayout'
 import { supabase } from '@/lib/supabase'
+import { useOrganization } from '@/lib/OrganizationContext'
 import { Plus, ClipboardList, ArrowDownToLine, ArrowUpFromLine, FileText, Edit2, Trash2 } from 'lucide-react'
 
 type Vistoria = {
@@ -17,29 +18,34 @@ type Vistoria = {
 }
 
 export default function VistoriasPage() {
+  const { organizacao } = useOrganization()
   const [vistorias, setVistorias] = useState<Vistoria[]>([])
   const [filtro, setFiltro] = useState<'todos' | 'entrada' | 'saida'>('todos')
   const [loading, setLoading] = useState(true)
   const [excluindo, setExcluindo] = useState<string | null>(null)
 
-  useEffect(() => { carregar() }, [])
+  useEffect(() => {
+    if (organizacao?.id) carregar(organizacao.id)
+  }, [organizacao?.id])
 
-  async function carregar() {
+  async function carregar(orgId: string) {
     setLoading(true)
     const { data } = await supabase
       .from('vistorias')
       .select('*, imovel:imoveis(endereco, numero, bairro), vistoriador:vistoriadores(nome)')
+      .eq('organization_id', orgId)
       .order('data_vistoria', { ascending: false })
     if (data) setVistorias(data)
     setLoading(false)
   }
 
   async function excluir(id: string) {
+    if (!organizacao?.id) return
     if (!confirm('Excluir esta vistoria? Esta ação não pode ser desfeita.')) return
     setExcluindo(id)
-    await supabase.from('vistorias').delete().eq('id', id)
+    await supabase.from('vistorias').delete().eq('id', id).eq('organization_id', organizacao.id)
     setExcluindo(null)
-    carregar()
+    carregar(organizacao.id)
   }
 
   const filtradas = vistorias.filter(v => filtro === 'todos' || v.tipo === filtro)

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import AppLayout from '@/components/layout/AppLayout'
 import { supabase } from '@/lib/supabase'
+import { useOrganization } from '@/lib/OrganizationContext'
 import { Plus, X, Edit2, Save, Wrench, ChevronDown, ChevronUp, Check, Ban, Archive } from 'lucide-react'
 import { registrarLog } from '@/lib/logs'
 
@@ -415,6 +416,7 @@ const formVazio = {
 }
 
 export default function DemandasPage() {
+  const { organizacao } = useOrganization()
   const [demandas, setDemandas] = useState<Demanda[]>([])
   const [imoveis, setImoveis] = useState<SelectOpt[]>([])
   const [clientes, setClientes] = useState<any[]>([])
@@ -426,16 +428,18 @@ export default function DemandasPage() {
   const [filtro, setFiltro] = useState<'todos' | 'arquivada' | string>('todos')
   const [expandido, setExpandido] = useState<string|null>(null)
 
-  useEffect(() => { buscarTudo() }, [])
+  useEffect(() => {
+    if (organizacao?.id) buscarTudo(organizacao.id)
+  }, [organizacao?.id])
 
-  async function buscarTudo() {
+  async function buscarTudo(orgId: string) {
     setLoading(true)
     const [dem, imov, cli, forn, cont] = await Promise.all([
-      supabase.from('demandas').select(`*, imovel:imoveis(titulo), contrato:contratos(numero), locatario:clientes!demandas_locatario_id_fkey(nome), locador:clientes!demandas_locador_id_fkey(nome), fornecedor:fornecedores(nome)`).order('created_at', {ascending:false}),
-      supabase.from('imoveis').select('id, titulo').order('titulo'),
-      supabase.from('clientes').select('id, nome, tipo').order('nome'),
-      supabase.from('fornecedores').select('id, nome').order('nome'),
-      supabase.from('contratos').select('id, numero, imovel_id, locatario_id, locador_id').order('numero'),
+      supabase.from('demandas').select(`*, imovel:imoveis(titulo), contrato:contratos(numero), locatario:clientes!demandas_locatario_id_fkey(nome), locador:clientes!demandas_locador_id_fkey(nome), fornecedor:fornecedores(nome)`).eq('organization_id', orgId).order('created_at', {ascending:false}),
+      supabase.from('imoveis').select('id, titulo').eq('organization_id', orgId).order('titulo'),
+      supabase.from('clientes').select('id, nome, tipo').eq('organization_id', orgId).order('nome'),
+      supabase.from('fornecedores').select('id, nome').eq('organization_id', orgId).order('nome'),
+      supabase.from('contratos').select('id, numero, imovel_id, locatario_id, locador_id').eq('organization_id', orgId).order('numero'),
     ])
     if (dem.data) setDemandas(dem.data)
     if (imov.data) setImoveis(imov.data)
@@ -445,7 +449,10 @@ export default function DemandasPage() {
     setLoading(false)
   }
 
-  function abrirNovo() { setFormInicial({...formVazio}) }
+  function abrirNovo() {
+    if (!organizacao?.id) return
+    setFormInicial({...formVazio})
+  }
 
   function abrirEdicao(d: Demanda) {
     setFormInicial({
@@ -461,6 +468,7 @@ export default function DemandasPage() {
   }
 
   async function salvar(dados: Record<string,string>) {
+    if (!organizacao?.id) throw new Error('Organização ainda não carregada. Aguarde e tente novamente.')
     const payload = {
       titulo: dados.titulo, descricao: dados.descricao||null, tipo: dados.tipo||null,
       local_imovel: dados.local_imovel||null, urgencia: dados.urgencia, origem: dados.origem,
@@ -477,11 +485,11 @@ export default function DemandasPage() {
 
     let error
     if (dados.id) {
-      const res = await supabase.from('demandas').update(payload).eq('id', dados.id)
+      const res = await supabase.from('demandas').update(payload).eq('id', dados.id).eq('organization_id', organizacao.id)
       error = res.error
     } else {
       // "numero" (protocolo) não é enviado — o gatilho no banco preenche sozinho.
-      const res = await supabase.from('demandas').insert([{...payload, data_abertura: new Date().toISOString()}])
+      const res = await supabase.from('demandas').insert([{...payload, organization_id: organizacao.id, data_abertura: new Date().toISOString()}])
       error = res.error
     }
     if (error) throw new Error(error.message)
@@ -494,24 +502,26 @@ export default function DemandasPage() {
 
     setFormInicial(null)
     setSucesso(dados.id ? 'Demanda atualizada!' : 'Demanda aberta!')
-    buscarTudo()
+    buscarTudo(organizacao.id)
     setTimeout(() => setSucesso(''), 3000)
   }
 
   async function decidir(id: string, decisao: 'deferida' | 'indeferida', justificativa: string) {
+    if (!organizacao?.id) return
     const d = demandas.find(x => x.id === id)
-    await supabase.from('demandas').update({ status: decisao, justificativa }).eq('id', id)
+    await supabase.from('demandas').update({ status: decisao, justificativa }).eq('id', id).eq('organization_id', organizacao.id)
     await registrarLog({
       acao: 'editou', modulo: 'demanda', registro_id: id,
       registro_nome: d?.titulo || '',
       descricao: `${decisao === 'deferida' ? 'Deferiu' : 'Indeferiu'} demanda "${d?.titulo}": ${justificativa}`,
     })
     setSucesso(decisao === 'deferida' ? 'Demanda deferida!' : 'Demanda indeferida!')
-    buscarTudo()
+    buscarTudo(organizacao.id)
     setTimeout(() => setSucesso(''), 3000)
   }
 
   async function avancarStatus(d: Demanda) {
+    if (!organizacao?.id) return
     const ordem = ['deferida', 'em_execucao', 'concluida']
     const idx = ordem.indexOf(d.status)
     if (idx === -1 || idx >= ordem.length - 1) return
@@ -519,18 +529,19 @@ export default function DemandasPage() {
     await supabase.from('demandas').update({
       status: novoStatus,
       data_conclusao: novoStatus === 'concluida' ? new Date().toISOString() : null,
-    }).eq('id', d.id)
+    }).eq('id', d.id).eq('organization_id', organizacao.id)
     await registrarLog({
       acao: 'editou', modulo: 'demanda', registro_id: d.id,
       registro_nome: d.titulo,
       descricao: `Avançou demanda "${d.titulo}" para: ${statusLabel[novoStatus]}`,
     })
-    buscarTudo()
+    buscarTudo(organizacao.id)
   }
 
   async function arquivar(d: Demanda) {
+    if (!organizacao?.id) return
     if (!confirm(`Arquivar a demanda "${d.titulo}"? Ela sai da lista principal mas continua acessível na aba "Arquivada".`)) return
-    const { error } = await supabase.from('demandas').update({ arquivada_em: new Date().toISOString() }).eq('id', d.id)
+    const { error } = await supabase.from('demandas').update({ arquivada_em: new Date().toISOString() }).eq('id', d.id).eq('organization_id', organizacao.id)
     if (error) {
       alert('Erro ao arquivar: ' + error.message)
       console.error('Erro ao arquivar demanda:', error)
@@ -541,23 +552,25 @@ export default function DemandasPage() {
       registro_nome: d.titulo,
       descricao: `Arquivou demanda "${d.titulo}"`,
     })
-    buscarTudo()
+    buscarTudo(organizacao.id)
   }
 
   async function desarquivar(d: Demanda) {
-    const { error } = await supabase.from('demandas').update({ arquivada_em: null }).eq('id', d.id)
+    if (!organizacao?.id) return
+    const { error } = await supabase.from('demandas').update({ arquivada_em: null }).eq('id', d.id).eq('organization_id', organizacao.id)
     if (error) {
       alert('Erro ao desarquivar: ' + error.message)
       console.error('Erro ao desarquivar demanda:', error)
       return
     }
-    buscarTudo()
+    buscarTudo(organizacao.id)
   }
 
   async function excluir(id: string, titulo: string) {
+    if (!organizacao?.id) return
     if (!confirm(`Excluir demanda "${titulo}"? Esta ação não pode ser desfeita.`)) return
-    await supabase.from('demandas').delete().eq('id', id)
-    buscarTudo()
+    await supabase.from('demandas').delete().eq('id', id).eq('organization_id', organizacao.id)
+    buscarTudo(organizacao.id)
   }
 
   function getNome(val: any): string {
@@ -589,7 +602,7 @@ export default function DemandasPage() {
 
           <div className="flex items-center justify-between mb-5">
             <h1 style={{ color: '#f4f4f3' }} className="text-lg font-medium">Demandas de reparo</h1>
-            <button className="btn btn-primary" onClick={abrirNovo}><Plus size={14} />Nova demanda</button>
+            <button className="btn btn-primary" onClick={abrirNovo} disabled={!organizacao?.id}><Plus size={14} />Nova demanda</button>
           </div>
 
           {sucesso && <div style={{ background: '#1a2e1f', border: '0.5px solid #2d4a35', color: '#3fb950' }} className="px-4 py-3 rounded-lg mb-4 text-sm">{sucesso}</div>}
