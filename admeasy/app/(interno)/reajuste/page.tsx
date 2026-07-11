@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import AppLayout from '@/components/layout/AppLayout'
 import { supabase } from '@/lib/supabase'
+import { useOrganization } from '@/lib/OrganizationContext'
 import { TrendingUp, Check, Edit2, Undo2, History, X } from 'lucide-react'
 import { registrarLog } from '@/lib/logs'
 
@@ -54,6 +55,7 @@ function getTitulo(val: any): string {
 }
 
 export default function ReajustePage() {
+  const { organizacao } = useOrganization()
   const [contratos, setContratos] = useState<Contrato[]>([])
   const [loading, setLoading] = useState(true)
   const [contratoSel, setContratoSel] = useState<Contrato | null>(null)
@@ -67,13 +69,16 @@ export default function ReajustePage() {
   const [showHistorico, setShowHistorico] = useState(false)
   const [desfazendo, setDesfazendo] = useState<string | null>(null)
 
-  useEffect(() => { buscarContratos() }, [])
+  useEffect(() => {
+    if (organizacao?.id) buscarContratos(organizacao.id)
+  }, [organizacao?.id])
 
-  async function buscarContratos() {
+  async function buscarContratos(orgId: string) {
     setLoading(true)
     const { data } = await supabase
       .from('contratos')
       .select(`*, imovel:imoveis(titulo), locatario:clientes!contratos_locatario_id_fkey(nome), locador:clientes!contratos_locador_id_fkey(nome)`)
+      .eq('organization_id', orgId)
       .eq('status', 'ativo')
       .order('numero')
     if (data) setContratos(data)
@@ -81,6 +86,7 @@ export default function ReajustePage() {
   }
 
   async function selecionarContrato(c: Contrato) {
+    if (!organizacao?.id) return
     setContratoSel(c)
     setIndiceSel(c.indice_reajuste || 'igpm')
     setEditandoValor(false)
@@ -89,6 +95,7 @@ export default function ReajustePage() {
     const { data } = await supabase
       .from('reajustes')
       .select('*')
+      .eq('organization_id', organizacao.id)
       .eq('contrato_id', c.id)
       .order('data_aplicacao', { ascending: false })
     if (data) setHistorico(data)
@@ -102,7 +109,7 @@ export default function ReajustePage() {
   const novoValor = editandoValor && valorEditado ? parseFloat(valorEditado.replace(',', '.')) : novoValorCalculado
 
   async function aplicarReajuste() {
-    if (!contratoSel) return
+    if (!contratoSel || !organizacao?.id) return
     setAplicando(true)
 
     const hoje = new Date().toISOString().split('T')[0]
@@ -111,6 +118,7 @@ export default function ReajustePage() {
 
     await supabase.from('reajustes').insert([{
       contrato_id: contratoSel.id,
+      organization_id: organizacao.id,
       indice: indiceSel.toUpperCase(),
       percentual: pct,
       valor_anterior: valorBase,
@@ -123,7 +131,7 @@ export default function ReajustePage() {
       valor_atual: novoValor,
       ultimo_reajuste: hoje,
       proximo_reajuste: proximoAno.toISOString().split('T')[0],
-    }).eq('id', contratoSel.id)
+    }).eq('id', contratoSel.id).eq('organization_id', organizacao.id)
 
     await registrarLog({
       acao: 'editou',
@@ -136,21 +144,22 @@ export default function ReajustePage() {
     setSucesso(`Reajuste aplicado! Novo valor: ${formatVal(novoValor)}`)
     setEditandoValor(false)
     setValorEditado('')
-    buscarContratos()
+    buscarContratos(organizacao.id)
     setContratoSel(null)
     setAplicando(false)
     setTimeout(() => setSucesso(''), 4000)
   }
 
   async function desfazerReajuste(r: Reajuste) {
+    if (!organizacao?.id) return
     if (!confirm(`Desfazer reajuste de ${formatVal(r.valor_anterior)} → ${formatVal(r.valor_novo)}? O contrato voltará ao valor anterior.`)) return
     setDesfazendo(r.id)
 
     await supabase.from('contratos').update({
       valor_atual: r.valor_anterior,
-    }).eq('id', r.contrato_id)
+    }).eq('id', r.contrato_id).eq('organization_id', organizacao.id)
 
-    await supabase.from('reajustes').delete().eq('id', r.id)
+    await supabase.from('reajustes').delete().eq('id', r.id).eq('organization_id', organizacao.id)
 
     await registrarLog({
       acao: 'editou',
@@ -161,7 +170,7 @@ export default function ReajustePage() {
     })
 
     setSucesso(`Reajuste desfeito! Valor revertido para ${formatVal(r.valor_anterior)}`)
-    buscarContratos()
+    buscarContratos(organizacao.id)
     if (contratoSel) selecionarContrato({ ...contratoSel, valor_atual: r.valor_anterior })
     setDesfazendo(null)
     setTimeout(() => setSucesso(''), 4000)

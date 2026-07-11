@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import AppLayout from '@/components/layout/AppLayout'
 import { supabase } from '@/lib/supabase'
+import { useOrganization } from '@/lib/OrganizationContext'
 import { Plus, X, DollarSign, TrendingUp, TrendingDown, Clock, CheckCircle, AlertCircle } from 'lucide-react'
 
 type Cobranca = {
@@ -78,6 +79,7 @@ function formatDate(date?: string) {
 const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 
 export default function FinanceiroPage() {
+  const { organizacao } = useOrganization()
   const [cobrancas, setCobrancas] = useState<Cobranca[]>([])
   const [contratos, setContratos] = useState<Contrato[]>([])
   const [loading, setLoading] = useState(true)
@@ -103,36 +105,45 @@ export default function FinanceiroPage() {
 
   const [contratoSel, setContratoSel] = useState<Contrato | null>(null)
 
-  useEffect(() => { buscarCobrancas(); buscarContratos(); buscarDespesas() }, [])
+  useEffect(() => {
+    if (organizacao?.id) {
+      buscarCobrancas(organizacao.id)
+      buscarContratos(organizacao.id)
+      buscarDespesas(organizacao.id)
+    }
+  }, [organizacao?.id])
 
-  async function buscarCobrancas() {
+  async function buscarCobrancas(orgId: string) {
     setLoading(true)
     const { data } = await supabase
       .from('cobrancas')
       .select(`*, contrato:contratos(numero, imovel:imoveis(titulo)), locatario:clientes!cobrancas_locatario_id_fkey(nome), locador:clientes!cobrancas_locador_id_fkey(nome)`)
+      .eq('organization_id', orgId)
       .order('data_vencimento', { ascending: true })
     if (data) setCobrancas(data)
     setLoading(false)
   }
 
-  async function buscarContratos() {
+  async function buscarContratos(orgId: string) {
     const { data } = await supabase
       .from('contratos')
       .select(`id, numero, valor_mensal, taxa_administracao, dia_vencimento, data_inicio, honorarios_aplicavel, valor_honorarios, imovel:imoveis(titulo), locatario:clientes!contratos_locatario_id_fkey(nome), locador:clientes!contratos_locador_id_fkey(nome)`)
+      .eq('organization_id', orgId)
       .eq('status', 'ativo')
     if (data) {
       setContratos(data)
-      await calcularHonorariosPendentes(data)
+      await calcularHonorariosPendentes(data, orgId)
     }
   }
 
-  async function calcularHonorariosPendentes(contratosAtivos: Contrato[]) {
+  async function calcularHonorariosPendentes(contratosAtivos: Contrato[], orgId: string) {
     const comHonorario = contratosAtivos.filter(c => c.honorarios_aplicavel)
     if (comHonorario.length === 0) { setHonorariosPendentes([]); return }
     const ids = comHonorario.map(c => c.id)
     const { data: cobrancasHon } = await supabase
       .from('cobrancas')
       .select('contrato_id, data_vencimento, status_cobranca')
+      .eq('organization_id', orgId)
       .in('contrato_id', ids)
       .order('data_vencimento', { ascending: true })
 
@@ -150,16 +161,18 @@ export default function FinanceiroPage() {
     setHonorariosPendentes(pendentes)
   }
 
-  async function buscarDespesas() {
+  async function buscarDespesas(orgId: string) {
     const { data } = await supabase
       .from('despesas')
       .select('*, fornecedor:fornecedores(nome)')
+      .eq('organization_id', orgId)
       .order('data_vencimento', { ascending: true })
     if (data) setDespesas(data)
   }
 
   async function salvarDespesa(e: React.FormEvent) {
     e.preventDefault()
+    if (!organizacao?.id) return
     setSalvandoDespesa(true)
     const { error } = await supabase.from('despesas').insert([{
       descricao: formDespesa.descricao,
@@ -167,22 +180,25 @@ export default function FinanceiroPage() {
       data_vencimento: formDespesa.data_vencimento,
       recorrente: formDespesa.recorrente,
       status: 'pendente',
+      organization_id: organizacao.id,
     }])
     if (!error) {
       setFormDespesa({ descricao: '', valor: '', data_vencimento: '', recorrente: false })
       setShowFormDespesa(false)
-      buscarDespesas()
+      buscarDespesas(organizacao.id)
     }
     setSalvandoDespesa(false)
   }
 
   async function marcarDespesaPaga(id: string) {
+    if (!organizacao?.id) return
     const hoje = new Date().toISOString().split('T')[0]
-    await supabase.from('despesas').update({ status: 'pago', data_pagamento: hoje }).eq('id', id)
-    buscarDespesas()
+    await supabase.from('despesas').update({ status: 'pago', data_pagamento: hoje }).eq('id', id).eq('organization_id', organizacao.id)
+    buscarDespesas(organizacao.id)
   }
 
   async function selecionarContrato(id: string) {
+    if (!organizacao?.id) return
     const c = contratos.find(x => x.id === id)
     setContratoSel(c || null)
     if (!c) return
@@ -196,6 +212,7 @@ export default function FinanceiroPage() {
     const { count } = await supabase
       .from('cobrancas')
       .select('id', { count: 'exact', head: true })
+      .eq('organization_id', organizacao.id)
       .eq('contrato_id', id)
 
     if ((count || 0) === 0 && c.data_inicio) {
@@ -219,6 +236,7 @@ export default function FinanceiroPage() {
 
   async function gerarCobranca(e: React.FormEvent) {
     e.preventDefault()
+    if (!organizacao?.id) { setErro('Organização ainda não carregada. Aguarde e tente novamente.'); return }
     setSalvando(true)
     setErro('')
 
@@ -234,6 +252,7 @@ export default function FinanceiroPage() {
       const { count } = await supabase
         .from('cobrancas')
         .select('id', { count: 'exact', head: true })
+        .eq('organization_id', organizacao.id)
         .eq('contrato_id', form.contrato_id)
       ehPrimeiraCobranca = (count || 0) === 0
     }
@@ -252,8 +271,9 @@ export default function FinanceiroPage() {
 
     const payload = {
       contrato_id: form.contrato_id,
-      locatario_id: contratoSel.locatario ? (await supabase.from('contratos').select('locatario_id').eq('id', form.contrato_id).single()).data?.locatario_id : null,
-      locador_id: contratoSel.locador ? (await supabase.from('contratos').select('locador_id').eq('id', form.contrato_id).single()).data?.locador_id : null,
+      organization_id: organizacao.id,
+      locatario_id: contratoSel.locatario ? (await supabase.from('contratos').select('locatario_id').eq('id', form.contrato_id).eq('organization_id', organizacao.id).single()).data?.locatario_id : null,
+      locador_id: contratoSel.locador ? (await supabase.from('contratos').select('locador_id').eq('id', form.contrato_id).eq('organization_id', organizacao.id).single()).data?.locador_id : null,
       mes_referencia: mesRef,
       competencia,
       valor_aluguel: valor,
@@ -272,38 +292,41 @@ export default function FinanceiroPage() {
     } else {
       setSucesso(`Cobrança de ${mesRef} gerada!`)
       setShowForm(false)
-      buscarCobrancas()
+      buscarCobrancas(organizacao.id)
       setTimeout(() => setSucesso(''), 3000)
     }
     setSalvando(false)
   }
 
   async function marcarPago(id: string) {
+    if (!organizacao?.id) return
     const hoje = new Date().toISOString().split('T')[0]
     await supabase.from('cobrancas').update({
       status_cobranca: 'pago',
       data_pagamento: hoje,
       status_repasse: 'aguardando',
-    }).eq('id', id)
-    buscarCobrancas()
+    }).eq('id', id).eq('organization_id', organizacao.id)
+    buscarCobrancas(organizacao.id)
   }
 
   async function marcarRepassado(id: string) {
+    if (!organizacao?.id) return
     const hoje = new Date().toISOString().split('T')[0]
     await supabase.from('cobrancas').update({
       status_repasse: 'repassado',
       data_repasse_realizada: hoje,
-    }).eq('id', id)
-    buscarCobrancas()
+    }).eq('id', id).eq('organization_id', organizacao.id)
+    buscarCobrancas(organizacao.id)
   }
 
   async function excluirCobranca(id: string) {
+    if (!organizacao?.id) return
     if (!confirm('Excluir esta cobrança? Essa ação não pode ser desfeita.')) return
-    const { error } = await supabase.from('cobrancas').delete().eq('id', id)
+    const { error } = await supabase.from('cobrancas').delete().eq('id', id).eq('organization_id', organizacao.id)
     if (error) {
       alert('Erro ao excluir: ' + error.message)
     } else {
-      buscarCobrancas()
+      buscarCobrancas(organizacao.id)
     }
   }
 
@@ -392,7 +415,7 @@ export default function FinanceiroPage() {
 
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
             <h1 style={{ color: '#f4f4f3' }} className="text-lg font-medium">Financeiro — Fluxo de caixa</h1>
-            <button className="btn btn-primary justify-center" onClick={() => setShowForm(!showForm)}>
+            <button className="btn btn-primary justify-center" onClick={() => setShowForm(!showForm)} disabled={!organizacao?.id}>
               {showForm ? <X size={14} /> : <Plus size={14} />}
               {showForm ? 'Cancelar' : 'Gerar cobrança'}
             </button>
@@ -701,7 +724,7 @@ export default function FinanceiroPage() {
 
               <div className="flex items-center justify-between mb-3">
                 <div style={{ color: '#8b8d98' }} className="text-xs font-medium uppercase tracking-wide">Despesas fixas cadastradas</div>
-                <button className="btn btn-sm" onClick={() => setShowFormDespesa(!showFormDespesa)}>
+                <button className="btn btn-sm" onClick={() => setShowFormDespesa(!showFormDespesa)} disabled={!organizacao?.id}>
                   {showFormDespesa ? <X size={13} /> : <Plus size={13} />}
                   {showFormDespesa ? 'Cancelar' : 'Nova despesa'}
                 </button>
