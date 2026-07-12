@@ -9,7 +9,7 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://admeasy.vercel.app'
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.admeasy.com.br'
 
 export async function POST(req: NextRequest) {
   try {

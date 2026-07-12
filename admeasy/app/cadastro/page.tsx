@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { pushDataLayerEvent } from '@/lib/gtm'
 import { Check, X, ArrowLeft } from 'lucide-react'
 
 type Plano = {
@@ -66,9 +67,19 @@ export default function CadastroPage() {
   }
 
   function escolherPlano(id: string) {
+    const plano = planos.find(p => p.id === id)
     setPlanoId(id)
     setEtapa('conta')
     window.scrollTo({ top: 0, behavior: 'smooth' })
+    if (plano) {
+      pushDataLayerEvent('select_plan', {
+        plan_id: plano.id,
+        plan_name: plano.nome,
+        billing_cycle: ciclo,
+        value: ciclo === 'anual' ? plano.preco_anual_total : plano.preco_mensal,
+        currency: 'BRL',
+      })
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -77,6 +88,8 @@ export default function CadastroPage() {
 
     if (senha.length < 6) { setErro('A senha precisa ter pelo menos 6 caracteres.'); return }
     if (senha !== confirmarSenha) { setErro('As senhas não coincidem.'); return }
+
+    pushDataLayerEvent('sign_up_submit', { plan_id: planoId, billing_cycle: ciclo })
 
     setEnviando(true)
     try {
@@ -102,8 +115,12 @@ export default function CadastroPage() {
         setEnviando(false)
         return
       }
-      // Cadastro concluído — manda pro checkout do Stripe pra cadastrar o
-      // cartão (nada é cobrado agora, só depois dos 7 dias de teste grátis)
+      // Cadastro concluído — dispara o evento de conversão principal antes de
+      // sair da página (sign_up é nome de evento recomendado do GA4).
+      pushDataLayerEvent('sign_up', { plan_id: planoId, billing_cycle: ciclo, method: 'form' })
+
+      // Manda pro checkout do Stripe pra cadastrar o cartão (nada é cobrado
+      // agora, só depois dos 7 dias de teste grátis)
       if (dados.checkout_url) {
         window.location.href = dados.checkout_url
       } else {
