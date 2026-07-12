@@ -652,20 +652,29 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
     setLoadingKit(true)
     const { data: files } = await supabase.storage.from('documentos').list(`contratos/${form.id}/kit`)
     const mapa: Record<string, Documento | null> = {}
+    // URL assinada (expira em 1h) em vez de link público — kit de contrato
+    // tem documento pessoal/financeiro assinado.
     for (const cat of KIT_CATEGORIAS) {
       const arquivo = files?.find(f => f.name.startsWith(cat.chave))
-      mapa[cat.chave] = arquivo ? {
-        nome: arquivo.name,
-        url: supabase.storage.from('documentos').getPublicUrl(`contratos/${form.id}/kit/${arquivo.name}`).data.publicUrl,
-        tipo: arquivo.name.split('.').pop() || '',
-        created_at: arquivo.created_at || '',
-      } : null
+      if (arquivo) {
+        const caminho = `contratos/${form.id}/kit/${arquivo.name}`
+        const { data: assinada } = await supabase.storage.from('documentos').createSignedUrl(caminho, 3600)
+        mapa[cat.chave] = {
+          nome: arquivo.name,
+          url: assinada?.signedUrl || '',
+          tipo: arquivo.name.split('.').pop() || '',
+          created_at: arquivo.created_at || '',
+        }
+      } else {
+        mapa[cat.chave] = null
+      }
     }
     setDocumentos(mapa)
     setLoadingKit(false)
   }
 
   async function uploadKit(chave: string, file: File) {
+    if (!organizationId) return
     setUploadandoKit(chave)
     const ext = file.name.split('.').pop()
     const path = `contratos/${form.id}/kit/${chave}.${ext}`

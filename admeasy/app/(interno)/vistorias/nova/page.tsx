@@ -4,6 +4,7 @@ import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import AppLayout from '@/components/layout/AppLayout'
 import { supabase } from '@/lib/supabase'
+import { resolverUrlFoto } from '@/lib/storageUrl'
 import { useOrganization } from '@/lib/OrganizationContext'
 import { Save, Plus, X, Camera, ChevronDown, ChevronUp } from 'lucide-react'
 
@@ -20,7 +21,7 @@ const ITENS_EXTRA = [
   'Armários - Suíte', 'Armários - Cozinha',
 ]
 
-type Foto = { url: string }
+type Foto = { path: string; previewUrl: string }
 type Ambiente = {
   nome: string
   estado: 'bom' | 'regular' | 'ruim' | ''
@@ -89,13 +90,27 @@ function NovaVistoriaConteudo() {
       setTestemunha1Cpf(data.testemunha1_cpf || '')
       setTestemunha2Nome(data.testemunha2_nome || '')
       setTestemunha2Cpf(data.testemunha2_cpf || '')
-      setAmbientes((data.ambientes || []).map((a: any) => ({
+      const ambientesCarregados = (data.ambientes || []).map((a: any) => ({
         nome: a.nome,
         estado: a.estado || '',
         observacao: a.observacao || '',
-        fotos: (a.fotos || []).map((url: string) => ({ url })),
+        fotos: (a.fotos || []).map((path: string) => ({ path, previewUrl: path.startsWith('http') ? path : '' })),
         aberto: false,
-      })))
+      }))
+      setAmbientes(ambientesCarregados)
+
+      // Fotos guardadas como caminho (não URL legada) precisam da URL
+      // assinada resolvida à parte pra pré-visualização.
+      ambientesCarregados.forEach((amb: any, ai: number) => {
+        amb.fotos.forEach((f: Foto, fi: number) => {
+          if (f.previewUrl) return
+          resolverUrlFoto(f.path).then(url => {
+            setAmbientes(prev => prev.map((a, i) => i === ai
+              ? { ...a, fotos: a.fotos.map((ff, ffi) => ffi === fi ? { ...ff, previewUrl: url } : ff) }
+              : a))
+          })
+        })
+      })
     }
     setCarregandoEdicao(false)
   }
@@ -156,8 +171,7 @@ function NovaVistoriaConteudo() {
     const path = `vistorias/${organizacao.id}/${Date.now()}.${ext}`
     const { data: up } = await supabase.storage.from('documentos').upload(path, file, { upsert: true })
     if (up) {
-      const { data: url } = supabase.storage.from('documentos').getPublicUrl(path)
-      setAmbientes(prev => prev.map((a, i) => i === idx ? { ...a, fotos: [...a.fotos, { url: url.publicUrl }] } : a))
+      setAmbientes(prev => prev.map((a, i) => i === idx ? { ...a, fotos: [...a.fotos, { path, previewUrl: URL.createObjectURL(file) }] } : a))
     }
   }
 
@@ -183,7 +197,7 @@ function NovaVistoriaConteudo() {
         nome: a.nome,
         estado: a.estado,
         observacao: a.observacao,
-        fotos: a.fotos.map(f => f.url),
+        fotos: a.fotos.map(f => f.path),
       })),
       locadores: locadores.filter(l => l.trim()),
       locatarios: locatarios.filter(l => l.trim()),
@@ -406,7 +420,7 @@ function NovaVistoriaConteudo() {
                     <div className="flex gap-2 flex-wrap">
                       {amb.fotos.map((foto, fi) => (
                         <div key={fi} style={{ border: '0.5px solid #2a2f3a', height: '80px' }} className="relative w-24 rounded-lg overflow-hidden">
-                          <img src={foto.url} alt="" className="w-full h-full object-cover" />
+                          <img src={foto.previewUrl} alt="" className="w-full h-full object-cover" />
                           <button type="button" onClick={() => removerFoto(idx, fi)}
                             className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center">
                             <X size={10} />

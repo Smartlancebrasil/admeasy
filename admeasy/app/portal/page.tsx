@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getPortalUser, logoutPortal, alterarSenhaPortal, PortalUser } from '@/lib/portal-auth'
 import { supabase } from '@/lib/supabase'
+import { resolverUrlFoto } from '@/lib/storageUrl'
 import { LogOut, Key, Plus, X, Upload, ChevronDown, ChevronUp, FileDown, Copy, Check, AlertCircle, QrCode, Edit2, Hourglass, Calculator } from 'lucide-react'
 
 function formatVal(v: number) {
@@ -307,22 +308,33 @@ function FormularioDemanda({ clienteId, contratoId, organizationId, editando, on
   const [titulo, setTitulo] = useState(editando?.titulo || '')
   const [descricao, setDescricao] = useState(editando?.descricao || '')
   const [urgencia, setUrgencia] = useState(editando?.urgencia || 'media')
-  const [anexos, setAnexos] = useState<{ url: string; nome: string; isImagem: boolean }[]>(
-    (editando?.fotos || []).map(url => ({ url, nome: '', isImagem: true }))
+  const [anexos, setAnexos] = useState<{ path: string; previewUrl: string; nome: string; isImagem: boolean }[]>(
+    (editando?.fotos || []).map(path => ({ path, previewUrl: path.startsWith('http') ? path : '', nome: '', isImagem: true }))
   )
   const [uploadando, setUploadando] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
   const [protocoloGerado, setProtocoloGerado] = useState<string | null>(null)
 
+  useEffect(() => {
+    // Fotos já salvas (edição) guardam só o caminho — resolve a URL assinada
+    // pra pré-visualização. Fotos legadas (URL completa) já vieram prontas.
+    ;(editando?.fotos || []).forEach((path, i) => {
+      if (path.startsWith('http')) return
+      resolverUrlFoto(path).then(url => {
+        setAnexos(prev => prev.map((a, idx) => idx === i ? { ...a, previewUrl: url } : a))
+      })
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   async function uploadAnexo(file: File) {
-    if (anexos.length >= 5) return
+    if (anexos.length >= 5 || !organizationId) return
     setUploadando(true)
     const path = `chamados/${organizationId}/${Date.now()}_${file.name}`
     const { data } = await supabase.storage.from('documentos').upload(path, file, { upsert: true })
     if (data) {
-      const { data: url } = supabase.storage.from('documentos').getPublicUrl(path)
-      setAnexos(prev => [...prev, { url: url.publicUrl, nome: file.name, isImagem: file.type.startsWith('image/') }])
+      setAnexos(prev => [...prev, { path, previewUrl: URL.createObjectURL(file), nome: file.name, isImagem: file.type.startsWith('image/') }])
     }
     setUploadando(false)
   }
@@ -339,7 +351,7 @@ function FormularioDemanda({ clienteId, contratoId, organizationId, editando, on
       // sobrescreve status/decisão de forma alguma).
       const { error } = await supabase.from('demandas').update({
         titulo, descricao: descricao || null, urgencia,
-        fotos: anexos.map(a => a.url),
+        fotos: anexos.map(a => a.path),
       }).eq('id', editando.id)
       setSalvando(false)
       if (error) { setErro('Erro: ' + error.message); return }
@@ -354,7 +366,7 @@ function FormularioDemanda({ clienteId, contratoId, organizationId, editando, on
       organization_id: organizationId, titulo, descricao: descricao || null, urgencia,
       origem: 'locatario', status: 'aberta', contrato_id: contratoId || null,
       locatario_id: clienteId, data_abertura: new Date().toISOString(),
-      fotos: anexos.map(a => a.url),
+      fotos: anexos.map(a => a.path),
     }]).select('numero').single()
 
     setSalvando(false)
@@ -423,7 +435,7 @@ function FormularioDemanda({ clienteId, contratoId, organizationId, editando, on
               <div className="flex gap-2 flex-wrap mb-2">
                 {anexos.map((a, i) => (
                   <div key={i} style={{ background: '#16243a', border: '0.5px solid #1e3a5f' }} className="relative rounded-lg overflow-hidden">
-                    {a.isImagem ? <img src={a.url} alt="" className="w-16 h-16 object-cover" />
+                    {a.isImagem ? <img src={a.previewUrl} alt="" className="w-16 h-16 object-cover" />
                       : <div className="w-16 h-16 flex flex-col items-center justify-center"><span className="text-xl">📄</span></div>}
                     <button type="button" onClick={() => setAnexos(prev => prev.filter((_, fi) => fi !== i))}
                       className="absolute top-0.5 right-0.5 bg-red-500 rounded-full w-4 h-4 flex items-center justify-center">
@@ -456,8 +468,16 @@ function FormularioDemanda({ clienteId, contratoId, organizationId, editando, on
 // ── CARD DEMANDA ──────────────────────────────────────────────────────
 function CardDemanda({ d, onEditar }: { d: any; onEditar: (d: any) => void }) {
   const [aberto, setAberto] = useState(false)
+  const [fotosResolvidas, setFotosResolvidas] = useState<string[]>([])
   const st = statusDemanda[d.status] || statusDemanda.aberta
   const podeEditar = d.status === 'aberta'
+
+  useEffect(() => {
+    if (aberto && d.fotos?.length > 0 && fotosResolvidas.length === 0) {
+      Promise.all(d.fotos.map((p: string) => resolverUrlFoto(p))).then(setFotosResolvidas)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aberto])
 
   return (
     <div style={{ background: '#0d1b2e', border: '0.5px solid #1e3a5f' }} className="rounded-xl p-4">
@@ -477,9 +497,9 @@ function CardDemanda({ d, onEditar }: { d: any; onEditar: (d: any) => void }) {
       {aberto && (
         <div className="mt-3 pt-3 space-y-2" style={{ borderTop: '0.5px solid #1e3a5f' }}>
           {d.descricao && <p style={{ color: '#c3c2b7' }} className="text-sm">{d.descricao}</p>}
-          {d.fotos?.length > 0 && (
+          {fotosResolvidas.length > 0 && (
             <div className="flex gap-2 flex-wrap">
-              {d.fotos.map((url: string, i: number) => (
+              {fotosResolvidas.map((url: string, i: number) => (
                 <a key={i} href={url} target="_blank" rel="noopener noreferrer" style={{ background: '#16243a', border: '0.5px solid #1e3a5f' }} className="w-14 h-14 rounded-lg overflow-hidden flex items-center justify-center">
                   <img src={url} alt="" className="w-full h-full object-cover" onError={(e: any) => { e.target.style.display = 'none' }} />
                 </a>

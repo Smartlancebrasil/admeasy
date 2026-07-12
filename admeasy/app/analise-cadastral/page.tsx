@@ -86,12 +86,15 @@ export default function AnaliseCadastralPage() {
 
   async function carregarDocumentos(analiseId: string) {
     const { data } = await supabase.storage.from('documentos').list(`analises/${analiseId}`)
-    if (data) {
-      setDocumentos(data.map(f => ({
-        nome: f.name,
-        url: supabase.storage.from('documentos').getPublicUrl(`analises/${analiseId}/${f.name}`).data.publicUrl,
-        tipo: f.name.split('.').pop() || '',
-      })))
+    if (data && data.length > 0) {
+      // URL assinada (expira em 1h) em vez de link público — documento de
+      // análise cadastral tem dado financeiro/pessoal sensível.
+      const comUrl = await Promise.all(data.map(async f => {
+        const caminho = `analises/${analiseId}/${f.name}`
+        const { data: assinada } = await supabase.storage.from('documentos').createSignedUrl(caminho, 3600)
+        return { nome: f.name, url: assinada?.signedUrl || '', tipo: f.name.split('.').pop() || '' }
+      }))
+      setDocumentos(comUrl)
     } else setDocumentos([])
   }
 
@@ -129,7 +132,7 @@ export default function AnaliseCadastralPage() {
   }
 
   async function uploadDocumento(file: File) {
-    if (!analiseAberta) return
+    if (!analiseAberta || !organizacao?.id) return
     setUploadando(true)
     const path = `analises/${analiseAberta.id}/${Date.now()}_${file.name}`
     const { error } = await supabase.storage.from('documentos').upload(path, file, { upsert: true })
@@ -138,7 +141,7 @@ export default function AnaliseCadastralPage() {
   }
 
   async function excluirDocumento(nome: string) {
-    if (!analiseAberta || !confirm('Excluir documento?')) return
+    if (!analiseAberta || !organizacao?.id || !confirm('Excluir documento?')) return
     await supabase.storage.from('documentos').remove([`analises/${analiseAberta.id}/${nome}`])
     carregarDocumentos(analiseAberta.id)
   }

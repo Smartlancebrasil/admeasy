@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import AppLayout from '@/components/layout/AppLayout'
 import { supabase } from '@/lib/supabase'
+import { resolverUrlFoto } from '@/lib/storageUrl'
 import { useOrganization } from '@/lib/OrganizationContext'
 import { FileDown, ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
@@ -34,10 +35,20 @@ export default function VistoriaDetalhePage() {
   const [vistoria, setVistoria] = useState<Vistoria | null>(null)
   const [org, setOrg] = useState<Org | null>(null)
   const [gerandoPdf, setGerandoPdf] = useState(false)
+  // Fotos guardam só o caminho no storage — URL assinada resolvida à parte,
+  // indexada pelo mesmo índice de vistoria.ambientes.
+  const [fotosResolvidas, setFotosResolvidas] = useState<string[][]>([])
 
   useEffect(() => {
     if (organizacao?.id) carregar(organizacao.id)
   }, [id, organizacao?.id])
+
+  useEffect(() => {
+    if (!vistoria) return
+    Promise.all(
+      (vistoria.ambientes || []).map(amb => Promise.all((amb.fotos || []).map(p => resolverUrlFoto(p))))
+    ).then(setFotosResolvidas)
+  }, [vistoria])
 
   async function carregar(orgId: string) {
     const { data } = await supabase
@@ -177,7 +188,8 @@ export default function VistoriaDetalhePage() {
           checkY(fotoH + gap)
 
           try {
-            const resp = await fetch(amb.fotos[fi])
+            const urlFoto = await resolverUrlFoto(amb.fotos[fi])
+            const resp = await fetch(urlFoto)
             const blob = await resp.blob()
             const b64 = await new Promise<string>(res => {
               const r = new FileReader()
@@ -313,7 +325,7 @@ export default function VistoriaDetalhePage() {
               )}
               {amb.fotos?.length > 0 && (
                 <div className="flex gap-2 flex-wrap">
-                  {amb.fotos.map((url, fi) => (
+                  {(fotosResolvidas[i] || []).map((url, fi) => (
                     <img key={fi} src={url} alt="" style={{ border: '0.5px solid #2a2f3a', width: '90px', height: '70px' }} className="object-cover rounded-lg" />
                   ))}
                 </div>
