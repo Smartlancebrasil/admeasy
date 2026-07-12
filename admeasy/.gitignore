@@ -17,6 +17,9 @@ out/
 # Vercel
 .vercel
 
+# Supabase CLI (estado local, nao portavel)
+supabase/.temp/
+
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
