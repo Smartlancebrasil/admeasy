@@ -47,6 +47,7 @@ export default function CadastroPage() {
   const router = useRouter()
   const [etapa, setEtapa] = useState<'plano' | 'conta'>('plano')
   const [planos, setPlanos] = useState<Plano[]>([])
+  const [carregandoPlanos, setCarregandoPlanos] = useState(true)
   const [planoId, setPlanoId] = useState('')
   const [ciclo, setCiclo] = useState<'mensal' | 'anual'>('mensal')
   const [nomeOrg, setNomeOrg] = useState('')
@@ -63,6 +64,7 @@ export default function CadastroPage() {
   async function carregarPlanos() {
     const { data } = await supabase.from('planos').select('*').order('preco_mensal')
     if (data) setPlanos(data)
+    setCarregandoPlanos(false)
   }
 
   function escolherPlano(id: string) {
@@ -155,6 +157,14 @@ export default function CadastroPage() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+              {carregandoPlanos && planos.length === 0 && [0, 1, 2, 3].map(i => (
+                <div key={i} style={{ border: '0.5px solid #2a2f3a', background: '#161b22' }} className="rounded-2xl p-6 h-72 animate-pulse">
+                  <div style={{ background: '#2a2f3a' }} className="h-4 w-2/3 rounded mb-3" />
+                  <div style={{ background: '#2a2f3a' }} className="h-3 w-1/2 rounded mb-6" />
+                  <div style={{ background: '#2a2f3a' }} className="h-8 w-3/4 rounded mb-6" />
+                  <div style={{ background: '#2a2f3a' }} className="h-9 w-full rounded" />
+                </div>
+              ))}
               {planos.map(p => {
                 const precoMensalEquivalente = ciclo === 'anual' ? p.preco_anual_total / 12 : p.preco_mensal
                 const destaque = p.id === 'corretor'

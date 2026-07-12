@@ -4,7 +4,7 @@ import { Inter } from 'next/font/google'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { CreditCard, ArrowLeftRight, ShieldCheck, FileText, BarChart3, X } from 'lucide-react'
+import { CreditCard, ArrowLeftRight, ShieldCheck, FileText, BarChart3 } from 'lucide-react'
 
 const inter = Inter({ subsets: ['latin'], weight: ['400', '500', '600', '700'], variable: '--font-body' })
 
@@ -235,7 +235,6 @@ const artigos = [
 
 export default function PaginaInicial() {
   const [menuAberto, setMenuAberto] = useState(false)
-  const [barraVisivel, setBarraVisivel] = useState(true)
   useCalEmbed()
 
   return (
@@ -249,11 +248,8 @@ export default function PaginaInicial() {
       {/* Header */}
       <header style={{ borderBottom: `1px solid ${COLORS.line}`, background: `${COLORS.bg}cc` }} className="sticky top-0 z-50 backdrop-blur">
         <div className="max-w-6xl mx-auto px-5 md:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <Image src="/admeasy-logo.png" alt="AdmEasy" width={28} height={28} className="rounded-sm" />
-            <span className="text-base font-bold tracking-wide">
-              Adm<span style={{ color: COLORS.blue }}>easy</span>
-            </span>
+          <div className="flex items-center">
+            <Image src="/admeasy-logo.png" alt="AdmEasy" width={128} height={32} priority />
           </div>
 
           <nav className="hidden md:flex items-center gap-8 text-sm" style={{ color: COLORS.muted }}>
@@ -265,9 +261,6 @@ export default function PaginaInicial() {
           </nav>
 
           <div className="hidden md:flex items-center gap-3">
-            <Link href="/portal" style={{ color: COLORS.text, border: `1px solid ${COLORS.line}` }} className="text-sm font-medium px-4 py-2 rounded-md hover:border-[#1A7FFF] transition-colors">
-              Área do inquilino
-            </Link>
             <Link href="/login" style={{ background: COLORS.blue, color: '#fff' }} className="text-sm font-semibold px-4 py-2 rounded-md hover:opacity-90 transition-opacity">
               Entrar
             </Link>
@@ -285,7 +278,6 @@ export default function PaginaInicial() {
             <a href="/cadastro" style={{ color: COLORS.muted }} onClick={() => setMenuAberto(false)}>Planos</a>
             <a href="#imobiliarias" style={{ color: COLORS.muted }} onClick={() => setMenuAberto(false)}>Para imobiliárias</a>
             <a href="#blog" style={{ color: COLORS.muted }} onClick={() => setMenuAberto(false)}>Blog</a>
-            <Link href="/portal" style={{ color: COLORS.text, border: `1px solid ${COLORS.line}` }} className="text-center font-medium px-4 py-2.5 rounded-md">Área do inquilino</Link>
             <Link href="/login" style={{ background: COLORS.blue, color: '#fff' }} className="text-center font-semibold px-4 py-2.5 rounded-md">Entrar</Link>
           </div>
         )}
@@ -436,50 +428,39 @@ export default function PaginaInicial() {
           </div>
           <div className="flex gap-6 text-xs" style={{ color: COLORS.muted }}>
             <Link href="/login" className="hover:opacity-80">Entrar</Link>
-            <Link href="/portal" className="hover:opacity-80">Área do inquilino</Link>
             <a href="mailto:contato@admeasy.com.br" className="hover:opacity-80">Contato</a>
           </div>
         </div>
       </footer>
 
       {/* Faixa fixa no rodapé */}
-      {barraVisivel && (
-        <div
-          style={{ background: '#0a1526', borderTop: `1px solid ${COLORS.line}` }}
-          className="fixed bottom-0 left-0 right-0 z-50 py-3 px-5"
-        >
-          <div className="max-w-6xl mx-auto flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3 min-w-0">
-              <span style={{ color: COLORS.text }} className="text-sm font-semibold truncate">
-                Crie agora sua conta no AdmEasy
-              </span>
-              <span style={{ color: COLORS.muted }} className="text-xs hidden sm:inline truncate">
-                Teste grátis por 7 dias, sem compromisso.
-              </span>
-            </div>
-            <div className="flex items-center gap-3 flex-shrink-0">
-              <a
-                href="/cadastro"
-                style={{
-                  background: `linear-gradient(135deg, ${COLORS.blue} 0%, ${COLORS.blueSecondary} 100%)`,
-                  color: '#fff',
-                }}
-                className="text-xs font-semibold uppercase tracking-wide px-5 py-2.5 rounded-lg whitespace-nowrap"
-              >
-                Teste agora por 7 dias grátis
-              </a>
-              <button
-                onClick={() => setBarraVisivel(false)}
-                aria-label="Fechar"
-                style={{ color: COLORS.muted }}
-                className="hover:opacity-80"
-              >
-                <X size={16} />
-              </button>
-            </div>
+      <div
+        style={{ background: '#0a1526', borderTop: `1px solid ${COLORS.line}` }}
+        className="fixed bottom-0 left-0 right-0 z-50 py-3 px-5"
+      >
+        <div className="max-w-6xl mx-auto flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <span style={{ color: COLORS.text }} className="text-sm font-semibold truncate">
+              Crie agora sua conta no AdmEasy
+            </span>
+            <span style={{ color: COLORS.muted }} className="text-xs hidden sm:inline truncate">
+              Teste grátis por 7 dias, sem compromisso.
+            </span>
+          </div>
+          <div className="flex items-center gap-3 flex-shrink-0">
+            <a
+              href="/cadastro"
+              style={{
+                background: `linear-gradient(135deg, ${COLORS.blue} 0%, ${COLORS.blueSecondary} 100%)`,
+                color: '#fff',
+              }}
+              className="text-xs font-semibold uppercase tracking-wide px-5 py-2.5 rounded-lg whitespace-nowrap"
+            >
+              Teste agora por 7 dias grátis
+            </a>
           </div>
         </div>
-      )}
+      </div>
     </div>
   )
 }
