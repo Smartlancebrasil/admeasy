@@ -25,6 +25,7 @@ type Cliente = {
   cidade?: string
   estado?: string
   cep?: string
+  chave_pix?: string
   observacoes?: string
   status: string
   tem_portal: boolean
@@ -60,7 +61,8 @@ const formVazio: Record<string, string> = {
   nome: '', tipo: 'locatario', cpf: '', rg: '', data_nascimento: '',
   estado_civil: '', profissao: '', renda_mensal: '', empresa: '',
   email: '', telefone: '', whatsapp: '',
-  endereco: '', bairro: '', cidade: '', estado: '', cep: '',
+  cep: '', endereco: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '',
+  chave_pix: '',
   observacoes: '', status: 'ativo',
 }
 
@@ -83,6 +85,38 @@ function FormCliente({
 }) {
   const set = (campo: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm(f => ({ ...f, [campo]: e.target.value }))
+
+  const [buscandoCep, setBuscandoCep] = useState(false)
+
+  // Busca o endereço automaticamente assim que o CEP tiver os 8 dígitos —
+  // mesmo padrão já usado no cadastro rápido de cliente na tela de Contratos.
+  async function buscarCep(cepDigitado: string) {
+    const cepLimpo = cepDigitado.replace(/\D/g, '')
+    if (cepLimpo.length !== 8) return
+    setBuscandoCep(true)
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`)
+      const dados = await res.json()
+      if (!dados.erro) {
+        setForm(f => ({
+          ...f,
+          endereco: dados.logradouro || f.endereco,
+          bairro: dados.bairro || f.bairro,
+          cidade: dados.localidade || f.cidade,
+          estado: dados.uf || f.estado,
+        }))
+      }
+    } catch {
+      // Sem internet ou API fora do ar: usuário preenche manualmente, sem travar o formulário.
+    }
+    setBuscandoCep(false)
+  }
+
+  function aoDigitarCep(e: React.ChangeEvent<HTMLInputElement>) {
+    const valor = e.target.value
+    setForm(f => ({ ...f, cep: valor }))
+    buscarCep(valor)
+  }
 
   return (
     <div className="card mb-6">
@@ -127,18 +161,29 @@ function FormCliente({
             <input className="input" value={form.telefone} onChange={set('telefone')} /></div>
           <div><label className="label">WhatsApp</label>
             <input className="input" value={form.whatsapp} onChange={set('whatsapp')} /></div>
-          <div className="sm:col-span-2"><label className="label">Endereço</label>
-            <input className="input" value={form.endereco} onChange={set('endereco')} placeholder="Rua, número, complemento" /></div>
-          <div><label className="label">Bairro</label>
-            <input className="input" value={form.bairro} onChange={set('bairro')} /></div>
-          <div><label className="label">Cidade</label>
-            <input className="input" value={form.cidade} onChange={set('cidade')} /></div>
+          <div><label className="label">CEP</label>
+            <div className="relative">
+              <input className="input" value={form.cep} onChange={aoDigitarCep} placeholder="00000-000" maxLength={9} />
+              {buscandoCep && <span style={{ color: '#5b9bf5' }} className="absolute right-3 top-1/2 -translate-y-1/2 text-xs">Buscando...</span>}
+            </div></div>
           <div><label className="label">Estado</label>
             <select className="input" value={form.estado} onChange={set('estado')}>
               <option value="">UF</option>{UFs.map(uf => <option key={uf} value={uf}>{uf}</option>)}
             </select></div>
-          <div><label className="label">CEP</label>
-            <input className="input" value={form.cep} onChange={set('cep')} placeholder="00000-000" /></div>
+          <div className="sm:col-span-2"><label className="label">Endereço</label>
+            <input className="input" value={form.endereco} onChange={set('endereco')} placeholder="Preenchido automaticamente pelo CEP, ou digite" /></div>
+          <div><label className="label">Número</label>
+            <input className="input" value={form.numero} onChange={set('numero')} placeholder="Ex: 123" /></div>
+          <div><label className="label">Complemento</label>
+            <input className="input" value={form.complemento} onChange={set('complemento')} placeholder="Ex: Apto 42, Bloco B" /></div>
+          <div><label className="label">Bairro</label>
+            <input className="input" value={form.bairro} onChange={set('bairro')} /></div>
+          <div><label className="label">Cidade</label>
+            <input className="input" value={form.cidade} onChange={set('cidade')} /></div>
+          {form.tipo === 'locador' && (
+            <div className="sm:col-span-2"><label className="label">Chave PIX (para recebimento dos repasses)</label>
+              <input className="input" value={form.chave_pix} onChange={set('chave_pix')} placeholder="CPF, CNPJ, e-mail, celular ou chave aleatória" /></div>
+          )}
           <div className="sm:col-span-2"><label className="label">Observações</label>
             <textarea className="input" rows={2} value={form.observacoes} onChange={set('observacoes')} /></div>
         </div>
@@ -282,8 +327,10 @@ export default function ClientesPage() {
       data_nascimento: c.data_nascimento || '', estado_civil: c.estado_civil || '',
       profissao: c.profissao || '', renda_mensal: c.renda_mensal?.toString() || '',
       empresa: c.empresa || '', email: c.email || '', telefone: c.telefone || '',
-      whatsapp: c.whatsapp || '', endereco: c.endereco || '', bairro: c.bairro || '',
-      cidade: c.cidade || '', estado: c.estado || '', cep: c.cep || '',
+      whatsapp: c.whatsapp || '',
+      cep: c.cep || '', endereco: c.endereco || '', numero: '', complemento: '', bairro: c.bairro || '',
+      cidade: c.cidade || '', estado: c.estado || '',
+      chave_pix: c.chave_pix || '',
       observacoes: c.observacoes || '', status: c.status || 'ativo',
     })
     setErro('')
@@ -303,8 +350,26 @@ export default function ClientesPage() {
     setSalvando(true)
     setErro('')
 
+    if (form.cpf?.trim()) {
+      let consultaCpf = supabase.from('clientes').select('id').eq('organization_id', organizacao.id).eq('cpf', form.cpf.trim())
+      if (editando) consultaCpf = consultaCpf.neq('id', editando.id)
+      const { data: duplicados } = await consultaCpf.limit(1)
+      if (duplicados && duplicados.length > 0) {
+        setErro('Já existe um cliente cadastrado com esse CPF.')
+        setSalvando(false)
+        return
+      }
+    }
+
+    // A tabela "clientes" guarda o endereço todo num campo só (endereco),
+    // então juntamos rua + número + complemento aqui antes de enviar —
+    // número/complemento existem só nesta tela, para facilitar o preenchimento.
+    const enderecoCompleto = [form.endereco, form.numero, form.complemento].filter(Boolean).join(', ')
+    const { numero, complemento, ...formSemNumeroComplemento } = form
+
     const payload = {
-      ...form,
+      ...formSemNumeroComplemento,
+      endereco: enderecoCompleto,
       renda_mensal: form.renda_mensal ? parseFloat(form.renda_mensal) : null,
       data_nascimento: form.data_nascimento || null,
     }
