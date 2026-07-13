@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import AppLayout from '@/components/layout/AppLayout'
 import { supabase } from '@/lib/supabase'
 import { useOrganization } from '@/lib/OrganizationContext'
-import { FileText, Plus, X, AlertTriangle, Edit2, FileDown, UserPlus, Upload, Download, Trash2, Hourglass, CheckCircle2 } from 'lucide-react'
+import { FileText, Plus, X, AlertTriangle, Edit2, FileDown, UserPlus, Upload, Trash2, Hourglass, CheckCircle2 } from 'lucide-react'
 import { registrarLog } from '@/lib/logs'
 
 type Contrato = {
@@ -641,7 +641,7 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
   const [modalCadastro, setModalCadastro] = useState<CampoParte | null>(null)
   const [modalImovel, setModalImovel] = useState(false)
   const [modalSelecionarCliente, setModalSelecionarCliente] = useState<CampoParte | null>(null)
-  const [documentos, setDocumentos] = useState<Record<string, Documento | null>>({})
+  const [documentos, setDocumentos] = useState<Record<string, Documento[]>>({})
   const [uploadandoKit, setUploadandoKit] = useState<string | null>(null)
   const [loadingKit, setLoadingKit] = useState(true)
   const set = (c: string) => (e: React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) => setForm(f=>({...f,[c]:e.target.value}))
@@ -683,19 +683,25 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
 
   useEffect(() => { if (form.id) carregarKit() }, [form.id])
 
+  // Cada categoria vira uma "pasta" própria (kit/{chave}/arquivo), permitindo
+  // guardar mais de um documento por item — igual às fotos da vistoria.
   async function carregarKit() {
     setLoadingKit(true)
-    const { data: files } = await supabase.storage.from('documentos').list(`contratos/${form.id}/kit`)
-    const mapa: Record<string, Documento | null> = {}
-    for (const cat of KIT_CATEGORIAS) {
-      const arquivo = files?.find(f => f.name.startsWith(cat.chave))
-      mapa[cat.chave] = arquivo ? {
-        nome: arquivo.name,
-        url: supabase.storage.from('documentos').getPublicUrl(`contratos/${form.id}/kit/${arquivo.name}`).data.publicUrl,
-        tipo: arquivo.name.split('.').pop() || '',
-        created_at: arquivo.created_at || '',
-      } : null
-    }
+    const resultados = await Promise.all(
+      KIT_CATEGORIAS.map(cat => supabase.storage.from('documentos').list(`contratos/${form.id}/kit/${cat.chave}`))
+    )
+    const mapa: Record<string, Documento[]> = {}
+    KIT_CATEGORIAS.forEach((cat, i) => {
+      const arquivos = resultados[i].data || []
+      mapa[cat.chave] = arquivos
+        .filter(a => a.id) // storage lista pastas vazias como pseudo-arquivos sem id
+        .map(a => ({
+          nome: a.name,
+          url: supabase.storage.from('documentos').getPublicUrl(`contratos/${form.id}/kit/${cat.chave}/${a.name}`).data.publicUrl,
+          tipo: a.name.split('.').pop() || '',
+          created_at: a.created_at || '',
+        }))
+    })
     setDocumentos(mapa)
     setLoadingKit(false)
   }
@@ -703,19 +709,17 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
   async function uploadKit(chave: string, file: File) {
     setUploadandoKit(chave)
     const ext = file.name.split('.').pop()
-    const path = `contratos/${form.id}/kit/${chave}.${ext}`
-    const { error } = await supabase.storage.from('documentos').upload(path, file, { upsert: true })
+    const path = `contratos/${form.id}/kit/${chave}/${Date.now()}.${ext}`
+    const { error } = await supabase.storage.from('documentos').upload(path, file)
     if (error) alert('Erro ao enviar: ' + error.message)
     await carregarKit()
     setUploadandoKit(null)
   }
 
-  async function excluirKit(chave: string) {
-    const doc = documentos[chave]
-    if (!doc) return
+  async function excluirKit(chave: string, doc: Documento) {
     if (!confirm('Tem certeza que deseja excluir este documento?')) return
     setUploadandoKit(chave)
-    const { error } = await supabase.storage.from('documentos').remove([`contratos/${form.id}/kit/${doc.nome}`])
+    const { error } = await supabase.storage.from('documentos').remove([`contratos/${form.id}/kit/${chave}/${doc.nome}`])
     if (error) alert('Erro ao excluir: ' + error.message)
     await carregarKit()
     setUploadandoKit(null)
@@ -1128,47 +1132,43 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
                   return (
                     <div key={grupo}>
                       <h4 style={{ color: '#8b9ab4' }} className="text-[11px] font-semibold uppercase tracking-wide mb-1.5">{grupo}</h4>
-                      <div className="space-y-1.5">
+                      <div className="space-y-3">
                         {categoriasDoGrupo.map(cat => {
-                          const doc = documentos[cat.chave]
+                          const docs = documentos[cat.chave] || []
                           const processando = uploadandoKit === cat.chave
                           return (
-                            <div key={cat.chave} style={{ background: '#16243a', border: '0.5px solid #1e3a5f' }} className="flex items-center justify-between px-3 py-2 rounded-lg gap-2">
-                              <div className="flex items-center gap-2 min-w-0">
-                                {doc ? <CheckCircle2 size={13} style={{ color: '#3fb950' }} className="flex-shrink-0" /> : <Hourglass size={13} style={{ color: '#5b5e6b' }} className="flex-shrink-0" />}
-                                <span style={{ color: '#f4f4f3' }} className="text-xs truncate">{cat.label}</span>
+                            <div key={cat.chave}>
+                              <div className="flex items-center gap-2 mb-1.5">
+                                {docs.length > 0 ? <CheckCircle2 size={13} style={{ color: '#3fb950' }} className="flex-shrink-0" /> : <Hourglass size={13} style={{ color: '#5b5e6b' }} className="flex-shrink-0" />}
+                                <span style={{ color: '#f4f4f3' }} className="text-xs">{cat.label}</span>
+                                {docs.length > 0 && <span style={{ color: '#8b9ab4' }} className="text-[10px]">{docs.length} arquivo{docs.length > 1 ? 's' : ''}</span>}
                               </div>
-                              <div className="flex items-center gap-1.5 flex-shrink-0">
-                                {doc ? (
-                                  <>
-                                    <a href={doc.url} target="_blank" rel="noopener noreferrer" download
-                                      style={{ background: '#f0fdf4', color: '#16a34a' }}
-                                      className="text-xs px-2.5 py-1 rounded-md flex items-center gap-1 font-medium">
-                                      <Download size={11} />Baixar
+                              <div className="flex gap-2 flex-wrap">
+                                {docs.map(doc => (
+                                  <div key={doc.nome} style={{ border: '0.5px solid #2a2f3a', height: '80px' }} className="relative w-20 rounded-lg overflow-hidden flex-shrink-0">
+                                    <a href={doc.url} target="_blank" rel="noopener noreferrer" className="block w-full h-full">
+                                      {['jpg', 'jpeg', 'png'].includes(doc.tipo.toLowerCase()) ? (
+                                        <img src={doc.url} alt="" className="w-full h-full object-cover" />
+                                      ) : (
+                                        <div style={{ background: '#0d1117' }} className="w-full h-full flex flex-col items-center justify-center gap-1">
+                                          <FileText size={18} style={{ color: '#5b9bf5' }} />
+                                          <span style={{ color: '#8b9ab4' }} className="text-[9px] uppercase">{doc.tipo}</span>
+                                        </div>
+                                      )}
                                     </a>
-                                    <label
-                                      style={{ color: '#8b9ab4', border: '0.5px solid #2a2f3a' }}
-                                      className="text-xs px-2.5 py-1 rounded-md cursor-pointer flex items-center gap-1 font-medium">
-                                      <Edit2 size={11} />{processando ? 'Enviando...' : 'Editar'}
-                                      <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png"
-                                        onChange={e => { const f = e.target.files?.[0]; if (f) uploadKit(cat.chave, f); e.target.value = '' }} />
-                                    </label>
-                                    <button type="button" disabled={processando}
-                                      onClick={() => excluirKit(cat.chave)}
-                                      style={{ background: '#2e1717', color: '#ef4444', border: '0.5px solid #4a2424' }}
-                                      className="text-xs px-2.5 py-1 rounded-md flex items-center gap-1 font-medium">
-                                      <Trash2 size={11} />Excluir
+                                    <button type="button" onClick={() => excluirKit(cat.chave, doc)}
+                                      className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center">
+                                      <X size={10} />
                                     </button>
-                                  </>
-                                ) : (
-                                  <label
-                                    style={{ color: '#8b9ab4', border: '0.5px solid #2a2f3a' }}
-                                    className="text-xs px-2.5 py-1 rounded-md cursor-pointer flex items-center gap-1 font-medium">
-                                    <Upload size={10} />{processando ? 'Enviando...' : 'Pendente'}
-                                    <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png"
-                                      onChange={e => { const f = e.target.files?.[0]; if (f) uploadKit(cat.chave, f); e.target.value = '' }} />
-                                  </label>
-                                )}
+                                  </div>
+                                ))}
+                                <label style={{ border: '1.5px dashed #2a2f3a', width: '80px', height: '80px' }}
+                                  className="rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 transition-all flex-shrink-0">
+                                  {processando ? <Hourglass size={16} className="animate-spin" style={{ color: '#5b9bf5' }} /> : <Upload size={16} style={{ color: '#5b5e6b' }} />}
+                                  <span style={{ color: '#5b5e6b' }} className="text-[9px] mt-1">{processando ? 'Enviando...' : 'Adicionar'}</span>
+                                  <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png" disabled={processando}
+                                    onChange={e => { const f = e.target.files?.[0]; if (f) uploadKit(cat.chave, f); e.target.value = '' }} />
+                                </label>
                               </div>
                             </div>
                           )
