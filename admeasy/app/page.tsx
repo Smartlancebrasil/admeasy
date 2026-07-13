@@ -442,7 +442,7 @@ export default function PaginaInicial() {
     >
       {/* Header */}
       <header style={{ borderBottom: `1px solid ${COLORS.line}`, background: `${COLORS.bg}cc` }} className="sticky top-0 z-50 backdrop-blur">
-        <div className="max-w-6xl mx-auto px-5 md:px-8 h-24 flex items-center justify-between">
+        <div className="max-w-[1600px] mx-auto px-5 md:px-8 lg:px-12 xl:px-16 h-24 flex items-center justify-between">
           <div className="flex items-center -ml-28">
             <Image src="/admeasy-logo.png" alt="AdmEasy" width={320} height={80} priority />
           </div>
@@ -479,7 +479,7 @@ export default function PaginaInicial() {
       </header>
 
       {/* Hero */}
-      <section className="max-w-[1360px] mx-auto px-5 md:px-8 pt-8 md:pt-12 pb-10 grid grid-cols-1 md:grid-cols-[0.72fr_1.4fr] gap-12 items-start">
+      <section className="max-w-[1600px] mx-auto px-5 md:px-8 lg:px-12 xl:px-16 pt-8 md:pt-12 pb-10 grid grid-cols-1 md:grid-cols-[0.72fr_1.4fr] gap-12 items-start">
         <div>
           <div style={{ color: COLORS.blue, background: COLORS.blueDim, border: `1px solid ${COLORS.line}` }} className="inline-flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide px-3 py-1 rounded-full mb-5">
             <span style={{ background: COLORS.blue }} className="w-1.5 h-1.5 rounded-full flex-shrink-0" />
@@ -550,9 +550,9 @@ export default function PaginaInicial() {
       {/* Faixa de segurança + CTA — fixa no rodapé, fina, ocupando a largura toda */}
       <div
         style={{ background: `${COLORS.bg}f5`, borderTop: `1px solid ${COLORS.line}`, backdropFilter: 'blur(8px)' }}
-        className="fixed bottom-0 left-0 right-0 z-50 px-5 md:px-8 py-2.5"
+        className="fixed bottom-0 left-0 right-0 z-50 px-5 md:px-8 lg:px-12 xl:px-16 py-2.5"
       >
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+        <div className="max-w-[1600px] mx-auto flex items-center justify-between gap-4">
           <div className="hidden md:flex items-center gap-5 min-w-0">
             {[
               { icone: Lock, texto: 'Dados protegidos' },
@@ -586,7 +586,7 @@ export default function PaginaInicial() {
 
       {/* Faixa de benefícios */}
       <section style={{ borderTop: `1px solid ${COLORS.line}`, borderBottom: `1px solid ${COLORS.line}`, background: COLORS.surfaceAlt }}>
-        <div className="max-w-6xl mx-auto px-5 md:px-8 py-10 grid grid-cols-2 md:grid-cols-5 gap-6">
+        <div className="max-w-[1600px] mx-auto px-5 md:px-8 lg:px-12 xl:px-16 py-10 grid grid-cols-2 md:grid-cols-5 gap-6">
           {[
             { icone: CreditCard, titulo: 'Cobranças automáticas', desc: 'Boletos, Pix e cartão com conciliação automática.' },
             { icone: ArrowLeftRight, titulo: 'Repasses com controle total', desc: 'Repasse automático aos proprietários com transparência.' },
@@ -609,7 +609,7 @@ export default function PaginaInicial() {
       </section>
 
       {/* Módulos / como funciona */}
-      <section id="modulos" className="max-w-6xl mx-auto px-5 md:px-8 py-16 md:py-20">
+      <section id="modulos" className="max-w-[1600px] mx-auto px-5 md:px-8 lg:px-12 xl:px-16 py-16 md:py-20">
         <div id="recursos" />
         <Eyebrow>O que está incluso</Eyebrow>
         <h2 className="text-2xl md:text-3xl font-bold mb-2 max-w-lg">
@@ -626,7 +626,7 @@ export default function PaginaInicial() {
 
       {/* Para imobiliárias */}
       <section id="imobiliarias" style={{ background: COLORS.surfaceAlt, borderTop: `1px solid ${COLORS.line}`, borderBottom: `1px solid ${COLORS.line}` }} className="py-16 md:py-24">
-        <div className="max-w-6xl mx-auto px-5 md:px-8 grid grid-cols-1 md:grid-cols-[1fr_1fr] gap-12 items-start">
+        <div className="max-w-[1600px] mx-auto px-5 md:px-8 lg:px-12 xl:px-16 grid grid-cols-1 md:grid-cols-[1fr_1fr] gap-12 items-start">
           <div>
             <Eyebrow>Para outras imobiliárias</Eyebrow>
             <h2 className="text-2xl md:text-3xl font-bold leading-tight">
@@ -656,7 +656,7 @@ export default function PaginaInicial() {
       </section>
 
       {/* Blog / dicas */}
-      <section id="blog" className="max-w-6xl mx-auto px-5 md:px-8 py-16 md:py-20">
+      <section id="blog" className="max-w-[1600px] mx-auto px-5 md:px-8 lg:px-12 xl:px-16 py-16 md:py-20">
         <Eyebrow>No blog</Eyebrow>
         <h2 className="text-2xl md:text-3xl font-bold mb-10 max-w-lg">
           Dicas pra proprietários, inquilinos e quem administra os dois lados.
@@ -676,7 +676,7 @@ export default function PaginaInicial() {
 
       {/* Footer */}
       <footer style={{ borderTop: `1px solid ${COLORS.line}` }} className="pt-10 pb-20">
-        <div className="max-w-6xl mx-auto px-5 md:px-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div className="max-w-[1600px] mx-auto px-5 md:px-8 lg:px-12 xl:px-16 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div style={{ color: COLORS.muted }} className="text-xs">
             © {new Date().getFullYear()} AdmEasy — Gestão Inteligente de Locações, por Smartlance Brasil
           </div>
