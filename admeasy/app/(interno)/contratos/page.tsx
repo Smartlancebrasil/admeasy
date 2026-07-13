@@ -71,17 +71,34 @@ type Parte = {
 
 type Documento = { nome: string; url: string; tipo: string; created_at: string }
 
+type KitCategoria = { chave: string; label: string; grupo: string; somenteGarantia?: string }
+
+// Cada "parte" do contrato (locatário, locador, 2º locatário) usa o mesmo
+// conjunto de 6 documentos granulares — titular e cônjuge separados, em vez
+// de um único upload genérico onde não dava pra saber o que faltava.
+function documentosPessoa(prefixo: string, grupo: string): KitCategoria[] {
+  return [
+    { chave: `${prefixo}_cpf_titular`, label: 'CPF do titular', grupo },
+    { chave: `${prefixo}_rg_titular`, label: 'RG do titular', grupo },
+    { chave: `${prefixo}_cpf_conjuge`, label: 'CPF do cônjuge', grupo },
+    { chave: `${prefixo}_rg_conjuge`, label: 'RG do cônjuge', grupo },
+    { chave: `${prefixo}_comprovante_endereco`, label: 'Comprovante de endereço', grupo },
+    { chave: `${prefixo}_comprovante_estado_civil`, label: 'Comprovante de estado civil', grupo },
+  ]
+}
+
 // Categorias fixas do "kit" de documentos assinados, exibido na tela de
 // consulta (somente leitura) do contrato — depois de gerado o PDF.
-const KIT_CATEGORIAS: { chave: string; label: string; somenteGarantia?: string }[] = [
-  { chave: 'documentos_locatario', label: 'Documentos do locatário' },
-  { chave: 'documentos_locador', label: 'Documentos do locador' },
-  { chave: 'contrato_assinado', label: 'Contrato de locação assinado' },
-  { chave: 'laudo_vistoria', label: 'Laudo de vistoria assinado' },
-  { chave: 'termo_entrega_chaves', label: 'Termo de entrega de chaves' },
-  { chave: 'apolice_seguro_incendio', label: 'Apólice do seguro incêndio' },
-  { chave: 'comprovante_caucao', label: 'Comprovante de pagamento da caução', somenteGarantia: 'caucao' },
-  { chave: 'apolice_seguro_fianca', label: 'Apólice do seguro fiança assinado', somenteGarantia: 'seguro_fianca' },
+const KIT_CATEGORIAS: KitCategoria[] = [
+  ...documentosPessoa('locatario', 'Documentos do locatário'),
+  ...documentosPessoa('locador', 'Documentos do locador'),
+  ...documentosPessoa('locatario2', 'Documentos do 2º locatário'),
+  { chave: 'contrato_assinado', label: 'Contrato de locação assinado', grupo: 'Outros documentos' },
+  { chave: 'laudo_vistoria', label: 'Laudo de vistoria assinado', grupo: 'Outros documentos' },
+  { chave: 'termo_entrega_chaves', label: 'Termo de entrega de chaves', grupo: 'Outros documentos' },
+  { chave: 'apolice_seguro_incendio', label: 'Apólice do seguro incêndio', grupo: 'Outros documentos' },
+  { chave: 'comprovante_caucao', label: 'Comprovante de pagamento da caução', grupo: 'Outros documentos', somenteGarantia: 'caucao' },
+  { chave: 'apolice_seguro_fianca', label: 'Apólice do seguro fiança assinado', grupo: 'Outros documentos', somenteGarantia: 'seguro_fianca' },
 ]
 
 const ESTADO_CIVIL_LABEL: Record<string, string> = {
@@ -693,6 +710,17 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
     setUploadandoKit(null)
   }
 
+  async function excluirKit(chave: string) {
+    const doc = documentos[chave]
+    if (!doc) return
+    if (!confirm('Tem certeza que deseja excluir este documento?')) return
+    setUploadandoKit(chave)
+    const { error } = await supabase.storage.from('documentos').remove([`contratos/${form.id}/kit/${doc.nome}`])
+    if (error) alert('Erro ao excluir: ' + error.message)
+    await carregarKit()
+    setUploadandoKit(null)
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault(); setSalvando(true); setErro('')
     try {
@@ -1091,31 +1119,60 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
             {loadingKit ? (
               <p style={{ color: '#8b9ab4' }} className="text-sm text-center py-4">Carregando...</p>
             ) : (
-              <div className="space-y-1.5">
-                {KIT_CATEGORIAS.filter(cat => !cat.somenteGarantia || cat.somenteGarantia === form.tipo_garantia).map(cat => {
-                  const doc = documentos[cat.chave]
+              <div className="space-y-4">
+                {Array.from(new Set(KIT_CATEGORIAS.map(c => c.grupo))).map(grupo => {
+                  const categoriasDoGrupo = KIT_CATEGORIAS.filter(cat =>
+                    cat.grupo === grupo && (!cat.somenteGarantia || cat.somenteGarantia === form.tipo_garantia)
+                  )
+                  if (categoriasDoGrupo.length === 0) return null
                   return (
-                    <div key={cat.chave} style={{ background: '#16243a', border: '0.5px solid #1e3a5f' }} className="flex items-center justify-between px-3 py-2 rounded-lg">
-                      <div className="flex items-center gap-2 min-w-0">
-                        {doc ? <CheckCircle2 size={13} style={{ color: '#3fb950' }} className="flex-shrink-0" /> : <Hourglass size={13} style={{ color: '#5b5e6b' }} className="flex-shrink-0" />}
-                        <span style={{ color: '#f4f4f3' }} className="text-xs truncate">{cat.label}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        {doc ? (
-                          <a href={doc.url} target="_blank" rel="noopener noreferrer" download
-                            style={{ background: '#f0fdf4', color: '#16a34a' }}
-                            className="text-xs px-2.5 py-1 rounded-md flex items-center gap-1 font-medium">
-                            <Download size={11} />Enviado
-                          </a>
-                        ) : (
-                          <label
-                            style={{ color: '#8b9ab4', border: '0.5px solid #2a2f3a' }}
-                            className="text-xs px-2.5 py-1 rounded-md cursor-pointer flex items-center gap-1 font-medium">
-                            <Upload size={10} />{uploadandoKit === cat.chave ? 'Enviando...' : 'Pendente'}
-                            <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png"
-                              onChange={e => { const f = e.target.files?.[0]; if (f) uploadKit(cat.chave, f); e.target.value = '' }} />
-                          </label>
-                        )}
+                    <div key={grupo}>
+                      <h4 style={{ color: '#8b9ab4' }} className="text-[11px] font-semibold uppercase tracking-wide mb-1.5">{grupo}</h4>
+                      <div className="space-y-1.5">
+                        {categoriasDoGrupo.map(cat => {
+                          const doc = documentos[cat.chave]
+                          const processando = uploadandoKit === cat.chave
+                          return (
+                            <div key={cat.chave} style={{ background: '#16243a', border: '0.5px solid #1e3a5f' }} className="flex items-center justify-between px-3 py-2 rounded-lg gap-2">
+                              <div className="flex items-center gap-2 min-w-0">
+                                {doc ? <CheckCircle2 size={13} style={{ color: '#3fb950' }} className="flex-shrink-0" /> : <Hourglass size={13} style={{ color: '#5b5e6b' }} className="flex-shrink-0" />}
+                                <span style={{ color: '#f4f4f3' }} className="text-xs truncate">{cat.label}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
+                                {doc ? (
+                                  <>
+                                    <a href={doc.url} target="_blank" rel="noopener noreferrer" download
+                                      style={{ background: '#f0fdf4', color: '#16a34a' }}
+                                      className="text-xs px-2.5 py-1 rounded-md flex items-center gap-1 font-medium">
+                                      <Download size={11} />Baixar
+                                    </a>
+                                    <label
+                                      style={{ color: '#8b9ab4', border: '0.5px solid #2a2f3a' }}
+                                      className="text-xs px-2.5 py-1 rounded-md cursor-pointer flex items-center gap-1 font-medium">
+                                      <Edit2 size={11} />{processando ? 'Enviando...' : 'Editar'}
+                                      <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png"
+                                        onChange={e => { const f = e.target.files?.[0]; if (f) uploadKit(cat.chave, f); e.target.value = '' }} />
+                                    </label>
+                                    <button type="button" disabled={processando}
+                                      onClick={() => excluirKit(cat.chave)}
+                                      style={{ background: '#2e1717', color: '#ef4444', border: '0.5px solid #4a2424' }}
+                                      className="text-xs px-2.5 py-1 rounded-md flex items-center gap-1 font-medium">
+                                      <Trash2 size={11} />Excluir
+                                    </button>
+                                  </>
+                                ) : (
+                                  <label
+                                    style={{ color: '#8b9ab4', border: '0.5px solid #2a2f3a' }}
+                                    className="text-xs px-2.5 py-1 rounded-md cursor-pointer flex items-center gap-1 font-medium">
+                                    <Upload size={10} />{processando ? 'Enviando...' : 'Pendente'}
+                                    <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png"
+                                      onChange={e => { const f = e.target.files?.[0]; if (f) uploadKit(cat.chave, f); e.target.value = '' }} />
+                                  </label>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })}
                       </div>
                     </div>
                   )
