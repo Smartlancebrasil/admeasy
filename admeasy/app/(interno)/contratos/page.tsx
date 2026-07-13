@@ -646,6 +646,8 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
   const [loadingKit, setLoadingKit] = useState(true)
   const [categoriasAbertas, setCategoriasAbertas] = useState<Record<string, boolean>>({})
   const toggleCategoria = (chave: string) => setCategoriasAbertas(prev => ({ ...prev, [chave]: !prev[chave] }))
+  const [gruposAbertos, setGruposAbertos] = useState<Record<string, boolean>>({})
+  const toggleGrupo = (grupo: string) => setGruposAbertos(prev => ({ ...prev, [grupo]: !prev[grupo] }))
   const set = (c: string) => (e: React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) => setForm(f=>({...f,[c]:e.target.value}))
   const [buscandoCepFiador, setBuscandoCepFiador] = useState(false)
 
@@ -1131,10 +1133,19 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
                     cat.grupo === grupo && (!cat.somenteGarantia || cat.somenteGarantia === form.tipo_garantia)
                   )
                   if (categoriasDoGrupo.length === 0) return null
+                  const grupoAberto = !!gruposAbertos[grupo]
+                  const enviados = categoriasDoGrupo.filter(cat => (documentos[cat.chave] || []).length > 0).length
                   return (
-                    <div key={grupo}>
-                      <h4 style={{ color: '#8b9ab4' }} className="text-[11px] font-semibold uppercase tracking-wide mb-1.5">{grupo}</h4>
-                      <div className="space-y-3">
+                    <div key={grupo} style={{ background: '#16243a', border: '0.5px solid #1e3a5f' }} className="rounded-lg overflow-hidden">
+                      <div className="flex items-center justify-between px-3 py-2.5 cursor-pointer" onClick={() => toggleGrupo(grupo)}>
+                        <span style={{ color: '#f4f4f3' }} className="text-xs font-semibold uppercase tracking-wide">{grupo}</span>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <span style={{ color: '#8b9ab4' }} className="text-[10px]">{enviados}/{categoriasDoGrupo.length} enviados</span>
+                          {grupoAberto ? <ChevronUp size={14} style={{ color: '#8b9ab4' }} /> : <ChevronDown size={14} style={{ color: '#8b9ab4' }} />}
+                        </div>
+                      </div>
+                      {grupoAberto && (
+                      <div className="space-y-3 px-3 pb-3">
                         {categoriasDoGrupo.map(cat => {
                           const docs = documentos[cat.chave] || []
                           const processando = uploadandoKit === cat.chave
@@ -1182,6 +1193,7 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
                           )
                         })}
                       </div>
+                      )}
                     </div>
                   )
                 })}
