@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import AppLayout from '@/components/layout/AppLayout'
 import { supabase } from '@/lib/supabase'
 import { useOrganization } from '@/lib/OrganizationContext'
-import { FileText, Plus, X, AlertTriangle, Edit2, FileDown, UserPlus, Upload, Trash2, Hourglass, CheckCircle2 } from 'lucide-react'
+import { FileText, Plus, X, AlertTriangle, Edit2, FileDown, UserPlus, Upload, Trash2, Hourglass, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react'
 import { registrarLog } from '@/lib/logs'
 
 type Contrato = {
@@ -644,6 +644,8 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
   const [documentos, setDocumentos] = useState<Record<string, Documento[]>>({})
   const [uploadandoKit, setUploadandoKit] = useState<string | null>(null)
   const [loadingKit, setLoadingKit] = useState(true)
+  const [categoriasAbertas, setCategoriasAbertas] = useState<Record<string, boolean>>({})
+  const toggleCategoria = (chave: string) => setCategoriasAbertas(prev => ({ ...prev, [chave]: !prev[chave] }))
   const set = (c: string) => (e: React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) => setForm(f=>({...f,[c]:e.target.value}))
   const [buscandoCepFiador, setBuscandoCepFiador] = useState(false)
 
@@ -1136,40 +1138,46 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
                         {categoriasDoGrupo.map(cat => {
                           const docs = documentos[cat.chave] || []
                           const processando = uploadandoKit === cat.chave
+                          const aberto = !!categoriasAbertas[cat.chave]
                           return (
-                            <div key={cat.chave}>
-                              <div className="flex items-center gap-2 mb-1.5">
-                                {docs.length > 0 ? <CheckCircle2 size={13} style={{ color: '#3fb950' }} className="flex-shrink-0" /> : <Hourglass size={13} style={{ color: '#5b5e6b' }} className="flex-shrink-0" />}
-                                <span style={{ color: '#f4f4f3' }} className="text-xs">{cat.label}</span>
-                                {docs.length > 0 && <span style={{ color: '#8b9ab4' }} className="text-[10px]">{docs.length} arquivo{docs.length > 1 ? 's' : ''}</span>}
+                            <div key={cat.chave} style={{ background: '#0d1117', border: '0.5px solid #1e3a5f' }} className="rounded-lg overflow-hidden">
+                              <div className="flex items-center justify-between px-3 py-2 cursor-pointer" onClick={() => toggleCategoria(cat.chave)}>
+                                <div className="flex items-center gap-2 min-w-0">
+                                  {docs.length > 0 ? <CheckCircle2 size={13} style={{ color: '#3fb950' }} className="flex-shrink-0" /> : <Hourglass size={13} style={{ color: '#5b5e6b' }} className="flex-shrink-0" />}
+                                  <span style={{ color: '#f4f4f3' }} className="text-xs truncate">{cat.label}</span>
+                                  {docs.length > 0 && <span style={{ color: '#8b9ab4' }} className="text-[10px] flex-shrink-0">{docs.length} arquivo{docs.length > 1 ? 's' : ''}</span>}
+                                </div>
+                                {aberto ? <ChevronUp size={14} style={{ color: '#8b9ab4' }} className="flex-shrink-0" /> : <ChevronDown size={14} style={{ color: '#8b9ab4' }} className="flex-shrink-0" />}
                               </div>
-                              <div className="flex gap-2 flex-wrap">
-                                {docs.map(doc => (
-                                  <div key={doc.nome} style={{ border: '0.5px solid #2a2f3a', height: '80px' }} className="relative w-20 rounded-lg overflow-hidden flex-shrink-0">
-                                    <a href={doc.url} target="_blank" rel="noopener noreferrer" className="block w-full h-full">
-                                      {['jpg', 'jpeg', 'png'].includes(doc.tipo.toLowerCase()) ? (
-                                        <img src={doc.url} alt="" className="w-full h-full object-cover" />
-                                      ) : (
-                                        <div style={{ background: '#0d1117' }} className="w-full h-full flex flex-col items-center justify-center gap-1">
-                                          <FileText size={18} style={{ color: '#5b9bf5' }} />
-                                          <span style={{ color: '#8b9ab4' }} className="text-[9px] uppercase">{doc.tipo}</span>
-                                        </div>
-                                      )}
-                                    </a>
-                                    <button type="button" onClick={() => excluirKit(cat.chave, doc)}
-                                      className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center">
-                                      <X size={10} />
-                                    </button>
-                                  </div>
-                                ))}
-                                <label style={{ border: '1.5px dashed #2a2f3a', width: '80px', height: '80px' }}
-                                  className="rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 transition-all flex-shrink-0">
-                                  {processando ? <Hourglass size={16} className="animate-spin" style={{ color: '#5b9bf5' }} /> : <Upload size={16} style={{ color: '#5b5e6b' }} />}
-                                  <span style={{ color: '#5b5e6b' }} className="text-[9px] mt-1">{processando ? 'Enviando...' : 'Adicionar'}</span>
-                                  <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png" disabled={processando}
-                                    onChange={e => { const f = e.target.files?.[0]; if (f) uploadKit(cat.chave, f); e.target.value = '' }} />
-                                </label>
-                              </div>
+                              {aberto && (
+                                <div className="px-3 pb-3 flex gap-2 flex-wrap">
+                                  {docs.map(doc => (
+                                    <div key={doc.nome} style={{ border: '0.5px solid #2a2f3a', height: '80px' }} className="relative w-20 rounded-lg overflow-hidden flex-shrink-0">
+                                      <a href={doc.url} target="_blank" rel="noopener noreferrer" className="block w-full h-full">
+                                        {['jpg', 'jpeg', 'png'].includes(doc.tipo.toLowerCase()) ? (
+                                          <img src={doc.url} alt="" className="w-full h-full object-cover" />
+                                        ) : (
+                                          <div style={{ background: '#161b22' }} className="w-full h-full flex flex-col items-center justify-center gap-1">
+                                            <FileText size={18} style={{ color: '#5b9bf5' }} />
+                                            <span style={{ color: '#8b9ab4' }} className="text-[9px] uppercase">{doc.tipo}</span>
+                                          </div>
+                                        )}
+                                      </a>
+                                      <button type="button" onClick={() => excluirKit(cat.chave, doc)}
+                                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center">
+                                        <X size={10} />
+                                      </button>
+                                    </div>
+                                  ))}
+                                  <label style={{ border: '1.5px dashed #2a2f3a', width: '80px', height: '80px' }}
+                                    className="rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 transition-all flex-shrink-0">
+                                    {processando ? <Hourglass size={16} className="animate-spin" style={{ color: '#5b9bf5' }} /> : <Upload size={16} style={{ color: '#5b5e6b' }} />}
+                                    <span style={{ color: '#5b5e6b' }} className="text-[9px] mt-1">{processando ? 'Enviando...' : 'Adicionar'}</span>
+                                    <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png" disabled={processando}
+                                      onChange={e => { const f = e.target.files?.[0]; if (f) uploadKit(cat.chave, f); e.target.value = '' }} />
+                                  </label>
+                                </div>
+                              )}
                             </div>
                           )
                         })}
