@@ -459,6 +459,24 @@ function ModalClienteCompleto({ tipoParte, onSalvar, onFechar, organizationId }:
     setSalvando(true)
     setErro('')
 
+    if (form.cpf?.trim()) {
+      const { data: duplicados } = await supabase.from('clientes').select('id').eq('organization_id', organizationId).eq('cpf', form.cpf.trim()).limit(1)
+      if (duplicados && duplicados.length > 0) {
+        setSalvando(false)
+        setErro('Já existe um cliente cadastrado com esse CPF.')
+        return
+      }
+    }
+
+    if (ehCasado && cadastrarConjuge && conjuge.nome.trim() && conjuge.cpf?.trim()) {
+      const { data: duplicadosConjuge } = await supabase.from('clientes').select('id').eq('organization_id', organizationId).eq('cpf', conjuge.cpf.trim()).limit(1)
+      if (duplicadosConjuge && duplicadosConjuge.length > 0) {
+        setSalvando(false)
+        setErro('Já existe um cliente cadastrado com o CPF informado para o cônjuge.')
+        return
+      }
+    }
+
     // A tabela "clientes" guarda o endereço todo num campo só (endereco),
     // então juntamos rua + número + complemento aqui antes de enviar —
     // número/complemento existem só nesta tela, para facilitar o preenchimento.
@@ -1213,6 +1231,10 @@ function descricaoImovelAuto(im: any): string {
   }
   let desc = `${tiposLabel[im.tipo] || 'imóvel'} situado à ${im.endereco || ''}, ${im.numero || ''}${im.complemento ? `, ${im.complemento}` : ''}, ${im.bairro || ''}, CEP ${im.cep || ''}, ${im.cidade || ''}/${im.estado || ''}`
   if (im.descricao) desc += `. ${im.descricao}`
+  const instalacoes: string[] = []
+  if (im.numero_instalacao_agua) instalacoes.push(`instalação de água nº ${im.numero_instalacao_agua}`)
+  if (im.numero_instalacao_energia) instalacoes.push(`instalação de energia nº ${im.numero_instalacao_energia}`)
+  if (instalacoes.length) desc += `. Imóvel com ${instalacoes.join(' e ')}`
   return desc
 }
 
