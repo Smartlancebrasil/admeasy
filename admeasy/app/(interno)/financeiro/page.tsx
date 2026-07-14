@@ -78,6 +78,55 @@ function formatDate(date?: string) {
 
 const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 
+type LinhaPopupFin = { descricao: string; subdescricao: string; valor: number; dataLabel: string; data: string }
+
+function ModalListaFinanceira({ titulo, subtitulo, linhas, vazio, onFechar }: {
+  titulo: string; subtitulo?: string; linhas: LinhaPopupFin[]; vazio: string; onFechar: () => void
+}) {
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 50 }}
+      className="flex items-start sm:items-center justify-center p-4 overflow-y-auto"
+      onClick={onFechar}
+    >
+      <div
+        style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }}
+        className="rounded-xl p-5 w-full max-w-2xl my-6"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <h3 style={{ color: '#f4f4f3' }} className="text-sm font-semibold">{titulo}</h3>
+            {subtitulo && <p style={{ color: '#8b8d98' }} className="text-[11px] mt-0.5">{subtitulo}</p>}
+          </div>
+          <button onClick={onFechar} style={{ color: '#8b8d98' }} className="hover:text-white transition-colors flex-shrink-0">
+            <X size={16} />
+          </button>
+        </div>
+
+        {linhas.length === 0 ? (
+          <p style={{ color: '#8b8d98' }} className="text-[12px] text-center py-8">{vazio}</p>
+        ) : (
+          <div className="flex flex-col gap-1.5 max-h-[60vh] overflow-y-auto">
+            {linhas.map((l, i) => (
+              <div key={i} style={{ background: '#0d1117', border: '0.5px solid #1c2128' }} className="flex items-center justify-between px-3 py-2.5 rounded-lg gap-3">
+                <div className="min-w-0">
+                  <div style={{ color: '#f4f4f3' }} className="text-[12px] font-medium truncate">{l.descricao}</div>
+                  <div style={{ color: '#8b8d98' }} className="text-[11px] truncate">{l.subdescricao}</div>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <div style={{ color: '#f4f4f3' }} className="text-[12px] font-medium">{formatVal(l.valor)}</div>
+                  <div style={{ color: '#8b8d98' }} className="text-[10px]">{l.dataLabel}: {formatDate(l.data)}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function FinanceiroPage() {
   const { organizacao } = useOrganization()
   const [cobrancas, setCobrancas] = useState<Cobranca[]>([])
@@ -105,6 +154,10 @@ export default function FinanceiroPage() {
 
   const [contratoSel, setContratoSel] = useState<Contrato | null>(null)
   const [filtroMes, setFiltroMes] = useState(() => new Date().toISOString().slice(0, 7))
+  const [popupAberto, setPopupAberto] = useState<'receber' | 'previstas' | null>(null)
+  const [anoSelFiltro, mesSelNumFiltro] = filtroMes.split('-')
+  const anoAtualFiltro = new Date().getFullYear()
+  const anosDisponiveisFiltro = Array.from({ length: 5 }, (_, i) => String(anoAtualFiltro - 2 + i))
 
   useEffect(() => {
     if (organizacao?.id) {
@@ -342,6 +395,14 @@ export default function FinanceiroPage() {
   const fimMesSel = new Date(anoSel, mesSelNum, 0).toISOString().slice(0, 10)
   const cobrancasDoMesSel = cobrancas.filter(c => c.data_vencimento >= inicioMesSel && c.data_vencimento <= fimMesSel)
 
+  const linhasReceberFin: LinhaPopupFin[] = cobrancasDoMesSel.filter(c => c.status_cobranca === 'pendente').map(c => ({
+    descricao: getTitulo(c.contrato?.imovel) || '—',
+    subdescricao: getNome(c.locatario),
+    valor: c.valor_aluguel,
+    dataLabel: 'Vencimento',
+    data: c.data_vencimento,
+  }))
+
   const totalReceber = cobrancasDoMesSel.filter(c => c.status_cobranca === 'pendente').reduce((s, c) => s + c.valor_aluguel, 0)
   const totalRecebido = cobrancasDoMesSel.filter(c => c.status_cobranca === 'pago').reduce((s, c) => s + c.valor_aluguel, 0)
   const totalTaxaAdm = cobrancasDoMesSel.filter(c => c.status_cobranca === 'pago').reduce((s, c) => s + c.valor_taxa_adm, 0)
@@ -426,13 +487,22 @@ export default function FinanceiroPage() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
             <h1 style={{ color: '#f4f4f3' }} className="text-lg font-medium">Financeiro — Fluxo de caixa</h1>
             <div className="flex items-center gap-2">
-              <input
-                type="month"
-                value={filtroMes}
-                onChange={e => setFiltroMes(e.target.value)}
+              <select
+                value={mesSelNumFiltro}
+                onChange={e => setFiltroMes(`${anoSelFiltro}-${e.target.value}`)}
                 style={{ background: '#161b22', border: '0.5px solid #2a2f3a', color: '#c3c2b7' }}
                 className="rounded-lg px-2.5 py-2 text-[13px]"
-              />
+              >
+                {meses.map((m, i) => <option key={m} value={String(i + 1).padStart(2, '0')}>{m}</option>)}
+              </select>
+              <select
+                value={anoSelFiltro}
+                onChange={e => setFiltroMes(`${e.target.value}-${mesSelNumFiltro}`)}
+                style={{ background: '#161b22', border: '0.5px solid #2a2f3a', color: '#c3c2b7' }}
+                className="rounded-lg px-2.5 py-2 text-[13px]"
+              >
+                {anosDisponiveisFiltro.map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
               <button className="btn btn-primary justify-center" onClick={() => setShowForm(!showForm)} disabled={!organizacao?.id}>
                 {showForm ? <X size={14} /> : <Plus size={14} />}
                 {showForm ? 'Cancelar' : 'Gerar cobrança'}
@@ -444,7 +514,7 @@ export default function FinanceiroPage() {
 
           {/* MÉTRICAS */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
-            <div className="card">
+            <div className="card cursor-pointer hover:opacity-80 transition-opacity" onClick={() => setPopupAberto('receber')}>
               <div style={{ color: '#8b8d98' }} className="text-xs mb-1 flex items-center gap-1"><Clock size={12} />A receber (mês)</div>
               <div style={{ color: '#f59e0b' }} className="text-xl font-semibold">{formatVal(totalReceber)}</div>
               <div style={{ color: '#8b8d98' }} className="text-xs mt-1">{cobrancasDoMesSel.filter(c => c.status_cobranca === 'pendente').length} cobranças pendentes</div>
@@ -587,6 +657,11 @@ export default function FinanceiroPage() {
                                 Confirmar pagamento
                               </button>
                             )}
+                            {c.status_cobranca === 'pago' && c.status_repasse === 'aguardando' && (
+                              <button className="btn btn-primary text-xs py-1 px-2" onClick={() => marcarRepassado(c.id)}>
+                                Repassar agora
+                              </button>
+                            )}
                             <button
                               className="btn text-xs py-1 px-2"
                               style={{ color: '#ef4444', borderColor: '#4a2424' }}
@@ -656,6 +731,9 @@ export default function FinanceiroPage() {
                             {c.status_cobranca === 'pendente' && (
                               <button className="btn btn-success text-xs py-1 px-2" onClick={() => marcarPago(c.id)}>Pago</button>
                             )}
+                            {c.status_cobranca === 'pago' && c.status_repasse === 'aguardando' && (
+                              <button className="btn btn-primary text-xs py-1 px-2" onClick={() => marcarRepassado(c.id)}>Repassar</button>
+                            )}
                             <button
                               className="btn text-xs py-1 px-2"
                               style={{ color: '#ef4444', borderColor: '#4a2424' }}
@@ -719,7 +797,7 @@ export default function FinanceiroPage() {
           {abaAtiva === 'previsto' && (
             <div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
-                <div className="card">
+                <div className="card cursor-pointer hover:opacity-80 transition-opacity" onClick={() => setPopupAberto('previstas')}>
                   <div style={{ color: '#8b8d98' }} className="text-xs mb-1 flex items-center gap-1"><TrendingUp size={12} />Entradas previstas (mês)</div>
                   <div style={{ color: '#3fb950' }} className="text-xl font-semibold">{formatVal(totalEntradasPrevistas)}</div>
                   <div style={{ color: '#8b8d98' }} className="text-xs mt-1">{entradasPrevistas.length} lançamento(s)</div>
@@ -817,6 +895,28 @@ export default function FinanceiroPage() {
           )}
         </div>
       </div>
+
+      {popupAberto === 'receber' && (
+        <ModalListaFinanceira
+          titulo="A receber (mês)"
+          subtitulo="Aluguéis pendentes com vencimento no mês selecionado"
+          linhas={linhasReceberFin}
+          vazio="Nenhuma cobrança pendente neste mês."
+          onFechar={() => setPopupAberto(null)}
+        />
+      )}
+      {popupAberto === 'previstas' && (
+        <ModalListaFinanceira
+          titulo="Entradas previstas (mês)"
+          subtitulo="Aluguéis e honorários previstos para o mês selecionado"
+          linhas={entradasPrevistas.map(e => ({
+            descricao: e.descricao, subdescricao: e.subdescricao, valor: e.valor,
+            dataLabel: e.tipo === 'honorario' ? 'Previsão' : 'Vencimento', data: e.data,
+          }))}
+          vazio="Nenhuma entrada prevista neste mês."
+          onFechar={() => setPopupAberto(null)}
+        />
+      )}
     </AppLayout>
   )
 }
