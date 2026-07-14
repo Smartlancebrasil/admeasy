@@ -71,18 +71,18 @@ export async function GET(req: NextRequest) {
   }
 
   const hoje = new Date().toISOString().split('T')[0]
-  const em7dias = addDias(hoje, 7)
+  const em10dias = addDias(hoje, 10)
   const em2dias = addDias(hoje, 2)
 
   const resultado = { boletosGerados: 0, lembretesEnviados: 0, erros: [] as string[] }
   const remetente = process.env.EMAIL_REMETENTE || 'AdmEasy <onboarding@resend.dev>'
 
   try {
-    // ── 1) Cobranças que vencem em 7 dias, sem boleto ainda ──────────
+    // ── 1) Cobranças que vencem em 10 dias, sem boleto ainda ──────────
     const { data: paraGerar, error: erroParaGerar } = await supabaseAdmin
       .from('cobrancas')
       .select('*')
-      .eq('data_vencimento', em7dias)
+      .eq('data_vencimento', em10dias)
       .neq('status_cobranca', 'pago')
       .is('boleto_url', null)
 
@@ -140,6 +140,8 @@ export async function GET(req: NextRequest) {
             boleto_linha_digitavel: linhaDigitavel,
             pix_qr_code: pixCopiaCola,
             pix_qr_code_base64: pixQrBase64,
+            // Coluna mantém o nome antigo (lembrete_7d) por não exigir migração —
+            // agora marca o envio do lembrete de 10 dias de antecedência.
             lembrete_7d_enviado_em: new Date().toISOString(),
           }).eq('id', c.id)
 
