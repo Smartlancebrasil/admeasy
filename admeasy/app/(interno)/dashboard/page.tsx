@@ -7,7 +7,7 @@ import { useOrganization } from '@/lib/OrganizationContext'
 import { supabase } from '@/lib/supabase'
 import {
   Building2, TrendingUp, AlertTriangle, Wallet,
-  CalendarClock, Scale, Percent, Bell, Info
+  CalendarClock, Scale, Percent, Bell, Info, X
 } from 'lucide-react'
 import Chart from 'chart.js/auto'
 
@@ -44,6 +44,72 @@ function mesLabel(mesStr: string) {
   return nomes[parseInt(mes) - 1]
 }
 
+type LinhaPopup = {
+  imovel: string
+  locatario: string
+  valor: number
+  dataLabel: string
+  data: string
+  extraLabel?: string
+  extra?: string
+  corExtra?: string
+}
+
+type PopupKey = 'previstos' | 'recebidos' | 'atraso' | 'repasses' | 'honorarios'
+
+function ModalListaFinanceira({ titulo, subtitulo, linhas, vazio, onFechar }: {
+  titulo: string; subtitulo?: string; linhas: LinhaPopup[]; vazio: string; onFechar: () => void
+}) {
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 50 }}
+      className="flex items-start sm:items-center justify-center p-4 overflow-y-auto"
+      onClick={onFechar}
+    >
+      <div
+        style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }}
+        className="rounded-xl p-5 w-full max-w-2xl my-6"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <h3 style={{ color: '#f4f4f3' }} className="text-sm font-semibold">{titulo}</h3>
+            {subtitulo && <p style={{ color: '#8b8d98' }} className="text-[11px] mt-0.5">{subtitulo}</p>}
+          </div>
+          <button onClick={onFechar} style={{ color: '#8b8d98' }} className="hover:text-white transition-colors flex-shrink-0">
+            <X size={16} />
+          </button>
+        </div>
+
+        {linhas.length === 0 ? (
+          <p style={{ color: '#8b8d98' }} className="text-[12px] text-center py-8">{vazio}</p>
+        ) : (
+          <div className="flex flex-col gap-1.5 max-h-[60vh] overflow-y-auto">
+            {linhas.map((l, i) => (
+              <div key={i} style={{ background: '#0d1117', border: '0.5px solid #1c2128' }} className="flex items-center justify-between px-3 py-2.5 rounded-lg gap-3">
+                <div className="min-w-0">
+                  <div style={{ color: '#f4f4f3' }} className="text-[12px] font-medium truncate">{l.imovel}</div>
+                  <div style={{ color: '#8b8d98' }} className="text-[11px] truncate">{l.locatario}</div>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <div style={{ color: '#f4f4f3' }} className="text-[12px] font-medium">{formatVal(l.valor)}</div>
+                  <div style={{ color: '#8b8d98' }} className="text-[10px]">{l.dataLabel}: {formatDataBR(l.data)}</div>
+                </div>
+                {l.extraLabel && (
+                  <div className="text-right flex-shrink-0 min-w-[90px]">
+                    <div style={{ color: '#8b8d98' }} className="text-[9px]">{l.extraLabel}</div>
+                    <div style={{ color: l.corExtra || '#c3c2b7' }} className="text-[11px] font-medium">{l.extra}</div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function DashboardPage() {
   const { organizacao } = useOrganization()
   const [loading, setLoading] = useState(true)
@@ -72,6 +138,10 @@ export default function DashboardPage() {
   const [honorariosMes, setHonorariosMes] = useState(0)
   const [honorariosPrevisto, setHonorariosPrevisto] = useState(0)
   const [honorariosProximaData, setHonorariosProximaData] = useState('')
+  const [honorariosDetalhe, setHonorariosDetalhe] = useState<{
+    contratoId: string; imovel: string; locatario: string; dataInicio: string
+    valor: number; recebido: boolean; dataRecebimento: string; dataPrevista: string
+  }[]>([])
 
   const [contratosVencidos, setContratosVencidos] = useState<any[]>([])
   const [contratosAVencer, setContratosAVencer] = useState<any[]>([])
@@ -89,7 +159,6 @@ export default function DashboardPage() {
   const [rawContratos, setRawContratos] = useState<any[]>([])
   const [rawImoveis, setRawImoveis] = useState<any[]>([])
   const [rawCobrancas, setRawCobrancas] = useState<any[]>([])
-  const [rawDespesas, setRawDespesas] = useState<any[]>([])
   const [rawDemandasStatus, setRawDemandasStatus] = useState<{ status: string; arquivada_em: string | null }[]>([])
   const [locadoresMap, setLocadoresMap] = useState<Record<string, string>>({})
 
@@ -98,6 +167,7 @@ export default function DashboardPage() {
   const [filtroLocador, setFiltroLocador] = useState('')
   const [filtroBairro, setFiltroBairro] = useState('')
   const [filtroStatusImovel, setFiltroStatusImovel] = useState('')
+  const [popupAberto, setPopupAberto] = useState<PopupKey | null>(null)
 
   const evoChartRef = useRef<HTMLCanvasElement>(null)
   const statusChartRef = useRef<HTMLCanvasElement>(null)
@@ -151,16 +221,21 @@ export default function DashboardPage() {
   ), [cobrancasFiltradas, inicioMesSel, fimMesSel])
 
   // --- Métricas da Fase 1 ---
-  const receitaPrevistaBI = useMemo(() => contratosAtivosFiltrados.reduce((acc, c) => acc + (c.valor_atual || c.valor_mensal || 0), 0), [contratosAtivosFiltrados])
+  // Total administrado: soma de todos os contratos ativos, independente do mês
+  // selecionado — usado só no card "Total administrado" e no ticket médio.
+  const totalAdministradoBI = useMemo(() => contratosAtivosFiltrados.reduce((acc, c) => acc + (c.valor_atual || c.valor_mensal || 0), 0), [contratosAtivosFiltrados])
 
   const pagasNoMesSel = useMemo(() => cobrancasDoMesSel.filter(c => c.status_cobranca === 'pago'), [cobrancasDoMesSel])
   const pendentesNoMesSel = useMemo(() => cobrancasDoMesSel.filter(c => c.status_cobranca === 'pendente'), [cobrancasDoMesSel])
   const atrasadasNoMesSel = useMemo(() => pendentesNoMesSel.filter(c => diasEntre(c.data_vencimento) < 0), [pendentesNoMesSel])
 
+  // Aluguéis previstos a receber no mês selecionado — soma das cobranças do mês
+  // (diferente de totalAdministradoBI, que não olha pra mês nenhum).
+  const alugueisPrevistosMesBI = useMemo(() => cobrancasDoMesSel.reduce((acc, c) => acc + valorCobrancaBI(c), 0), [cobrancasDoMesSel])
+
   const valorRecebidoBI = useMemo(() => pagasNoMesSel.reduce((acc, c) => acc + valorCobrancaBI(c), 0), [pagasNoMesSel])
-  const valorEmAbertoBI = useMemo(() => pendentesNoMesSel.reduce((acc, c) => acc + valorCobrancaBI(c), 0), [pendentesNoMesSel])
   const valorAtrasadoBI = useMemo(() => atrasadasNoMesSel.reduce((acc, c) => acc + valorCobrancaBI(c), 0), [atrasadasNoMesSel])
-  const pctRecebidoBI = receitaPrevistaBI > 0 ? (valorRecebidoBI / receitaPrevistaBI) * 100 : 0
+  const pctRecebidoBI = alugueisPrevistosMesBI > 0 ? (valorRecebidoBI / alugueisPrevistosMesBI) * 100 : 0
   const taxaInadimplenciaBI = cobrancasDoMesSel.length > 0 ? (atrasadasNoMesSel.length / cobrancasDoMesSel.length) * 100 : 0
 
   const taxaContratoBI = (contratoId: string) => {
@@ -168,11 +243,66 @@ export default function DashboardPage() {
     return c?.taxa_administracao || 10
   }
   const comissaoMesBI = useMemo(() => pagasNoMesSel.reduce((acc, c) => acc + valorCobrancaBI(c) * (taxaContratoBI(c.contrato_id) / 100), 0), [pagasNoMesSel, contratosFiltrados])
-  const repasseLiquidoMesBI = valorRecebidoBI - comissaoMesBI
-  const taxaMediaAdmBI = contratosAtivosFiltrados.length > 0
-    ? contratosAtivosFiltrados.reduce((acc, c) => acc + (c.taxa_administracao || 10), 0) / contratosAtivosFiltrados.length
-    : 10
-  const ticketMedioBI = contratosAtivosFiltrados.length > 0 ? receitaPrevistaBI / contratosAtivosFiltrados.length : 0
+  // Repasses pendentes (mês): repasses ainda não feitos referentes a cobranças do
+  // mês que estão em aberto (atrasadas ou ainda não vencidas).
+  const repassesPendentesMesBI = useMemo(() => pendentesNoMesSel.reduce((acc, c) => acc + (c.valor_repasse || 0), 0), [pendentesNoMesSel])
+  const ticketMedioBI = contratosAtivosFiltrados.length > 0 ? totalAdministradoBI / contratosAtivosFiltrados.length : 0
+
+  // --- Linhas dos popups dos cards clicáveis ---
+  const linhasPrevistosBI = useMemo<LinhaPopup[]>(() => cobrancasDoMesSel.map(c => ({
+    imovel: getNome(c.contrato?.imovel),
+    locatario: getNome(c.contrato?.locatario),
+    valor: valorCobrancaBI(c),
+    dataLabel: 'Vencimento',
+    data: c.data_vencimento,
+    extraLabel: 'Status',
+    extra: c.status_cobranca === 'pago' ? 'Pago' : (diasEntre(c.data_vencimento) < 0 ? 'Atrasado' : 'A vencer'),
+    corExtra: c.status_cobranca === 'pago' ? '#3fb950' : (diasEntre(c.data_vencimento) < 0 ? '#ef4444' : '#f59e0b'),
+  })), [cobrancasDoMesSel])
+
+  const linhasRecebidosBI = useMemo<LinhaPopup[]>(() => pagasNoMesSel.map(c => ({
+    imovel: getNome(c.contrato?.imovel),
+    locatario: getNome(c.contrato?.locatario),
+    valor: valorCobrancaBI(c),
+    dataLabel: 'Pago em',
+    data: c.data_pagamento || c.data_vencimento,
+  })), [pagasNoMesSel])
+
+  const linhasAtrasoBI = useMemo<LinhaPopup[]>(() => atrasadasNoMesSel.map(c => ({
+    imovel: getNome(c.contrato?.imovel),
+    locatario: getNome(c.contrato?.locatario),
+    valor: valorCobrancaBI(c),
+    dataLabel: 'Vencimento',
+    data: c.data_vencimento,
+    extraLabel: 'Dias em atraso',
+    extra: `${Math.abs(diasEntre(c.data_vencimento))}d`,
+    corExtra: '#ef4444',
+  })), [atrasadasNoMesSel])
+
+  const linhasRepassesBI = useMemo<LinhaPopup[]>(() => pendentesNoMesSel.map(c => {
+    const atrasada = diasEntre(c.data_vencimento) < 0
+    return {
+      imovel: getNome(c.contrato?.imovel),
+      locatario: getNome(c.contrato?.locatario),
+      valor: c.valor_repasse || 0,
+      dataLabel: atrasada ? 'Vencido em' : 'Vence em',
+      data: c.data_vencimento,
+      extraLabel: 'Situação',
+      extra: atrasada ? 'Atrasado' : 'A vencer',
+      corExtra: atrasada ? '#ef4444' : '#f59e0b',
+    }
+  }), [pendentesNoMesSel])
+
+  const linhasHonorariosBI = useMemo<LinhaPopup[]>(() => honorariosDetalhe.map(h => ({
+    imovel: h.imovel,
+    locatario: h.locatario,
+    valor: h.valor,
+    dataLabel: 'Locado em',
+    data: h.dataInicio,
+    extraLabel: h.recebido ? 'Honorário recebido em' : 'Previsão de recebimento',
+    extra: formatDataBR(h.recebido ? h.dataRecebimento : h.dataPrevista),
+    corExtra: h.recebido ? '#3fb950' : '#f59e0b',
+  })), [honorariosDetalhe])
 
   const alertasBI = useMemo(() => {
     const hoje = new Date().toISOString().slice(0, 10)
@@ -246,17 +376,20 @@ export default function DashboardPage() {
     return { pendentes, totalARepassar, totalRepassadoMes, tabela }
   }, [cobrancasFiltradas])
 
-  const fluxoPrevisto30 = useMemo(() => {
-    const hoje = new Date().toISOString().slice(0, 10)
-    const daqui30 = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
-    const entradas = cobrancasFiltradas
-      .filter(c => c.status_cobranca === 'pendente' && c.data_vencimento >= hoje && c.data_vencimento <= daqui30)
-      .reduce((acc, c) => acc + valorCobrancaBI(c), 0)
-    const saidas = rawDespesas
-      .filter(d => d.data_vencimento >= hoje && d.data_vencimento <= daqui30)
-      .reduce((acc, d) => acc + (d.valor || 0), 0)
-    return { entradas, saidas, saldo: entradas - saidas }
-  }, [cobrancasFiltradas, rawDespesas])
+  // Fluxo previsto (30 dias): faturamento próprio da imobiliária no mês — soma da
+  // comissão de administração + comissão sobre seguro fiança + comissão sobre
+  // seguro incêndio + honorários de locação. As comissões de seguro ainda não
+  // existem no contrato (entram numa fase futura) — fallback 0 até lá.
+  // TODO: fase seguros — substituir quando contratos.comissao_seguro_fianca/incendio existirem.
+  const comissaoSeguroFiancaMesBI = 0
+  const comissaoSeguroIncendioMesBI = 0
+  const faturamentoProprioMesBI = useMemo(() => ({
+    comissaoAdm: comissaoMesBI,
+    seguroFianca: comissaoSeguroFiancaMesBI,
+    seguroIncendio: comissaoSeguroIncendioMesBI,
+    honorarios: honorariosMes,
+    total: comissaoMesBI + comissaoSeguroFiancaMesBI + comissaoSeguroIncendioMesBI + honorariosMes,
+  }), [comissaoMesBI, honorariosMes])
 
   // --- Fase 2: status dos imóveis (filtrado) + evolução financeira ---
   const statusImoveisBI = useMemo(() => {
@@ -419,6 +552,7 @@ export default function DashboardPage() {
       let somaHonorariosMes = 0
       let somaHonorariosPrevisto = 0
       let proximaDataHonorario = ''
+      const detalheHonorarios: typeof honorariosDetalhe = []
       if (idsHonorario.length > 0) {
         const { data: cobrancasHonorario } = await supabase
           .from('cobrancas')
@@ -434,21 +568,34 @@ export default function DashboardPage() {
         contratosComHonorario.forEach(c => {
           const primeira = primeiraPorContrato[c.id]
           const valor = c.valor_honorarios || 0
-          if (primeira?.status_cobranca === 'pago') {
+          const im = Array.isArray(c.imovel) ? c.imovel[0] : c.imovel
+          const recebido = primeira?.status_cobranca === 'pago'
+          const dataPrevista = primeira?.data_vencimento || (c.data_inicio ? adicionarDias(c.data_inicio, 30) : '')
+          if (recebido) {
             const dataRef = primeira.data_pagamento || primeira.data_vencimento
             if (dataRef >= inicioMesHon && dataRef <= fimMesHon) somaHonorariosMes += valor
+            detalheHonorarios.push({
+              contratoId: c.id, imovel: getNome(im), locatario: getNome(c.locatario),
+              dataInicio: c.data_inicio, valor, recebido: true,
+              dataRecebimento: dataRef, dataPrevista: '',
+            })
           } else {
             somaHonorariosPrevisto += valor
-            const dataPrevista = primeira?.data_vencimento || (c.data_inicio ? adicionarDias(c.data_inicio, 30) : '')
             if (dataPrevista && (!proximaDataHonorario || dataPrevista < proximaDataHonorario)) {
               proximaDataHonorario = dataPrevista
             }
+            detalheHonorarios.push({
+              contratoId: c.id, imovel: getNome(im), locatario: getNome(c.locatario),
+              dataInicio: c.data_inicio, valor, recebido: false,
+              dataRecebimento: '', dataPrevista,
+            })
           }
         })
       }
       setHonorariosMes(somaHonorariosMes)
       setHonorariosPrevisto(somaHonorariosPrevisto)
       setHonorariosProximaData(proximaDataHonorario)
+      setHonorariosDetalhe(detalheHonorarios)
 
       const somaTaxas = ativos.reduce((acc, c) => {
         const valor = c.valor_atual || c.valor_mensal || 0
@@ -515,8 +662,6 @@ export default function DashboardPage() {
 
     if (cobrancas) {
       setRawCobrancas(cobrancas)
-      const { data: despesas } = await supabase.from('despesas').select('id, valor, data_vencimento, status').eq('organization_id', orgId).eq('status', 'pendente')
-      setRawDespesas(despesas || [])
       const pagas = cobrancas.filter(c => c.status_cobranca === 'pago')
       const pendentes = cobrancas.filter(c => c.status_cobranca === 'pendente')
       const atrasadas = pendentes.filter(c => diasEntre(c.data_vencimento) < 0)
@@ -654,23 +799,35 @@ export default function DashboardPage() {
 
           {/* Cards principais (4) */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
-            <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-xl p-3.5">
-              <div style={{ color: '#8b8d98' }} className="flex items-center gap-1.5 text-[11px] mb-1.5"><TrendingUp size={12} />Receita prevista do mês</div>
-              <div style={{ color: '#f4f4f3' }} className="text-xl font-medium">{formatVal(receitaPrevistaBI)}</div>
-              <div style={{ color: '#8b8d98' }} className="text-[10px] mt-1.5 mb-1.5">Receita bruta dos contratos ativos</div>
+            <div
+              onClick={() => setPopupAberto('previstos')}
+              style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }}
+              className="rounded-xl p-3.5 cursor-pointer hover:opacity-80 transition-opacity"
+            >
+              <div style={{ color: '#8b8d98' }} className="flex items-center gap-1.5 text-[11px] mb-1.5"><TrendingUp size={12} />Aluguéis Previstos a Receber (mês)</div>
+              <div style={{ color: '#f4f4f3' }} className="text-xl font-medium">{formatVal(alugueisPrevistosMesBI)}</div>
+              <div style={{ color: '#8b8d98' }} className="text-[10px] mt-1.5 mb-1.5">Cobranças com vencimento no mês selecionado</div>
               <div style={{ background: '#0d1117', height: 4, borderRadius: 3 }}>
                 <div style={{ background: '#1A7FFF', width: `${Math.min(pctRecebidoBI, 100)}%`, height: 4, borderRadius: 3 }} />
               </div>
             </div>
-            <div style={{ background: '#1a2e1f', border: '0.5px solid #2d4a35' }} className="rounded-xl p-3.5">
+            <div
+              onClick={() => setPopupAberto('recebidos')}
+              style={{ background: '#1a2e1f', border: '0.5px solid #2d4a35' }}
+              className="rounded-xl p-3.5 cursor-pointer hover:opacity-80 transition-opacity"
+            >
               <div style={{ color: '#8b8d98' }} className="flex items-center gap-1.5 text-[11px] mb-1.5"><Wallet size={12} />Valor recebido</div>
               <div style={{ color: '#3fb950' }} className="text-xl font-medium">{formatVal(valorRecebidoBI)}</div>
-              <div style={{ color: '#8b8d98' }} className="text-[10px] mt-1.5">{pctRecebidoBI.toFixed(1)}% da receita prevista</div>
+              <div style={{ color: '#8b8d98' }} className="text-[10px] mt-1.5">{pctRecebidoBI.toFixed(1)}% dos aluguéis previstos</div>
             </div>
-            <div style={{ background: '#2e2515', border: '0.5px solid #4a3a1f' }} className="rounded-xl p-3.5">
+            <div
+              onClick={() => setPopupAberto('atraso')}
+              style={{ background: '#2e1717', border: '0.5px solid #4a2424' }}
+              className="rounded-xl p-3.5 cursor-pointer hover:opacity-80 transition-opacity"
+            >
               <div style={{ color: '#8b8d98' }} className="flex items-center gap-1.5 text-[11px] mb-1.5"><CalendarClock size={12} />Valor em aberto</div>
-              <div style={{ color: '#f59e0b' }} className="text-xl font-medium">{formatVal(valorEmAbertoBI)}</div>
-              <div style={{ color: '#8b8d98' }} className="text-[10px] mt-1.5">{pendentesNoMesSel.length} cobrança(s) pendente(s)</div>
+              <div style={{ color: '#ef4444' }} className="text-xl font-medium">{formatVal(valorAtrasadoBI)}</div>
+              <div style={{ color: '#8b8d98' }} className="text-[10px] mt-1.5">{atrasadasNoMesSel.length} cobrança(s) vencida(s) e não paga(s)</div>
             </div>
             <div style={{ background: taxaInadimplenciaBI > 5 ? '#2e1717' : '#161b22', border: taxaInadimplenciaBI > 5 ? '0.5px solid #4a2424' : '0.5px solid #2a2f3a' }} className="rounded-xl p-3.5">
               <div style={{ color: '#8b8d98' }} className="flex items-center gap-1.5 text-[11px] mb-1.5"><Percent size={12} />Inadimplência</div>
@@ -679,19 +836,22 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Indicadores financeiros da imobiliária (7) */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
-            <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-xl p-3.5">
-              <div style={{ color: '#8b8d98' }} className="flex items-center gap-1.5 text-[11px] mb-1.5"><Wallet size={12} />Comissão da imobiliária (mês)</div>
-              <div style={{ color: '#f4f4f3' }} className="text-xl font-medium">{formatVal(comissaoMesBI)}</div>
-              <div style={{ color: '#8b8d98' }} className="text-[10px] mt-1.5">Taxa média: {taxaMediaAdmBI.toFixed(1)}%</div>
-            </div>
-            <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-xl p-3.5">
+          {/* Indicadores financeiros da imobiliária (6) */}
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-3">
+            <div
+              onClick={() => setPopupAberto('repasses')}
+              style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }}
+              className="rounded-xl p-3.5 cursor-pointer hover:opacity-80 transition-opacity"
+            >
               <div style={{ color: '#8b8d98' }} className="flex items-center gap-1.5 text-[11px] mb-1.5"><Wallet size={12} />Repasses pendentes (mês)</div>
-              <div style={{ color: '#f4f4f3' }} className="text-xl font-medium">{formatVal(repasseLiquidoMesBI)}</div>
-              <div style={{ color: '#8b8d98' }} className="text-[10px] mt-1.5">Estimado — módulo de repasses em construção</div>
+              <div style={{ color: '#f4f4f3' }} className="text-xl font-medium">{formatVal(repassesPendentesMesBI)}</div>
+              <div style={{ color: '#8b8d98' }} className="text-[10px] mt-1.5">{pendentesNoMesSel.length} cobrança(s) aguardando pagamento</div>
             </div>
-            <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-xl p-3.5">
+            <div
+              onClick={() => setPopupAberto('honorarios')}
+              style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }}
+              className="rounded-xl p-3.5 cursor-pointer hover:opacity-80 transition-opacity"
+            >
               <div style={{ color: '#8b8d98' }} className="flex items-center gap-1.5 text-[11px] mb-1.5"><Wallet size={12} />Honorários de locação (mês)</div>
               {honorariosMes > 0 ? (
                 <>
@@ -701,8 +861,8 @@ export default function DashboardPage() {
               ) : honorariosPrevisto > 0 ? (
                 <>
                  <div style={{ color: '#f59e0b' }} className="text-xl font-medium">{formatVal(honorariosPrevisto)}</div>
-                  <div style={{ color: '#8b8d98' }} className="text-[10px] mt-1.5">Previsto{honorariosProximaData ? ` para ${formatDataBR(honorariosProximaData)}` : ''}, aguardando 1º pagamento</div> 
-                  
+                  <div style={{ color: '#8b8d98' }} className="text-[10px] mt-1.5">Previsto{honorariosProximaData ? ` para ${formatDataBR(honorariosProximaData)}` : ''}, aguardando 1º pagamento</div>
+
                 </>
               ) : (
                 <>
@@ -718,7 +878,7 @@ export default function DashboardPage() {
             </div>
             <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-xl p-3.5">
               <div style={{ color: '#8b8d98' }} className="flex items-center gap-1.5 text-[11px] mb-1.5"><Building2 size={12} />Total administrado</div>
-              <div style={{ color: '#f4f4f3' }} className="text-xl font-medium">{formatVal(receitaPrevistaBI)}</div>
+              <div style={{ color: '#f4f4f3' }} className="text-xl font-medium">{formatVal(totalAdministradoBI)}</div>
               <div style={{ color: '#8b8d98' }} className="text-[10px] mt-1.5">{contratosAtivosFiltrados.length} contratos ativos</div>
             </div>
             <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-xl p-3.5">
@@ -731,10 +891,12 @@ export default function DashboardPage() {
             </div>
             <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-xl p-3.5">
               <div style={{ color: '#8b8d98' }} className="flex items-center gap-1.5 text-[11px] mb-1.5"><TrendingUp size={12} />Fluxo previsto (30 dias)</div>
-              <div style={{ color: fluxoPrevisto30.saldo >= 0 ? '#3fb950' : '#ef4444' }} className="text-xl font-medium">{formatVal(fluxoPrevisto30.saldo)}</div>
-              <div className="flex gap-2.5 mt-1.5 text-[10px]">
-                <span style={{ color: '#3fb950' }}>↑ {formatValCompact(fluxoPrevisto30.entradas)}</span>
-                <span style={{ color: '#ef4444' }}>↓ {formatValCompact(fluxoPrevisto30.saidas)}</span>
+              <div style={{ color: '#3fb950' }} className="text-xl font-medium">{formatVal(faturamentoProprioMesBI.total)}</div>
+              <div className="flex flex-wrap gap-x-2.5 gap-y-0.5 mt-1.5 text-[10px]" style={{ color: '#8b8d98' }}>
+                <span>Adm {formatValCompact(faturamentoProprioMesBI.comissaoAdm)}</span>
+                <span>Honorários {formatValCompact(faturamentoProprioMesBI.honorarios)}</span>
+                {faturamentoProprioMesBI.seguroFianca > 0 && <span>Seguro fiança {formatValCompact(faturamentoProprioMesBI.seguroFianca)}</span>}
+                {faturamentoProprioMesBI.seguroIncendio > 0 && <span>Seguro incêndio {formatValCompact(faturamentoProprioMesBI.seguroIncendio)}</span>}
               </div>
             </div>
           </div>
@@ -1008,6 +1170,52 @@ export default function DashboardPage() {
 
         </div>
       </div>
+
+      {popupAberto === 'previstos' && (
+        <ModalListaFinanceira
+          titulo="Aluguéis Previstos a Receber (mês)"
+          subtitulo="Cobranças com vencimento no mês selecionado"
+          linhas={linhasPrevistosBI}
+          vazio="Nenhuma cobrança prevista para este mês."
+          onFechar={() => setPopupAberto(null)}
+        />
+      )}
+      {popupAberto === 'recebidos' && (
+        <ModalListaFinanceira
+          titulo="Valor recebido"
+          subtitulo="Aluguéis pagos no mês selecionado"
+          linhas={linhasRecebidosBI}
+          vazio="Nenhum aluguel recebido neste mês ainda."
+          onFechar={() => setPopupAberto(null)}
+        />
+      )}
+      {popupAberto === 'atraso' && (
+        <ModalListaFinanceira
+          titulo="Valor em aberto"
+          subtitulo="Aluguéis vencidos e não pagos no mês selecionado"
+          linhas={linhasAtrasoBI}
+          vazio="Nenhuma cobrança em atraso neste mês."
+          onFechar={() => setPopupAberto(null)}
+        />
+      )}
+      {popupAberto === 'repasses' && (
+        <ModalListaFinanceira
+          titulo="Repasses pendentes (mês)"
+          subtitulo="Cobranças do mês ainda não pagas — repasse aguardando"
+          linhas={linhasRepassesBI}
+          vazio="Nenhum repasse pendente neste mês."
+          onFechar={() => setPopupAberto(null)}
+        />
+      )}
+      {popupAberto === 'honorarios' && (
+        <ModalListaFinanceira
+          titulo="Honorários de locação (mês)"
+          subtitulo="Contratos com honorários de locação recebidos ou previstos"
+          linhas={linhasHonorariosBI}
+          vazio="Nenhum contrato com honorários pendente."
+          onFechar={() => setPopupAberto(null)}
+        />
+      )}
     </AppLayout>
   )
 }
