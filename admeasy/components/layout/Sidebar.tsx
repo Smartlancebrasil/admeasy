@@ -10,7 +10,7 @@ import {
   LayoutDashboard, Building2, Users, FileText, TrendingUp,
   Calculator, Wrench, Truck, Calendar, DollarSign,
   UserCircle, BuildingIcon, Settings, LogOut, FileSearch,
-  ShieldCheck, X, Wallet
+  ShieldCheck, X, Wallet, Target
 } from 'lucide-react'
 
 // ORG_ID fixo removido — agora vem do useOrganization() (multi-tenant)
@@ -22,6 +22,7 @@ const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/financeiro', label: 'Financeiro', icon: DollarSign },
   { href: '/custos', label: 'Custos', icon: Wallet },
+  { href: '/meta', label: 'Meta da imobiliária', icon: Target },
   { href: '/imoveis', label: 'Cadastro Imóveis', icon: Building2 },
   { href: '/contratos', label: 'Contratos', icon: FileText, badge: 3 },
   { href: '/vistorias', label: 'Laudo de Vistoria', icon: FileSearch },
