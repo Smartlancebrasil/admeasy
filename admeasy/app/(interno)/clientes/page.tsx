@@ -258,14 +258,14 @@ function ModalAcessoPortal({ cliente, onFechar, onSucesso }: {
               <div style={{ color: '#f4f4f3' }} className="text-sm font-medium">{senha}</div>
             </div>
             <div style={{ color: '#8b8d98' }} className="text-xs mb-4">
-              Anote ou copie esses dados agora — a senha não fica visível em nenhum outro lugar depois que você fechar esta janela. Envie ao locatário por WhatsApp ou e-mail.
+              Anote ou copie esses dados agora — a senha não fica visível em nenhum outro lugar depois que você fechar esta janela. Envie ao {cliente.tipo === 'locador' ? 'locador' : 'locatário'} por WhatsApp ou e-mail.
             </div>
             <button className="btn btn-primary" onClick={onFechar}>Fechar</button>
           </div>
         ) : (
           <>
             <div className="mb-3">
-              <label className="label">E-mail do locatário</label>
+              <label className="label">E-mail do {cliente.tipo === 'locador' ? 'locador' : 'locatário'}</label>
               <input className="input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="email@exemplo.com" />
             </div>
             <div className="mb-3">
@@ -484,7 +484,7 @@ export default function ClientesPage() {
                       <td style={{ color: '#8b8d98' }} className="px-4 py-3">{c.email || '—'}</td>
                       <td className="px-4 py-3"><span className={statusBadge[c.status] || 'badge badge-gray'}>{c.status}</span></td>
                       <td className="px-4 py-3">
-                        {c.tipo === 'locatario' ? (
+                        {c.tipo === 'locatario' || c.tipo === 'locador' ? (
                           <span className={c.tem_portal ? 'badge badge-green' : 'badge badge-gray'}>
                             {c.tem_portal ? 'Ativo' : 'Sem acesso'}
                           </span>
@@ -494,7 +494,7 @@ export default function ClientesPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex gap-2">
-                          {c.tipo === 'locatario' && (
+                          {(c.tipo === 'locatario' || c.tipo === 'locador') && (
                             <button className="btn btn-sm" onClick={() => setClienteAcesso(c)} title="Gerenciar acesso ao portal">
                               <KeyRound size={12} />{c.tem_portal ? 'Redefinir' : 'Gerenciar acesso'}
                             </button>
