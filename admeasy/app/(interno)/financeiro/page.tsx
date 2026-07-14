@@ -104,6 +104,7 @@ export default function FinanceiroPage() {
   })
 
   const [contratoSel, setContratoSel] = useState<Contrato | null>(null)
+  const [filtroMes, setFiltroMes] = useState(() => new Date().toISOString().slice(0, 7))
 
   useEffect(() => {
     if (organizacao?.id) {
@@ -334,10 +335,17 @@ export default function FinanceiroPage() {
     return c.valor_repasse === 0 && c.valor_taxa_adm === c.valor_aluguel && c.valor_aluguel > 0
   }
 
-  const totalReceber = cobrancas.filter(c => c.status_cobranca === 'pendente').reduce((s, c) => s + c.valor_aluguel, 0)
-  const totalRecebido = cobrancas.filter(c => c.status_cobranca === 'pago').reduce((s, c) => s + c.valor_aluguel, 0)
-  const totalTaxaAdm = cobrancas.filter(c => c.status_cobranca === 'pago').reduce((s, c) => s + c.valor_taxa_adm, 0)
-  const totalRepassar = cobrancas.filter(c => c.status_cobranca === 'pago' && c.status_repasse === 'aguardando').reduce((s, c) => s + c.valor_repasse, 0)
+  // Cobranças do mês selecionado no filtro — as métricas do topo e a aba
+  // "Cobranças" mostram só o mês, em vez do período inteiro do contrato.
+  const inicioMesSel = `${filtroMes}-01`
+  const [anoSel, mesSelNum] = filtroMes.split('-').map(Number)
+  const fimMesSel = new Date(anoSel, mesSelNum, 0).toISOString().slice(0, 10)
+  const cobrancasDoMesSel = cobrancas.filter(c => c.data_vencimento >= inicioMesSel && c.data_vencimento <= fimMesSel)
+
+  const totalReceber = cobrancasDoMesSel.filter(c => c.status_cobranca === 'pendente').reduce((s, c) => s + c.valor_aluguel, 0)
+  const totalRecebido = cobrancasDoMesSel.filter(c => c.status_cobranca === 'pago').reduce((s, c) => s + c.valor_aluguel, 0)
+  const totalTaxaAdm = cobrancasDoMesSel.filter(c => c.status_cobranca === 'pago').reduce((s, c) => s + c.valor_taxa_adm, 0)
+  const totalRepassar = cobrancasDoMesSel.filter(c => c.status_cobranca === 'pago' && c.status_repasse === 'aguardando').reduce((s, c) => s + c.valor_repasse, 0)
 
   const hoje = new Date()
   const proximos30 = cobrancas
@@ -350,15 +358,17 @@ export default function FinanceiroPage() {
 
   const despesasPendentes = despesas.filter(d => d.status === 'pendente')
 
+  // Entradas previstas: só o mês selecionado no filtro (aluguéis e honorários
+  // cuja data prevista cai dentro do mês) — não o acumulado de todos os meses.
   const entradasPrevistas = [
-    ...cobrancas.filter(c => c.status_cobranca === 'pendente').map(c => ({
+    ...cobrancasDoMesSel.filter(c => c.status_cobranca === 'pendente').map(c => ({
       tipo: 'aluguel' as const,
       descricao: getTitulo(c.contrato?.imovel) || '—',
       subdescricao: getNome(c.locatario),
       valor: c.valor_aluguel,
       data: c.data_vencimento,
     })),
-    ...honorariosPendentes.map(h => ({
+    ...honorariosPendentes.filter(h => h.dataPrevista >= inicioMesSel && h.dataPrevista <= fimMesSel).map(h => ({
       tipo: 'honorario' as const,
       descricao: h.imovel,
       subdescricao: 'Honorários de locação',
@@ -415,10 +425,19 @@ export default function FinanceiroPage() {
 
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
             <h1 style={{ color: '#f4f4f3' }} className="text-lg font-medium">Financeiro — Fluxo de caixa</h1>
-            <button className="btn btn-primary justify-center" onClick={() => setShowForm(!showForm)} disabled={!organizacao?.id}>
-              {showForm ? <X size={14} /> : <Plus size={14} />}
-              {showForm ? 'Cancelar' : 'Gerar cobrança'}
-            </button>
+            <div className="flex items-center gap-2">
+              <input
+                type="month"
+                value={filtroMes}
+                onChange={e => setFiltroMes(e.target.value)}
+                style={{ background: '#161b22', border: '0.5px solid #2a2f3a', color: '#c3c2b7' }}
+                className="rounded-lg px-2.5 py-2 text-[13px]"
+              />
+              <button className="btn btn-primary justify-center" onClick={() => setShowForm(!showForm)} disabled={!organizacao?.id}>
+                {showForm ? <X size={14} /> : <Plus size={14} />}
+                {showForm ? 'Cancelar' : 'Gerar cobrança'}
+              </button>
+            </div>
           </div>
 
           {sucesso && <div style={{ background: '#1a2e1f', border: '0.5px solid #2d4a35', color: '#3fb950' }} className="px-4 py-3 rounded-lg mb-4 text-sm">{sucesso}</div>}
@@ -426,24 +445,24 @@ export default function FinanceiroPage() {
           {/* MÉTRICAS */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
             <div className="card">
-              <div style={{ color: '#8b8d98' }} className="text-xs mb-1 flex items-center gap-1"><Clock size={12} />A receber</div>
+              <div style={{ color: '#8b8d98' }} className="text-xs mb-1 flex items-center gap-1"><Clock size={12} />A receber (mês)</div>
               <div style={{ color: '#f59e0b' }} className="text-xl font-semibold">{formatVal(totalReceber)}</div>
-              <div style={{ color: '#8b8d98' }} className="text-xs mt-1">{cobrancas.filter(c => c.status_cobranca === 'pendente').length} cobranças pendentes</div>
+              <div style={{ color: '#8b8d98' }} className="text-xs mt-1">{cobrancasDoMesSel.filter(c => c.status_cobranca === 'pendente').length} cobranças pendentes</div>
             </div>
             <div className="card">
-              <div style={{ color: '#8b8d98' }} className="text-xs mb-1 flex items-center gap-1"><TrendingUp size={12} />Recebido</div>
+              <div style={{ color: '#8b8d98' }} className="text-xs mb-1 flex items-center gap-1"><TrendingUp size={12} />Recebido (mês)</div>
               <div style={{ color: '#3fb950' }} className="text-xl font-semibold">{formatVal(totalRecebido)}</div>
-              <div style={{ color: '#8b8d98' }} className="text-xs mt-1">{cobrancas.filter(c => c.status_cobranca === 'pago').length} pagamentos confirmados</div>
+              <div style={{ color: '#8b8d98' }} className="text-xs mt-1">{cobrancasDoMesSel.filter(c => c.status_cobranca === 'pago').length} pagamentos confirmados</div>
             </div>
             <div className="card">
-              <div style={{ color: '#8b8d98' }} className="text-xs mb-1 flex items-center gap-1"><DollarSign size={12} />Taxa de adm.</div>
+              <div style={{ color: '#8b8d98' }} className="text-xs mb-1 flex items-center gap-1"><DollarSign size={12} />Taxa de adm. (mês)</div>
               <div style={{ color: '#5b9bf5' }} className="text-xl font-semibold">{formatVal(totalTaxaAdm)}</div>
               <div style={{ color: '#8b8d98' }} className="text-xs mt-1">Receita da imobiliária</div>
             </div>
             <div className="card">
-              <div style={{ color: '#8b8d98' }} className="text-xs mb-1 flex items-center gap-1"><TrendingDown size={12} />A repassar</div>
+              <div style={{ color: '#8b8d98' }} className="text-xs mb-1 flex items-center gap-1"><TrendingDown size={12} />A repassar (mês)</div>
               <div style={{ color: '#f59e0b' }} className="text-xl font-semibold">{formatVal(totalRepassar)}</div>
-              <div style={{ color: '#8b8d98' }} className="text-xs mt-1">{cobrancas.filter(c => c.status_repasse === 'aguardando' && c.status_cobranca === 'pago').length} repasses pendentes</div>
+              <div style={{ color: '#8b8d98' }} className="text-xs mt-1">{cobrancasDoMesSel.filter(c => c.status_repasse === 'aguardando' && c.status_cobranca === 'pago').length} repasses pendentes</div>
             </div>
           </div>
 
@@ -591,8 +610,8 @@ export default function FinanceiroPage() {
             <div className="card p-0 overflow-hidden overflow-x-auto">
               {loading ? (
                 <div style={{ color: '#8b8d98' }} className="text-center py-10 text-sm">Carregando...</div>
-              ) : cobrancas.length === 0 ? (
-                <div style={{ color: '#8b8d98' }} className="text-center py-10 text-sm">Nenhuma cobrança cadastrada</div>
+              ) : cobrancasDoMesSel.length === 0 ? (
+                <div style={{ color: '#8b8d98' }} className="text-center py-10 text-sm">Nenhuma cobrança neste mês</div>
               ) : (
                 <table className="w-full text-sm">
                   <thead>
@@ -603,15 +622,10 @@ export default function FinanceiroPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {cobrancas.map(c => (
+                    {cobrancasDoMesSel.map(c => (
                       <tr key={c.id} style={{ borderBottom: '0.5px solid #1c2128' }} className="hover:bg-[#161b22]">
                         <td className="px-4 py-3">
-                          <div style={{ color: '#f4f4f3' }} className="font-medium text-sm flex items-center gap-1.5">
-                            {getTitulo(c.contrato?.imovel) || '—'}
-                            {ehHonorario(c) && (
-                              <span style={{ background: '#3987e522', color: '#5b9bf5' }} className="text-[9px] font-semibold px-1.5 py-0.5 rounded">Honorários</span>
-                            )}
-                          </div>
+                          <div style={{ color: '#f4f4f3' }} className="font-medium text-sm">{getTitulo(c.contrato?.imovel) || '—'}</div>
                           <div style={{ color: '#8b8d98' }} className="text-xs">{getNome(c.locatario)}</div>
                         </td>
                         <td style={{ color: '#8b8d98' }} className="px-4 py-3 text-xs capitalize">{c.mes_referencia}</td>
@@ -706,7 +720,7 @@ export default function FinanceiroPage() {
             <div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
                 <div className="card">
-                  <div style={{ color: '#8b8d98' }} className="text-xs mb-1 flex items-center gap-1"><TrendingUp size={12} />Entradas previstas</div>
+                  <div style={{ color: '#8b8d98' }} className="text-xs mb-1 flex items-center gap-1"><TrendingUp size={12} />Entradas previstas (mês)</div>
                   <div style={{ color: '#3fb950' }} className="text-xl font-semibold">{formatVal(totalEntradasPrevistas)}</div>
                   <div style={{ color: '#8b8d98' }} className="text-xs mt-1">{entradasPrevistas.length} lançamento(s)</div>
                 </div>
