@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getPortalUser, logoutPortal, alterarSenhaPortal, PortalUser } from '@/lib/portal-auth'
 import { supabase } from '@/lib/supabase'
-import { LogOut, Key, Plus, X, Upload, ChevronDown, ChevronUp, FileDown, Copy, Check, AlertCircle, QrCode, Edit2, Hourglass, Calculator } from 'lucide-react'
+import { LogOut, Key, Plus, X, Upload, ChevronDown, ChevronUp, FileDown, Copy, Check, AlertCircle, QrCode, Edit2, Hourglass, Calculator, FileText, Download, Building2 } from 'lucide-react'
 
 function formatVal(v: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0)
@@ -454,10 +454,13 @@ function FormularioDemanda({ clienteId, contratoId, organizationId, editando, on
 }
 
 // ── CARD DEMANDA ──────────────────────────────────────────────────────
-function CardDemanda({ d, onEditar }: { d: any; onEditar: (d: any) => void }) {
+function CardDemanda({ d, onEditar, onAprovar, onRecusar, processando }: {
+  d: any; onEditar?: (d: any) => void; onAprovar?: (d: any) => void; onRecusar?: (d: any) => void; processando?: boolean
+}) {
   const [aberto, setAberto] = useState(false)
   const st = statusDemanda[d.status] || statusDemanda.aberta
-  const podeEditar = d.status === 'aberta'
+  const podeEditar = d.status === 'aberta' && !!onEditar
+  const podeAprovarOuRecusar = d.status === 'aguardando_locador' && (!!onAprovar || !!onRecusar)
 
   return (
     <div style={{ background: '#0d1b2e', border: '0.5px solid #1e3a5f' }} className="rounded-xl p-4">
@@ -500,6 +503,40 @@ function CardDemanda({ d, onEditar }: { d: any; onEditar: (d: any) => void }) {
               <p style={{ color: '#c3c2b7' }} className="text-sm">{d.justificativa}</p>
             </div>
           )}
+          {podeAprovarOuRecusar && (
+            <div style={{ background: '#0d1117', border: '0.5px solid #2a2f3a' }} className="rounded-lg p-3 space-y-2">
+              {d.orcamento > 0 && (
+                <p style={{ color: '#c3c2b7' }} className="text-sm">
+                  Orçamento da imobiliária: <strong style={{ color: '#f4f4f3' }}>{formatVal(d.orcamento)}</strong>
+                </p>
+              )}
+              {d.prazo_estimado && (
+                <p style={{ color: '#8b9ab4' }} className="text-xs">Prazo estimado de conclusão: {formatDate(d.prazo_estimado)}</p>
+              )}
+              <div className="flex gap-2 pt-1">
+                {onAprovar && (
+                  <button
+                    disabled={processando}
+                    onClick={(e) => { e.stopPropagation(); onAprovar(d) }}
+                    style={{ background: '#3fb950', color: '#062e0f', opacity: processando ? 0.6 : 1 }}
+                    className="text-xs font-semibold px-3 py-1.5 rounded-lg"
+                  >
+                    {processando ? 'Enviando...' : 'Aprovar orçamento'}
+                  </button>
+                )}
+                {onRecusar && (
+                  <button
+                    disabled={processando}
+                    onClick={(e) => { e.stopPropagation(); onRecusar(d) }}
+                    style={{ border: '0.5px solid #4a2424', color: '#ef4444', opacity: processando ? 0.6 : 1 }}
+                    className="text-xs font-semibold px-3 py-1.5 rounded-lg"
+                  >
+                    Recusar — farei por conta própria
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
           {podeEditar && (
             <button
               onClick={(e) => { e.stopPropagation(); onEditar(d) }}
@@ -510,6 +547,176 @@ function CardDemanda({ d, onEditar }: { d: any; onEditar: (d: any) => void }) {
             </button>
           )}
         </div>
+      )}
+    </div>
+  )
+}
+
+// ── PAINEL LOCADOR ────────────────────────────────────────────────────
+type DocumentoKit = { chave: string; label: string; arquivos: { nome: string; url: string }[] }
+
+const KIT_DOC_CATEGORIAS_LOCADOR: { chave: string; label: string }[] = [
+  { chave: 'contrato_assinado', label: 'Contrato de locação assinado' },
+  { chave: 'laudo_vistoria', label: 'Laudo de vistoria assinado' },
+  { chave: 'apolice_seguro_incendio', label: 'Apólice do seguro incêndio' },
+  { chave: 'apolice_seguro_fianca', label: 'Apólice do seguro fiança' },
+]
+
+function CardContratoLocador({ contrato, documentos }: { contrato: any; documentos: DocumentoKit[] }) {
+  const [aberto, setAberto] = useState(false)
+  const imovel = contrato.imovel ? (Array.isArray(contrato.imovel) ? contrato.imovel[0] : contrato.imovel) : null
+  const locatario = contrato.locatario ? (Array.isArray(contrato.locatario) ? contrato.locatario[0] : contrato.locatario) : null
+
+  return (
+    <div style={{ background: '#0d1b2e', border: '0.5px solid #1e3a5f' }} className="rounded-xl p-4">
+      <div className="flex items-center justify-between cursor-pointer" onClick={() => setAberto(!aberto)}>
+        <div className="flex-1 min-w-0">
+          <p className="text-white text-sm font-medium truncate">{imovel?.titulo || `Contrato #${contrato.numero}`}</p>
+          <p style={{ color: '#8b9ab4' }} className="text-[10px] mt-0.5">Locatário: {locatario?.nome || '—'}</p>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+          <span style={{ color: '#f4f4f3' }} className="text-sm font-semibold">{formatVal(contrato.valor_atual || contrato.valor_mensal || 0)}</span>
+          {aberto ? <ChevronUp size={14} style={{ color: '#8b9ab4' }} /> : <ChevronDown size={14} style={{ color: '#8b9ab4' }} />}
+        </div>
+      </div>
+
+      {aberto && (
+        <div className="mt-3 pt-3 space-y-3" style={{ borderTop: '0.5px solid #1e3a5f' }}>
+          <p style={{ color: '#8b9ab4' }} className="text-xs">
+            {imovel?.endereco ? `${imovel.endereco}, ${imovel.numero || ''} — ${imovel.bairro || ''}, ${imovel.cidade || ''}` : '—'}
+          </p>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div style={{ color: '#8b9ab4' }}>Início: <span style={{ color: '#c3c2b7' }}>{formatDate(contrato.data_inicio)}</span></div>
+            <div style={{ color: '#8b9ab4' }}>Fim: <span style={{ color: '#c3c2b7' }}>{formatDate(contrato.data_fim)}</span></div>
+          </div>
+
+          <div>
+            <p style={{ color: '#8b9ab4' }} className="text-[10px] font-semibold uppercase tracking-wide mb-2">Documentos</p>
+            <div className="flex flex-col gap-1.5">
+              {documentos.map(doc => (
+                <div key={doc.chave} style={{ background: '#0d1117', border: '0.5px solid #1e3a5f' }} className="flex items-center justify-between px-3 py-2 rounded-lg">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <FileText size={13} style={{ color: doc.arquivos.length > 0 ? '#5b9bf5' : '#5a5f6a' }} className="flex-shrink-0" />
+                    <span style={{ color: '#c3c2b7' }} className="text-xs truncate">{doc.label}</span>
+                  </div>
+                  {doc.arquivos.length > 0 ? (
+                    <div className="flex gap-1.5 flex-shrink-0">
+                      {doc.arquivos.map((a, i) => (
+                        <a key={i} href={a.url} target="_blank" rel="noopener noreferrer"
+                          style={{ color: '#5b9bf5' }} className="hover:opacity-80" title={a.nome}>
+                          <Download size={13} />
+                        </a>
+                      ))}
+                    </div>
+                  ) : (
+                    <span style={{ color: '#5a5f6a' }} className="text-[10px] flex-shrink-0">Ainda não enviado</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PainelLocador({ user }: { user: PortalUser }) {
+  const [contratos, setContratos] = useState<any[]>([])
+  const [demandas, setDemandas] = useState<any[]>([])
+  const [documentosPorContrato, setDocumentosPorContrato] = useState<Record<string, DocumentoKit[]>>({})
+  const [aba, setAba] = useState<'imoveis' | 'demandas'>('imoveis')
+  const [loading, setLoading] = useState(true)
+  const [processando, setProcessando] = useState<string | null>(null)
+
+  useEffect(() => { carregar() }, [])
+
+  async function carregar() {
+    setLoading(true)
+    const [cont, dem] = await Promise.all([
+      supabase.from('contratos')
+        .select('*, imovel:imoveis(titulo, endereco, numero, bairro, cidade), locatario:clientes!contratos_locatario_id_fkey(nome)')
+        .eq('locador_id', user.cliente_id).in('status', ['ativo', 'pendente']).order('numero'),
+      supabase.from('demandas').select('*').eq('locador_id', user.cliente_id).order('created_at', { ascending: false }),
+    ])
+    if (cont.data) {
+      setContratos(cont.data)
+      const docsPorContrato: Record<string, DocumentoKit[]> = {}
+      await Promise.all(cont.data.map(async (c: any) => {
+        docsPorContrato[c.id] = await Promise.all(KIT_DOC_CATEGORIAS_LOCADOR.map(async cat => {
+          const { data } = await supabase.storage.from('documentos').list(`contratos/${c.id}/kit/${cat.chave}`)
+          const arquivos = (data || []).filter(a => a.id).map(a => ({
+            nome: a.name,
+            url: supabase.storage.from('documentos').getPublicUrl(`contratos/${c.id}/kit/${cat.chave}/${a.name}`).data.publicUrl,
+          }))
+          return { ...cat, arquivos }
+        }))
+      }))
+      setDocumentosPorContrato(docsPorContrato)
+    }
+    if (dem.data) setDemandas(dem.data)
+    setLoading(false)
+  }
+
+  async function aprovarDemanda(d: any) {
+    setProcessando(d.id)
+    await supabase.from('demandas').update({ status: 'autorizada' }).eq('id', d.id)
+    setDemandas(prev => prev.map(x => x.id === d.id ? { ...x, status: 'autorizada' } : x))
+    setProcessando(null)
+  }
+
+  async function recusarDemanda(d: any) {
+    if (!confirm('Recusar o orçamento da imobiliária? Isso indica que você vai resolver por conta própria.')) return
+    setProcessando(d.id)
+    await supabase.from('demandas').update({ status: 'recusada' }).eq('id', d.id)
+    setDemandas(prev => prev.map(x => x.id === d.id ? { ...x, status: 'recusada' } : x))
+    setProcessando(null)
+  }
+
+  if (loading) return <p style={{ color: '#8b9ab4' }} className="text-sm text-center py-10">Carregando...</p>
+
+  const demandasAguardando = demandas.filter(d => d.status === 'aguardando_locador').length
+
+  return (
+    <div>
+      <div style={{ borderBottom: '0.5px solid #1e3a5f' }} className="flex gap-1 mb-5">
+        {(['imoveis', 'demandas'] as const).map(a => (
+          <button key={a} onClick={() => setAba(a)}
+            style={aba === a ? { borderBottom: '2px solid #5b9bf5', color: '#5b9bf5' } : { borderBottom: '2px solid transparent', color: '#8b9ab4' }}
+            className="px-4 py-2 text-sm font-medium transition-all relative">
+            {a === 'imoveis' ? 'Meus imóveis' : 'Solicitações'}
+            {a === 'demandas' && demandasAguardando > 0 && (
+              <span style={{ background: '#ef4444' }} className="absolute -top-1 -right-2 text-white text-[9px] w-4 h-4 rounded-full flex items-center justify-center">{demandasAguardando}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {aba === 'imoveis' && (
+        contratos.length === 0 ? (
+          <div style={{ color: '#8b9ab4' }} className="text-center py-10 text-sm">
+            <Building2 size={28} className="mx-auto mb-2 opacity-40" />
+            Nenhum imóvel administrado encontrado.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {contratos.map(c => (
+              <CardContratoLocador key={c.id} contrato={c} documentos={documentosPorContrato[c.id] || []} />
+            ))}
+          </div>
+        )
+      )}
+
+      {aba === 'demandas' && (
+        demandas.length === 0 ? (
+          <div style={{ color: '#8b9ab4' }} className="text-center py-10 text-sm">Nenhuma solicitação registrada.</div>
+        ) : (
+          <div className="space-y-3">
+            {demandas.map(d => (
+              <CardDemanda key={d.id} d={d} onAprovar={aprovarDemanda} onRecusar={recusarDemanda} processando={processando === d.id} />
+            ))}
+          </div>
+        )
       )}
     </div>
   )
@@ -906,7 +1113,7 @@ export default function PortalPage() {
     async function iniciar() {
       const u = await getPortalUser()
       if (!u) { router.push('/portal/login'); return }
-      if (u.tipo !== 'locatario') { await logoutPortal(); router.push('/portal/login'); return }
+      if (u.tipo !== 'locatario' && u.tipo !== 'locador') { await logoutPortal(); router.push('/portal/login'); return }
       setUser(u)
       const { data } = await supabase.from('organizations').select('nome, logo_url').eq('id', u.organization_id).single()
       if (data) setOrg(data)
@@ -923,7 +1130,7 @@ export default function PortalPage() {
         <div className="flex items-center gap-3">
           <div className="text-right hidden sm:block">
             <div style={{ color: '#f4f4f3' }} className="text-xs font-medium">{user.nome}</div>
-            <div style={{ color: '#8b9ab4' }} className="text-[10px]">Locatário</div>
+            <div style={{ color: '#8b9ab4' }} className="text-[10px]">{user.tipo === 'locador' ? 'Locador' : 'Locatário'}</div>
           </div>
           <button onClick={() => setModalSenha(true)} style={{ color: '#8b9ab4' }} className="hover:text-blue-400 transition-colors"><Key size={16} /></button>
           <button onClick={async () => { await logoutPortal(); router.push('/portal/login') }} style={{ color: '#8b9ab4' }} className="hover:text-red-400 transition-colors"><LogOut size={16} /></button>
@@ -934,7 +1141,7 @@ export default function PortalPage() {
           <h1 className="text-white font-bold text-lg">Olá, {user.nome.split(' ')[0]}!</h1>
           <p style={{ color: '#8b9ab4' }} className="text-sm">Bem-vindo ao seu portal</p>
         </div>
-        <PainelLocatario user={user} />
+        {user.tipo === 'locador' ? <PainelLocador user={user} /> : <PainelLocatario user={user} />}
       </div>
       {modalSenha && <ModalTrocarSenha onFechar={() => setModalSenha(false)} />}
     </div>
