@@ -737,6 +737,7 @@ function PainelLocatario({ user }: { user: PortalUser }) {
   const [erroBoleto, setErroBoleto] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [anosExpandidos, setAnosExpandidos] = useState<Set<string>>(new Set([String(new Date().getFullYear())]))
+  const [documentos, setDocumentos] = useState<DocumentoKit[]>([])
 
   function toggleAno(ano: string) {
     setAnosExpandidos(prev => {
@@ -760,6 +761,22 @@ function PainelLocatario({ user }: { user: PortalUser }) {
     if (cob.data) setCobrancas(cob.data)
     if (dem.data) setDemandas(dem.data)
     if (cli.data) setClienteData(cli.data)
+
+    if (cont.data) {
+      const docs = await Promise.all(
+        [{ chave: 'contrato_assinado', label: 'Contrato de locação assinado' }, { chave: 'laudo_vistoria', label: 'Laudo de vistoria assinado' }]
+          .map(async cat => {
+            const { data } = await supabase.storage.from('documentos').list(`contratos/${cont.data.id}/kit/${cat.chave}`)
+            const arquivos = (data || []).filter(a => a.id).map(a => ({
+              nome: a.name,
+              url: supabase.storage.from('documentos').getPublicUrl(`contratos/${cont.data.id}/kit/${cat.chave}/${a.name}`).data.publicUrl,
+            }))
+            return { ...cat, arquivos }
+          })
+      )
+      setDocumentos(docs)
+    }
+
     setLoading(false)
   }
 
@@ -907,6 +924,34 @@ function PainelLocatario({ user }: { user: PortalUser }) {
                     </div>
                   </div>
                 </div>
+
+                {documentos.length > 0 && (
+                  <div style={{ background: '#0d1b2e', border: '0.5px solid #1e3a5f' }} className="rounded-xl p-4">
+                    <p style={{ color: '#8b9ab4' }} className="text-xs font-medium mb-3">Documentos</p>
+                    <div className="flex flex-col gap-1.5">
+                      {documentos.map(doc => (
+                        <div key={doc.chave} style={{ background: '#0d1117', border: '0.5px solid #1e3a5f' }} className="flex items-center justify-between px-3 py-2 rounded-lg">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <FileText size={13} style={{ color: doc.arquivos.length > 0 ? '#5b9bf5' : '#5a5f6a' }} className="flex-shrink-0" />
+                            <span style={{ color: '#c3c2b7' }} className="text-xs truncate">{doc.label}</span>
+                          </div>
+                          {doc.arquivos.length > 0 ? (
+                            <div className="flex gap-1.5 flex-shrink-0">
+                              {doc.arquivos.map((a, i) => (
+                                <a key={i} href={a.url} target="_blank" rel="noopener noreferrer"
+                                  style={{ color: '#5b9bf5' }} className="hover:opacity-80" title={a.nome}>
+                                  <Download size={13} />
+                                </a>
+                              ))}
+                            </div>
+                          ) : (
+                            <span style={{ color: '#5a5f6a' }} className="text-[10px] flex-shrink-0">Ainda não enviado</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex flex-col gap-2">
                   <button

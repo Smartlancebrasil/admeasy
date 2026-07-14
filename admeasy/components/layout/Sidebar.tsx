@@ -9,7 +9,7 @@ import { useOrganization } from '@/lib/OrganizationContext'
 import {
   LayoutDashboard, Building2, Users, FileText, TrendingUp,
   Calculator, Wrench, Truck, Calendar, DollarSign,
-  UserCircle, BuildingIcon, Settings, LogOut, FileSearch,
+  BuildingIcon, Settings, LogOut, FileSearch,
   ShieldCheck, X, Wallet, Target
 } from 'lucide-react'
 
@@ -28,7 +28,6 @@ const navItems = [
   { href: '/vistorias', label: 'Laudo de Vistoria', icon: FileSearch },
   { section: 'Partes' },
   { href: '/clientes', label: 'Cadastro Cliente', icon: Users },
-  { href: '/portal-locatario', label: 'Portal locatário', icon: UserCircle },
   { href: '/fornecedores', label: 'Fornecedores', icon: Truck },
   { section: 'Operações' },
   { href: '/demandas', label: 'Chamados', icon: Wrench }, // badge agora é dinâmico, ver render
