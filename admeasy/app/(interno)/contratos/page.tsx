@@ -19,7 +19,9 @@ type Contrato = {
   valor_condominio?: number
   valor_iptu?: number
   valor_seguro_incendio?: number
+  comissao_seguro_incendio?: number
   valor_seguro_fianca?: number
+  comissao_seguro_fianca?: number
   seguradora_fianca?: string
   apolice_fianca?: string
   parcelas_caucao?: number
@@ -381,6 +383,7 @@ const formVazio = {
   honorarios_aplicavel: '', valor_honorarios: '',
   data_inicio:'', data_fim:'', duracao_meses:'',
   valor_mensal:'', valor_condominio:'', valor_iptu:'', valor_seguro_incendio:'', valor_seguro_fianca:'',
+  comissao_seguro_incendio:'', comissao_seguro_fianca:'',
   seguradora_fianca:'', apolice_fianca:'',
   valor_caucao:'',
   parcelas_caucao: '1',
@@ -1001,6 +1004,10 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
                   <label className="label">Nº da apólice</label>
                   <input className="input" value={form.apolice_fianca} onChange={set('apolice_fianca')} placeholder="Ex: 123456789" />
                 </div>
+                <div>
+                  <label className="label">Comissão mensal da imobiliária (R$)</label>
+                  <InputMoeda value={form.comissao_seguro_fianca} onChange={v => setForm(f => ({...f, comissao_seguro_fianca: v}))} />
+                </div>
               </div>
             </div>
           )}
@@ -1013,6 +1020,8 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
             <InputMoeda value={form.valor_seguro_incendio} onChange={v => setForm(f => ({...f, valor_seguro_incendio: v}))} /></div>
           <div><label className="label">Nº apólice — Seguro incêndio</label>
             <input className="input" value={form.apolice_incendio_numero} onChange={set('apolice_incendio_numero')} /></div>
+          <div><label className="label">Comissão mensal da imobiliária — Seguro incêndio (R$)</label>
+            <InputMoeda value={form.comissao_seguro_incendio} onChange={v => setForm(f => ({...f, comissao_seguro_incendio: v}))} /></div>
 
           <div className="sm:col-span-2">
             <div style={{ background: '#16243a', border: '0.5px solid #1e3a5f' }} className="rounded-lg p-3">
@@ -1730,6 +1739,7 @@ export default function ContratosPage() {
       valor_mensal: c.valor_mensal?.toString()||'', valor_caucao: c.valor_caucao?.toString()||'',
       valor_condominio: c.valor_condominio?.toString()||'', valor_iptu: c.valor_iptu?.toString()||'',
       valor_seguro_incendio: c.valor_seguro_incendio?.toString()||'', valor_seguro_fianca: c.valor_seguro_fianca?.toString()||'',
+      comissao_seguro_incendio: c.comissao_seguro_incendio?.toString()||'', comissao_seguro_fianca: c.comissao_seguro_fianca?.toString()||'',
       seguradora_fianca: c.seguradora_fianca||'', apolice_fianca: c.apolice_fianca||'',
       parcelas_caucao: '1',
       indice_reajuste: c.indice_reajuste||'igpm', mes_reajuste: c.mes_reajuste?.toString()||'1',
@@ -1780,7 +1790,9 @@ export default function ContratosPage() {
       valor_condominio: dados.valor_condominio ? parseFloat(dados.valor_condominio) : 0,
       valor_iptu: dados.valor_iptu ? parseFloat(dados.valor_iptu) : 0,
       valor_seguro_incendio: dados.valor_seguro_incendio ? parseFloat(dados.valor_seguro_incendio) : 0,
+      comissao_seguro_incendio: dados.comissao_seguro_incendio ? parseFloat(dados.comissao_seguro_incendio) : 0,
       valor_seguro_fianca: dados.tipo_garantia === 'seguro_fianca' && dados.valor_seguro_fianca ? parseFloat(dados.valor_seguro_fianca) : 0,
+      comissao_seguro_fianca: dados.tipo_garantia === 'seguro_fianca' && dados.comissao_seguro_fianca ? parseFloat(dados.comissao_seguro_fianca) : 0,
       seguradora_fianca: dados.tipo_garantia === 'seguro_fianca' ? (dados.seguradora_fianca || null) : null,
       apolice_fianca: dados.tipo_garantia === 'seguro_fianca' ? (dados.apolice_fianca || null) : null,
       taxa_administracao: dados.taxa_administracao ? parseFloat(dados.taxa_administracao) : 10,

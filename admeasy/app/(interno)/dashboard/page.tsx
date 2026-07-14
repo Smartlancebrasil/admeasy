@@ -378,11 +378,12 @@ export default function DashboardPage() {
 
   // Fluxo previsto (30 dias): faturamento próprio da imobiliária no mês — soma da
   // comissão de administração + comissão sobre seguro fiança + comissão sobre
-  // seguro incêndio + honorários de locação. As comissões de seguro ainda não
-  // existem no contrato (entram numa fase futura) — fallback 0 até lá.
-  // TODO: fase seguros — substituir quando contratos.comissao_seguro_fianca/incendio existirem.
-  const comissaoSeguroFiancaMesBI = 0
-  const comissaoSeguroIncendioMesBI = 0
+  // seguro incêndio + honorários de locação. As comissões de seguro são valores
+  // fixos por contrato, contadas quando a cobrança do mês foi paga (mesmo
+  // critério já usado pela comissão de administração).
+  const contratoPorId = (contratoId: string) => contratosFiltrados.find(x => x.id === contratoId)
+  const comissaoSeguroFiancaMesBI = useMemo(() => pagasNoMesSel.reduce((acc, c) => acc + (contratoPorId(c.contrato_id)?.comissao_seguro_fianca || 0), 0), [pagasNoMesSel, contratosFiltrados])
+  const comissaoSeguroIncendioMesBI = useMemo(() => pagasNoMesSel.reduce((acc, c) => acc + (contratoPorId(c.contrato_id)?.comissao_seguro_incendio || 0), 0), [pagasNoMesSel, contratosFiltrados])
   const faturamentoProprioMesBI = useMemo(() => ({
     comissaoAdm: comissaoMesBI,
     seguroFianca: comissaoSeguroFiancaMesBI,
@@ -526,7 +527,7 @@ export default function DashboardPage() {
 
     const { data: contratos } = await supabase
       .from('contratos')
-      .select('id, numero, data_fim, data_inicio, status, valor_atual, valor_mensal, taxa_administracao, honorarios_aplicavel, valor_honorarios, locador_id, proximo_reajuste, tipo_garantia, imovel:imoveis(id, titulo, bairro, status), locatario:clientes!contratos_locatario_id_fkey(nome)')
+      .select('id, numero, data_fim, data_inicio, status, valor_atual, valor_mensal, taxa_administracao, honorarios_aplicavel, valor_honorarios, comissao_seguro_incendio, comissao_seguro_fianca, locador_id, proximo_reajuste, tipo_garantia, imovel:imoveis(id, titulo, bairro, status), locatario:clientes!contratos_locatario_id_fkey(nome)')
       .eq('organization_id', orgId)
 
     if (contratos) {
