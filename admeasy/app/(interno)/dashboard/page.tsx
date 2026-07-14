@@ -44,6 +44,8 @@ function mesLabel(mesStr: string) {
   return nomes[parseInt(mes) - 1]
 }
 
+const mesesNomeCompleto = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+
 type LinhaPopup = {
   imovel: string
   locatario: string
@@ -168,6 +170,9 @@ export default function DashboardPage() {
   const [filtroBairro, setFiltroBairro] = useState('')
   const [filtroStatusImovel, setFiltroStatusImovel] = useState('')
   const [popupAberto, setPopupAberto] = useState<PopupKey | null>(null)
+  const [anoSelFiltro, mesSelNumFiltro] = filtroMes.split('-')
+  const anoAtualFiltro = new Date().getFullYear()
+  const anosDisponiveisFiltro = Array.from({ length: 5 }, (_, i) => String(anoAtualFiltro - 2 + i))
 
   const evoChartRef = useRef<HTMLCanvasElement>(null)
   const statusChartRef = useRef<HTMLCanvasElement>(null)
@@ -752,13 +757,22 @@ export default function DashboardPage() {
               <p style={{ color: '#8b8d98' }} className="text-[12px] mt-0.5">Visão gerencial da carteira, contratos, cobranças e repasses</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <input
-                type="month"
-                value={filtroMes}
-                onChange={e => setFiltroMes(e.target.value)}
+              <select
+                value={mesSelNumFiltro}
+                onChange={e => setFiltroMes(`${anoSelFiltro}-${e.target.value}`)}
                 style={{ background: '#161b22', border: '0.5px solid #2a2f3a', color: '#c3c2b7' }}
                 className="rounded-lg px-2.5 py-1.5 text-[11px]"
-              />
+              >
+                {mesesNomeCompleto.map((m, i) => <option key={m} value={String(i + 1).padStart(2, '0')}>{m}</option>)}
+              </select>
+              <select
+                value={anoSelFiltro}
+                onChange={e => setFiltroMes(`${e.target.value}-${mesSelNumFiltro}`)}
+                style={{ background: '#161b22', border: '0.5px solid #2a2f3a', color: '#c3c2b7' }}
+                className="rounded-lg px-2.5 py-1.5 text-[11px]"
+              >
+                {anosDisponiveisFiltro.map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
               <select
                 value={filtroLocador}
                 onChange={e => setFiltroLocador(e.target.value)}
