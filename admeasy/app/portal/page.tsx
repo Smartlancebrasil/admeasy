@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getPortalUser, logoutPortal, alterarSenhaPortal, PortalUser } from '@/lib/portal-auth'
 import { supabase } from '@/lib/supabase'
+import { resolverUrlExibicao } from '@/lib/documentosSignedUrl'
 import { LogOut, Key, Plus, X, Upload, ChevronDown, ChevronUp, FileDown, Copy, Check, AlertCircle, QrCode, Edit2, Hourglass, Calculator, FileText, Download, Building2 } from 'lucide-react'
 
 function formatVal(v: number) {
@@ -307,13 +308,33 @@ function FormularioDemanda({ clienteId, contratoId, organizationId, editando, on
   const [titulo, setTitulo] = useState(editando?.titulo || '')
   const [descricao, setDescricao] = useState(editando?.descricao || '')
   const [urgencia, setUrgencia] = useState(editando?.urgencia || 'media')
-  const [anexos, setAnexos] = useState<{ url: string; nome: string; isImagem: boolean }[]>(
-    (editando?.fotos || []).map(url => ({ url, nome: '', isImagem: true }))
+  // "path" é o que é salvo em demandas.fotos (nunca uma URL pública
+  // permanente — ver docs/STORAGE_PRIVATE_MIGRATION_PROPOSAL.md, seção
+  // "demandas.fotos"). "previewUrl" é só para exibir nesta tela: para
+  // upload novo é um blob local (instantâneo, não depende do bucket ser
+  // público); para anexo já existente é resolvido de forma assíncrona
+  // (signed URL se path, ou a própria URL se for valor legado).
+  const [anexos, setAnexos] = useState<{ path: string; nome: string; isImagem: boolean; previewUrl: string | null }[]>(
+    (editando?.fotos || []).map(valor => ({ path: valor, nome: '', isImagem: true, previewUrl: null }))
   )
   const [uploadando, setUploadando] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
   const [protocoloGerado, setProtocoloGerado] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!editando?.fotos?.length) return
+    let cancelado = false
+    ;(async () => {
+      for (const valor of editando.fotos!) {
+        const url = await resolverUrlExibicao(valor)
+        if (cancelado) return
+        setAnexos(prev => prev.map(a => a.path === valor ? { ...a, previewUrl: url } : a))
+      }
+    })()
+    return () => { cancelado = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function uploadAnexo(file: File) {
     if (anexos.length >= 5) return
@@ -321,8 +342,10 @@ function FormularioDemanda({ clienteId, contratoId, organizationId, editando, on
     const path = `chamados/${organizationId}/${Date.now()}_${file.name}`
     const { data } = await supabase.storage.from('documentos').upload(path, file, { upsert: true })
     if (data) {
-      const { data: url } = supabase.storage.from('documentos').getPublicUrl(path)
-      setAnexos(prev => [...prev, { url: url.publicUrl, nome: file.name, isImagem: file.type.startsWith('image/') }])
+      // Preview local (blob), nunca a URL pública do objeto — funciona
+      // igual esteja o bucket público ou privado, e não persiste nada.
+      const previewUrl = URL.createObjectURL(file)
+      setAnexos(prev => [...prev, { path, nome: file.name, isImagem: file.type.startsWith('image/'), previewUrl }])
     }
     setUploadando(false)
   }
@@ -339,7 +362,7 @@ function FormularioDemanda({ clienteId, contratoId, organizationId, editando, on
       // sobrescreve status/decisão de forma alguma).
       const { error } = await supabase.from('demandas').update({
         titulo, descricao: descricao || null, urgencia,
-        fotos: anexos.map(a => a.url),
+        fotos: anexos.map(a => a.path),
       }).eq('id', editando.id)
       setSalvando(false)
       if (error) { setErro('Erro: ' + error.message); return }
@@ -354,7 +377,7 @@ function FormularioDemanda({ clienteId, contratoId, organizationId, editando, on
       organization_id: organizationId, titulo, descricao: descricao || null, urgencia,
       origem: 'locatario', status: 'aberta', contrato_id: contratoId || null,
       locatario_id: clienteId, data_abertura: new Date().toISOString(),
-      fotos: anexos.map(a => a.url),
+      fotos: anexos.map(a => a.path),
     }]).select('numero').single()
 
     setSalvando(false)
@@ -423,7 +446,8 @@ function FormularioDemanda({ clienteId, contratoId, organizationId, editando, on
               <div className="flex gap-2 flex-wrap mb-2">
                 {anexos.map((a, i) => (
                   <div key={i} style={{ background: '#16243a', border: '0.5px solid #1e3a5f' }} className="relative rounded-lg overflow-hidden">
-                    {a.isImagem ? <img src={a.url} alt="" className="w-16 h-16 object-cover" />
+                    {a.isImagem && a.previewUrl ? <img src={a.previewUrl} alt="" className="w-16 h-16 object-cover" />
+                      : a.isImagem ? <div className="w-16 h-16 flex items-center justify-center"><span className="text-xs" style={{ color: '#5b6472' }}>...</span></div>
                       : <div className="w-16 h-16 flex flex-col items-center justify-center"><span className="text-xl">📄</span></div>}
                     <button type="button" onClick={() => setAnexos(prev => prev.filter((_, fi) => fi !== i))}
                       className="absolute top-0.5 right-0.5 bg-red-500 rounded-full w-4 h-4 flex items-center justify-center">
@@ -458,9 +482,28 @@ function CardDemanda({ d, onEditar, onAprovar, onRecusar, processando }: {
   d: any; onEditar?: (d: any) => void; onAprovar?: (d: any) => void; onRecusar?: (d: any) => void; processando?: boolean
 }) {
   const [aberto, setAberto] = useState(false)
+  // path/URL legada -> URL exibível. Só resolve quando o card é expandido
+  // (evita gerar signed URL para fotos que ninguém vai ver nesta sessão) e
+  // nunca é persistido — é recalculado toda vez que o card abre.
+  const [fotosResolvidas, setFotosResolvidas] = useState<Record<string, string | null>>({})
   const st = statusDemanda[d.status] || statusDemanda.aberta
   const podeEditar = d.status === 'aberta' && !!onEditar
   const podeAprovarOuRecusar = d.status === 'aguardando_locador' && (!!onAprovar || !!onRecusar)
+
+  useEffect(() => {
+    if (!aberto || !d.fotos?.length) return
+    let cancelado = false
+    ;(async () => {
+      for (const valor of d.fotos as string[]) {
+        if (fotosResolvidas[valor] !== undefined) continue
+        const url = await resolverUrlExibicao(valor)
+        if (cancelado) return
+        setFotosResolvidas(prev => ({ ...prev, [valor]: url }))
+      }
+    })()
+    return () => { cancelado = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aberto])
 
   return (
     <div style={{ background: '#0d1b2e', border: '0.5px solid #1e3a5f' }} className="rounded-xl p-4">
@@ -482,11 +525,28 @@ function CardDemanda({ d, onEditar, onAprovar, onRecusar, processando }: {
           {d.descricao && <p style={{ color: '#c3c2b7' }} className="text-sm">{d.descricao}</p>}
           {d.fotos?.length > 0 && (
             <div className="flex gap-2 flex-wrap">
-              {d.fotos.map((url: string, i: number) => (
-                <a key={i} href={url} target="_blank" rel="noopener noreferrer" style={{ background: '#16243a', border: '0.5px solid #1e3a5f' }} className="w-14 h-14 rounded-lg overflow-hidden flex items-center justify-center">
-                  <img src={url} alt="" className="w-full h-full object-cover" onError={(e: any) => { e.target.style.display = 'none' }} />
-                </a>
-              ))}
+              {d.fotos.map((valor: string, i: number) => {
+                const resolvida = fotosResolvidas[valor]
+                if (resolvida === undefined) {
+                  return (
+                    <div key={i} style={{ background: '#16243a', border: '0.5px solid #1e3a5f' }} className="w-14 h-14 rounded-lg flex items-center justify-center">
+                      <span className="text-xs" style={{ color: '#5b6472' }}>...</span>
+                    </div>
+                  )
+                }
+                if (resolvida === null) {
+                  return (
+                    <div key={i} style={{ background: '#16243a', border: '0.5px solid #1e3a5f' }} className="w-14 h-14 rounded-lg flex items-center justify-center">
+                      <span className="text-[9px] text-center px-1" style={{ color: '#5b6472' }}>indisponível</span>
+                    </div>
+                  )
+                }
+                return (
+                  <a key={i} href={resolvida} target="_blank" rel="noopener noreferrer" style={{ background: '#16243a', border: '0.5px solid #1e3a5f' }} className="w-14 h-14 rounded-lg overflow-hidden flex items-center justify-center">
+                    <img src={resolvida} alt="" className="w-full h-full object-cover" onError={(e: any) => { e.target.style.display = 'none' }} />
+                  </a>
+                )
+              })}
             </div>
           )}
           {d.resposta_imobiliaria && (
