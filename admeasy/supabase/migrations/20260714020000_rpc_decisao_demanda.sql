@@ -136,3 +136,27 @@ grant execute on function public.portal_locador_decidir_demanda(uuid, text, text
 -- (funções aprovarDemanda/recusarDemanda, Fase 7) — ver
 -- docs/SECURITY_HARDENING_REVIEW.md, Seção 4, item 3.
 -- ============================================================
+
+-- ============================================================
+-- ROLLBACK (2026-07-15) — SOMENTE DOCUMENTADO, NÃO EXECUTAR
+-- AUTOMATICAMENTE. Aplicar linha a linha, manualmente, só se esta
+-- migration precisar ser revertida depois de já aplicada.
+--
+-- Ordem: esta é a TERCEIRA e ÚLTIMA das três migrations a ser
+-- aplicada (depende de get_portal_organization_id(), criada em
+-- 20260714000000_portal_locador_rls.sql). Por isso, deve ser a
+-- PRIMEIRA a ser revertida, antes de 20260714000000 e de
+-- 20260714010000 — nessa ordem, sempre o inverso da aplicação.
+--
+-- -- Remover a função e a permissão de execução:
+-- revoke execute on function public.portal_locador_decidir_demanda(uuid, text, text) from authenticated;
+-- drop function if exists public.portal_locador_decidir_demanda(uuid, text, text);
+--
+-- IMPORTANTE: se este rollback for aplicado enquanto
+-- app/portal/page.tsx (branch integration/secure-portal-flows, já em
+-- produção) ainda chamar esta RPC, os botões "Aprovar"/"Recusar" do
+-- locador voltam a falhar (mesmo estado descrito em
+-- docs/SECURITY_HARDENING_REVIEW.md sobre a correção temporária de UI)
+-- — reativar a constante RPC_DECISAO_LOCADOR_INDISPONIVEL em
+-- app/portal/page.tsx antes ou junto deste rollback, não depois.
+-- ============================================================

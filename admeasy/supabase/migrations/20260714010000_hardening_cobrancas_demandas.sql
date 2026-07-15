@@ -212,3 +212,33 @@ create trigger trg_preencher_locador_demanda_portal
 --     venha no INSERT, senão um client malicioso poderia declarar um
 --     número de protocolo à mão.
 -- ============================================================
+
+-- ============================================================
+-- ROLLBACK (2026-07-15) — SOMENTE DOCUMENTADO, NÃO EXECUTAR
+-- AUTOMATICAMENTE. Aplicar linha a linha, manualmente, só se esta
+-- migration precisar ser revertida depois de já aplicada.
+--
+-- Ordem: esta é a PRIMEIRA das três migrations a ser aplicada (ver
+-- docs/SECURITY_HARDENING_REVIEW.md, ordem de aplicação), então deve
+-- ser a ÚLTIMA a ser revertida — reverter antes de
+-- 20260714000000_portal_locador_rls.sql e
+-- 20260714020000_rpc_decisao_demanda.sql só depois de reverter as duas.
+--
+-- -- Restaurar cobrancas.portal_locatario_update:
+-- create policy "portal_locatario_update" on public.cobrancas
+--   for update using (locatario_id = public.get_portal_cliente_id())
+--   with check (locatario_id = public.get_portal_cliente_id());
+--
+-- -- Restaurar demandas.portal_locatario (FOR ALL) e remover as 3 novas:
+-- drop policy if exists "portal_locatario_select" on public.demandas;
+-- drop policy if exists "portal_locatario_insert" on public.demandas;
+-- drop policy if exists "portal_locatario_update" on public.demandas;
+-- create policy "portal_locatario" on public.demandas
+--   for all using (locatario_id = public.get_portal_cliente_id());
+--
+-- -- Remover triggers e funções novas:
+-- drop trigger if exists trg_proteger_colunas_demanda_portal on public.demandas;
+-- drop function if exists public.proteger_colunas_demanda_portal();
+-- drop trigger if exists trg_preencher_locador_demanda_portal on public.demandas;
+-- drop function if exists public.preencher_locador_demanda_portal();
+-- ============================================================

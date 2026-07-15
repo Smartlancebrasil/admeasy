@@ -178,3 +178,26 @@ create policy "portal_leitura" on public.vistorias
 --     "aguardando_locador" — sem isso, a política acima nunca mostra
 --     nada pro locador na prática.
 -- ============================================================
+
+-- ============================================================
+-- ROLLBACK (2026-07-15) — SOMENTE DOCUMENTADO, NÃO EXECUTAR
+-- AUTOMATICAMENTE. Aplicar linha a linha, manualmente, só se esta
+-- migration precisar ser revertida depois de já aplicada.
+--
+-- Ordem: esta é a SEGUNDA das três migrations a ser aplicada. A
+-- função get_portal_organization_id() criada aqui é usada pela RPC de
+-- 20260714020000_rpc_decisao_demanda.sql — por isso, reverter esta
+-- migration só é seguro DEPOIS de reverter 20260714020000 primeiro
+-- (senão a RPC fica quebrada, chamando uma função que não existe mais).
+--
+-- -- Remover as políticas de locador/leitura criadas aqui:
+-- drop policy if exists "portal_locador" on public.contratos;
+-- drop policy if exists "portal_locador" on public.demandas;
+-- drop policy if exists "portal_locador_select" on public.cobrancas;
+-- drop policy if exists "portal_leitura" on public.imoveis;
+-- drop policy if exists "portal_leitura" on public.vistorias;
+--
+-- -- Remover a função auxiliar (só depois da RPC de 20260714020000 já
+-- -- ter sido revertida, ver acima):
+-- drop function if exists public.get_portal_organization_id();
+-- ============================================================
