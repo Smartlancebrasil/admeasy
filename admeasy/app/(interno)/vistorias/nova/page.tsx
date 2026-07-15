@@ -6,6 +6,7 @@ import AppLayout from '@/components/layout/AppLayout'
 import { supabase } from '@/lib/supabase'
 import { useOrganization } from '@/lib/OrganizationContext'
 import { resolverUrlExibicao } from '@/lib/documentosSignedUrl'
+import { uploadDocumentoAdministrativo } from '@/lib/documentosAdmin'
 import { Save, Plus, X, Camera, ChevronDown, ChevronUp } from 'lucide-react'
 
 const AMBIENTES_PADRAO = [
@@ -175,15 +176,12 @@ function NovaVistoriaConteudo() {
   async function adicionarFoto(idx: number, file: File) {
     if (ambientes[idx].fotos.length >= 5) return
     if (!organizacao?.id) return
-    const ext = file.name.split('.').pop()
-    const path = `vistorias/${organizacao.id}/${Date.now()}.${ext}`
-    const { data: up } = await supabase.storage.from('documentos').upload(path, file, { upsert: true })
-    if (up) {
-      // Preview local (blob), nunca a URL pública do objeto — funciona
-      // igual esteja o bucket público ou privado, e não persiste nada.
-      const previewUrl = URL.createObjectURL(file)
-      setAmbientes(prev => prev.map((a, i) => i === idx ? { ...a, fotos: [...a.fotos, { path, previewUrl }] } : a))
-    }
+    const resultado = await uploadDocumentoAdministrativo({ file, prefixo: 'vistorias' })
+    if ('erro' in resultado) { alert('Erro ao enviar foto: ' + resultado.erro); return }
+    // Preview local (blob), nunca a URL pública do objeto — funciona
+    // igual esteja o bucket público ou privado, e não persiste nada.
+    const previewUrl = URL.createObjectURL(file)
+    setAmbientes(prev => prev.map((a, i) => i === idx ? { ...a, fotos: [...a.fotos, { path: resultado.path, previewUrl }] } : a))
   }
 
   function removerFoto(ambIdx: number, fotoIdx: number) {
