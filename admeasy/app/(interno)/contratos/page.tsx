@@ -6,6 +6,8 @@ import { supabase } from '@/lib/supabase'
 import { useOrganization } from '@/lib/OrganizationContext'
 import { FileText, Plus, X, AlertTriangle, Edit2, FileDown, UserPlus, Upload, Trash2, Hourglass, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react'
 import { registrarLog } from '@/lib/logs'
+import { resolverUrlExibicao } from '@/lib/documentosSignedUrl'
+import { uploadDocumentoAdministrativo, excluirDocumentoAdministrativo } from '@/lib/documentosAdmin'
 
 type Contrato = {
   id: string
@@ -698,27 +700,26 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
       KIT_CATEGORIAS.map(cat => supabase.storage.from('documentos').list(`contratos/${form.id}/kit/${cat.chave}`))
     )
     const mapa: Record<string, Documento[]> = {}
-    KIT_CATEGORIAS.forEach((cat, i) => {
-      const arquivos = resultados[i].data || []
-      mapa[cat.chave] = arquivos
-        .filter(a => a.id) // storage lista pastas vazias como pseudo-arquivos sem id
-        .map(a => ({
+    await Promise.all(KIT_CATEGORIAS.map(async (cat, i) => {
+      const arquivos = (resultados[i].data || []).filter(a => a.id) // storage lista pastas vazias como pseudo-arquivos sem id
+      mapa[cat.chave] = await Promise.all(arquivos.map(async a => {
+        const path = `contratos/${form.id}/kit/${cat.chave}/${a.name}`
+        return {
           nome: a.name,
-          url: supabase.storage.from('documentos').getPublicUrl(`contratos/${form.id}/kit/${cat.chave}/${a.name}`).data.publicUrl,
+          url: (await resolverUrlExibicao(path)) || '',
           tipo: a.name.split('.').pop() || '',
           created_at: a.created_at || '',
-        }))
-    })
+        }
+      }))
+    }))
     setDocumentos(mapa)
     setLoadingKit(false)
   }
 
   async function uploadKit(chave: string, file: File) {
     setUploadandoKit(chave)
-    const ext = file.name.split('.').pop()
-    const path = `contratos/${form.id}/kit/${chave}/${Date.now()}.${ext}`
-    const { error } = await supabase.storage.from('documentos').upload(path, file)
-    if (error) alert('Erro ao enviar: ' + error.message)
+    const resultado = await uploadDocumentoAdministrativo({ file, prefixo: 'contratos', contratoId: form.id, categoria: chave })
+    if ('erro' in resultado) alert('Erro ao enviar: ' + resultado.erro)
     await carregarKit()
     setUploadandoKit(null)
   }
@@ -726,8 +727,9 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
   async function excluirKit(chave: string, doc: Documento) {
     if (!confirm('Tem certeza que deseja excluir este documento?')) return
     setUploadandoKit(chave)
-    const { error } = await supabase.storage.from('documentos').remove([`contratos/${form.id}/kit/${chave}/${doc.nome}`])
-    if (error) alert('Erro ao excluir: ' + error.message)
+    const path = `contratos/${form.id}/kit/${chave}/${doc.nome}`
+    const resultado = await excluirDocumentoAdministrativo(path)
+    if ('erro' in resultado) alert('Erro ao excluir: ' + resultado.erro)
     await carregarKit()
     setUploadandoKit(null)
   }
