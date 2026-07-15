@@ -477,6 +477,24 @@ function FormularioDemanda({ clienteId, contratoId, organizationId, editando, on
   )
 }
 
+// ── CORREÇÃO TEMPORÁRIA (2026-07-15) ────────────────────────────────
+// aprovarDemanda/recusarDemanda (mais abaixo) já chamam a RPC
+// portal_locador_decidir_demanda (supabase/migrations/20260714020000_rpc_decisao_demanda.sql),
+// que ainda NÃO foi aplicada ao banco de produção — a migration está
+// pronta na branch security/portal-rls-hardening, aguardando merge +
+// aplicação (ver docs/SECURITY_HARDENING_REVIEW.md). Até lá, clicar em
+// "Aprovar"/"Recusar" resultaria num erro do Postgres ("function
+// portal_locador_decidir_demanda does not exist").
+//
+// Em vez de voltar ao UPDATE direto em "demandas" (o problema de
+// segurança que a RPC resolve) ou inventar algum fallback que grave
+// direto na tabela, os dois botões ficam desabilitados com uma
+// mensagem explicando o motivo. Nenhuma lógica de decisão muda —
+// assim que a RPC existir no banco, é só apagar esta constante (e o
+// bloco de mensagem condicional logo abaixo) que tudo volta a
+// funcionar sem tocar em mais nada.
+const RPC_DECISAO_LOCADOR_INDISPONIVEL = true
+
 // ── CARD DEMANDA ──────────────────────────────────────────────────────
 function CardDemanda({ d, onEditar, onAprovar, onRecusar, processando }: {
   d: any; onEditar?: (d: any) => void; onAprovar?: (d: any) => void; onRecusar?: (d: any) => void; processando?: boolean
@@ -573,12 +591,17 @@ function CardDemanda({ d, onEditar, onAprovar, onRecusar, processando }: {
               {d.prazo_estimado && (
                 <p style={{ color: '#8b9ab4' }} className="text-xs">Prazo estimado de conclusão: {formatDate(d.prazo_estimado)}</p>
               )}
+              {RPC_DECISAO_LOCADOR_INDISPONIVEL && (
+                <p style={{ color: '#f59e0b' }} className="text-xs">
+                  Função temporariamente indisponível durante uma atualização de segurança.
+                </p>
+              )}
               <div className="flex gap-2 pt-1">
                 {onAprovar && (
                   <button
-                    disabled={processando}
-                    onClick={(e) => { e.stopPropagation(); onAprovar(d) }}
-                    style={{ background: '#3fb950', color: '#062e0f', opacity: processando ? 0.6 : 1 }}
+                    disabled={processando || RPC_DECISAO_LOCADOR_INDISPONIVEL}
+                    onClick={(e) => { e.stopPropagation(); if (!RPC_DECISAO_LOCADOR_INDISPONIVEL) onAprovar(d) }}
+                    style={{ background: '#3fb950', color: '#062e0f', opacity: (processando || RPC_DECISAO_LOCADOR_INDISPONIVEL) ? 0.5 : 1, cursor: RPC_DECISAO_LOCADOR_INDISPONIVEL ? 'not-allowed' : 'pointer' }}
                     className="text-xs font-semibold px-3 py-1.5 rounded-lg"
                   >
                     {processando ? 'Enviando...' : 'Aprovar orçamento'}
@@ -586,9 +609,9 @@ function CardDemanda({ d, onEditar, onAprovar, onRecusar, processando }: {
                 )}
                 {onRecusar && (
                   <button
-                    disabled={processando}
-                    onClick={(e) => { e.stopPropagation(); onRecusar(d) }}
-                    style={{ border: '0.5px solid #4a2424', color: '#ef4444', opacity: processando ? 0.6 : 1 }}
+                    disabled={processando || RPC_DECISAO_LOCADOR_INDISPONIVEL}
+                    onClick={(e) => { e.stopPropagation(); if (!RPC_DECISAO_LOCADOR_INDISPONIVEL) onRecusar(d) }}
+                    style={{ border: '0.5px solid #4a2424', color: '#ef4444', opacity: (processando || RPC_DECISAO_LOCADOR_INDISPONIVEL) ? 0.5 : 1, cursor: RPC_DECISAO_LOCADOR_INDISPONIVEL ? 'not-allowed' : 'pointer' }}
                     className="text-xs font-semibold px-3 py-1.5 rounded-lg"
                   >
                     Recusar — farei por conta própria
