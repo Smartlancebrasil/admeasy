@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import AppLayout from '@/components/layout/AppLayout'
 import { supabase } from '@/lib/supabase'
 import { useOrganization } from '@/lib/OrganizationContext'
+import { resolverUrlExibicao } from '@/lib/documentosSignedUrl'
 import { Save, Plus, X, Camera, ChevronDown, ChevronUp } from 'lucide-react'
 
 const AMBIENTES_PADRAO = [
@@ -20,7 +21,11 @@ const ITENS_EXTRA = [
   'Armários - Suíte', 'Armários - Cozinha',
 ]
 
-type Foto = { url: string }
+// "path" é o que é salvo em vistorias.ambientes[].fotos[] (nunca URL
+// pública nem signed URL — ver docs/STORAGE_PRIVATE_MIGRATION_PROPOSAL.md,
+// Seção 0.2). "previewUrl" só serve para exibir nesta tela: blob local
+// pra upload novo, signed URL resolvida sob demanda pra foto já existente.
+type Foto = { path: string; previewUrl: string | null }
 type Ambiente = {
   nome: string
   estado: 'bom' | 'regular' | 'ruim' | ''
@@ -89,15 +94,33 @@ function NovaVistoriaConteudo() {
       setTestemunha1Cpf(data.testemunha1_cpf || '')
       setTestemunha2Nome(data.testemunha2_nome || '')
       setTestemunha2Cpf(data.testemunha2_cpf || '')
-      setAmbientes((data.ambientes || []).map((a: any) => ({
+      const ambientesCarregados = (data.ambientes || []).map((a: any) => ({
         nome: a.nome,
         estado: a.estado || '',
         observacao: a.observacao || '',
-        fotos: (a.fotos || []).map((url: string) => ({ url })),
+        fotos: (a.fotos || []).map((valor: string) => ({ path: valor, previewUrl: null })),
         aberto: false,
-      })))
+      }))
+      setAmbientes(ambientesCarregados)
+      resolverPreviewsExistentes(ambientesCarregados)
     }
     setCarregandoEdicao(false)
+  }
+
+  // Resolve os previews das fotos já salvas de forma assíncrona, sem
+  // travar o carregamento da tela. Casa por nome do ambiente + path (não
+  // por índice) pra não gravar num slot errado se o usuário remover uma
+  // foto ou um ambiente enquanto a resolução ainda está em andamento.
+  async function resolverPreviewsExistentes(ambientesCarregados: Ambiente[]) {
+    for (const amb of ambientesCarregados) {
+      for (const foto of amb.fotos) {
+        const url = await resolverUrlExibicao(foto.path)
+        setAmbientes(prev => prev.map(a => a.nome === amb.nome
+          ? { ...a, fotos: a.fotos.map(f => f.path === foto.path ? { ...f, previewUrl: url } : f) }
+          : a
+        ))
+      }
+    }
   }
 
   async function aoSelecionarImovel(id: string) {
@@ -156,8 +179,10 @@ function NovaVistoriaConteudo() {
     const path = `vistorias/${organizacao.id}/${Date.now()}.${ext}`
     const { data: up } = await supabase.storage.from('documentos').upload(path, file, { upsert: true })
     if (up) {
-      const { data: url } = supabase.storage.from('documentos').getPublicUrl(path)
-      setAmbientes(prev => prev.map((a, i) => i === idx ? { ...a, fotos: [...a.fotos, { url: url.publicUrl }] } : a))
+      // Preview local (blob), nunca a URL pública do objeto — funciona
+      // igual esteja o bucket público ou privado, e não persiste nada.
+      const previewUrl = URL.createObjectURL(file)
+      setAmbientes(prev => prev.map((a, i) => i === idx ? { ...a, fotos: [...a.fotos, { path, previewUrl }] } : a))
     }
   }
 
@@ -183,7 +208,7 @@ function NovaVistoriaConteudo() {
         nome: a.nome,
         estado: a.estado,
         observacao: a.observacao,
-        fotos: a.fotos.map(f => f.url),
+        fotos: a.fotos.map(f => f.path),
       })),
       locadores: locadores.filter(l => l.trim()),
       locatarios: locatarios.filter(l => l.trim()),
@@ -405,8 +430,10 @@ function NovaVistoriaConteudo() {
                     <label className="label">Fotos ({amb.fotos.length}/5)</label>
                     <div className="flex gap-2 flex-wrap">
                       {amb.fotos.map((foto, fi) => (
-                        <div key={fi} style={{ border: '0.5px solid #2a2f3a', height: '80px' }} className="relative w-24 rounded-lg overflow-hidden">
-                          <img src={foto.url} alt="" className="w-full h-full object-cover" />
+                        <div key={fi} style={{ border: '0.5px solid #2a2f3a', height: '80px' }} className="relative w-24 rounded-lg overflow-hidden flex items-center justify-center">
+                          {foto.previewUrl
+                            ? <img src={foto.previewUrl} alt="" className="w-full h-full object-cover" />
+                            : <span className="text-xs" style={{ color: '#5b6472' }}>...</span>}
                           <button type="button" onClick={() => removerFoto(idx, fi)}
                             className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center">
                             <X size={10} />

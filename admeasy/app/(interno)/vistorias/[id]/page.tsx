@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation'
 import AppLayout from '@/components/layout/AppLayout'
 import { supabase } from '@/lib/supabase'
 import { useOrganization } from '@/lib/OrganizationContext'
+import { resolverUrlExibicao } from '@/lib/documentosSignedUrl'
 import { FileDown, ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 
@@ -34,6 +35,10 @@ export default function VistoriaDetalhePage() {
   const [vistoria, setVistoria] = useState<Vistoria | null>(null)
   const [org, setOrg] = useState<Org | null>(null)
   const [gerandoPdf, setGerandoPdf] = useState(false)
+  // path/URL legada -> URL exibível, pra galeria em tela (não pro PDF,
+  // que resolve a sua própria signed URL no momento de gerar — ver
+  // gerarPdf()). Nunca persistido, recalculado a cada carregamento.
+  const [fotosResolvidas, setFotosResolvidas] = useState<Record<string, string | null>>({})
 
   useEffect(() => {
     if (organizacao?.id) carregar(organizacao.id)
@@ -46,9 +51,21 @@ export default function VistoriaDetalhePage() {
       .eq('id', id)
       .eq('organization_id', orgId)
       .single()
-    if (data) setVistoria(data)
+    if (data) {
+      setVistoria(data)
+      resolverGaleria(data.ambientes || [])
+    }
     const { data: o } = await supabase.from('organizations').select('*').eq('id', orgId).single()
     if (o) setOrg(o)
+  }
+
+  async function resolverGaleria(ambientes: Ambiente[]) {
+    const valores = new Set<string>()
+    for (const amb of ambientes) for (const f of amb.fotos || []) valores.add(f)
+    for (const valor of Array.from(valores)) {
+      const url = await resolverUrlExibicao(valor)
+      setFotosResolvidas(prev => ({ ...prev, [valor]: url }))
+    }
   }
 
   function dataExtenso(dateStr: string) {
@@ -177,14 +194,24 @@ export default function VistoriaDetalhePage() {
           checkY(fotoH + gap)
 
           try {
-            const resp = await fetch(amb.fotos[fi])
+            // Nunca faz fetch direto no valor salvo (pode ser path, não
+            // uma URL fetchável, ou uma URL pública que já não existe mais
+            // depois do bucket virar privado). Sempre resolve uma signed
+            // URL pelo servidor primeiro — a mesma rota que já valida
+            // organização e vínculo real da vistoria (ver
+            // app/api/documentos/url-assinada/route.ts) — usa ela só pra
+            // baixar o binário e embutir no PDF, nunca grava a signed URL
+            // em lugar nenhum.
+            const urlResolvida = await resolverUrlExibicao(amb.fotos[fi])
+            if (!urlResolvida) throw new Error('sem acesso à foto')
+            const resp = await fetch(urlResolvida)
             const blob = await resp.blob()
             const b64 = await new Promise<string>(res => {
               const r = new FileReader()
               r.onload = () => res((r.result as string).split(',')[1])
               r.readAsDataURL(blob)
             })
-            const ext = amb.fotos[fi].includes('.png') ? 'PNG' : 'JPEG'
+            const ext = amb.fotos[fi].toLowerCase().includes('.png') ? 'PNG' : 'JPEG'
             doc.addImage(b64, ext, fx, fy, fotoW, fotoH)
           } catch {}
           fx += fotoW + gap
@@ -313,9 +340,16 @@ export default function VistoriaDetalhePage() {
               )}
               {amb.fotos?.length > 0 && (
                 <div className="flex gap-2 flex-wrap">
-                  {amb.fotos.map((url, fi) => (
-                    <img key={fi} src={url} alt="" style={{ border: '0.5px solid #2a2f3a', width: '90px', height: '70px' }} className="object-cover rounded-lg" />
-                  ))}
+                  {amb.fotos.map((valor, fi) => {
+                    const resolvida = fotosResolvidas[valor]
+                    return (
+                      <div key={fi} style={{ border: '0.5px solid #2a2f3a', width: '90px', height: '70px', background: '#161b22' }} className="rounded-lg overflow-hidden flex items-center justify-center">
+                        {resolvida
+                          ? <img src={resolvida} alt="" style={{ width: '90px', height: '70px' }} className="object-cover" />
+                          : <span className="text-xs" style={{ color: '#5b6472' }}>{resolvida === null ? 'indisponível' : '...'}</span>}
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </div>
