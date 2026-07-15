@@ -5,6 +5,8 @@ import AppLayout from '@/components/layout/AppLayout'
 import { supabase } from '@/lib/supabase'
 import { useOrganization } from '@/lib/OrganizationContext'
 import { Plus, X, Upload, Trash2, ExternalLink, CheckCircle, XCircle, Clock, Search, FileText, Eye, Copy } from 'lucide-react'
+import { resolverUrlExibicao } from '@/lib/documentosSignedUrl'
+import { uploadDocumentoAdministrativo, excluirDocumentoAdministrativo } from '@/lib/documentosAdmin'
 
 type Cliente = { id: string; nome: string; cpf?: string; telefone?: string; email?: string }
 type Contrato = { id: string; numero: string; imovel?: any }
@@ -87,10 +89,13 @@ export default function AnaliseCadastralPage() {
   async function carregarDocumentos(analiseId: string) {
     const { data } = await supabase.storage.from('documentos').list(`analises/${analiseId}`)
     if (data) {
-      setDocumentos(data.map(f => ({
-        nome: f.name,
-        url: supabase.storage.from('documentos').getPublicUrl(`analises/${analiseId}/${f.name}`).data.publicUrl,
-        tipo: f.name.split('.').pop() || '',
+      setDocumentos(await Promise.all(data.map(async f => {
+        const path = `analises/${analiseId}/${f.name}`
+        return {
+          nome: f.name,
+          url: (await resolverUrlExibicao(path)) || '',
+          tipo: f.name.split('.').pop() || '',
+        }
       })))
     } else setDocumentos([])
   }
@@ -131,15 +136,19 @@ export default function AnaliseCadastralPage() {
   async function uploadDocumento(file: File) {
     if (!analiseAberta) return
     setUploadando(true)
-    const path = `analises/${analiseAberta.id}/${Date.now()}_${file.name}`
-    const { error } = await supabase.storage.from('documentos').upload(path, file, { upsert: true })
-    if (!error) { setSucesso('Documento enviado!'); setTimeout(() => setSucesso(''), 3000); carregarDocumentos(analiseAberta.id) }
+    const resultado = await uploadDocumentoAdministrativo({ file, prefixo: 'analises', analiseId: analiseAberta.id })
+    if ('erro' in resultado) {
+      alert('Erro ao enviar: ' + resultado.erro)
+    } else {
+      setSucesso('Documento enviado!'); setTimeout(() => setSucesso(''), 3000); carregarDocumentos(analiseAberta.id)
+    }
     setUploadando(false)
   }
 
   async function excluirDocumento(nome: string) {
     if (!analiseAberta || !confirm('Excluir documento?')) return
-    await supabase.storage.from('documentos').remove([`analises/${analiseAberta.id}/${nome}`])
+    const resultado = await excluirDocumentoAdministrativo(`analises/${analiseAberta.id}/${nome}`)
+    if ('erro' in resultado) alert('Erro ao excluir: ' + resultado.erro)
     carregarDocumentos(analiseAberta.id)
   }
 

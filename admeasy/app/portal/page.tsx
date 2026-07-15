@@ -477,6 +477,24 @@ function FormularioDemanda({ clienteId, contratoId, organizationId, editando, on
   )
 }
 
+// ── CORREÇÃO TEMPORÁRIA (2026-07-15) ────────────────────────────────
+// aprovarDemanda/recusarDemanda (mais abaixo) já chamam a RPC
+// portal_locador_decidir_demanda (supabase/migrations/20260714020000_rpc_decisao_demanda.sql),
+// que ainda NÃO foi aplicada ao banco de produção — a migration está
+// pronta na branch security/portal-rls-hardening, aguardando merge +
+// aplicação (ver docs/SECURITY_HARDENING_REVIEW.md). Até lá, clicar em
+// "Aprovar"/"Recusar" resultaria num erro do Postgres ("function
+// portal_locador_decidir_demanda does not exist").
+//
+// Em vez de voltar ao UPDATE direto em "demandas" (o problema de
+// segurança que a RPC resolve) ou inventar algum fallback que grave
+// direto na tabela, os dois botões ficam desabilitados com uma
+// mensagem explicando o motivo. Nenhuma lógica de decisão muda —
+// assim que a RPC existir no banco, é só apagar esta constante (e o
+// bloco de mensagem condicional logo abaixo) que tudo volta a
+// funcionar sem tocar em mais nada.
+const RPC_DECISAO_LOCADOR_INDISPONIVEL = true
+
 // ── CARD DEMANDA ──────────────────────────────────────────────────────
 function CardDemanda({ d, onEditar, onAprovar, onRecusar, processando }: {
   d: any; onEditar?: (d: any) => void; onAprovar?: (d: any) => void; onRecusar?: (d: any) => void; processando?: boolean
@@ -573,12 +591,17 @@ function CardDemanda({ d, onEditar, onAprovar, onRecusar, processando }: {
               {d.prazo_estimado && (
                 <p style={{ color: '#8b9ab4' }} className="text-xs">Prazo estimado de conclusão: {formatDate(d.prazo_estimado)}</p>
               )}
+              {RPC_DECISAO_LOCADOR_INDISPONIVEL && (
+                <p style={{ color: '#f59e0b' }} className="text-xs">
+                  Função temporariamente indisponível durante uma atualização de segurança.
+                </p>
+              )}
               <div className="flex gap-2 pt-1">
                 {onAprovar && (
                   <button
-                    disabled={processando}
-                    onClick={(e) => { e.stopPropagation(); onAprovar(d) }}
-                    style={{ background: '#3fb950', color: '#062e0f', opacity: processando ? 0.6 : 1 }}
+                    disabled={processando || RPC_DECISAO_LOCADOR_INDISPONIVEL}
+                    onClick={(e) => { e.stopPropagation(); if (!RPC_DECISAO_LOCADOR_INDISPONIVEL) onAprovar(d) }}
+                    style={{ background: '#3fb950', color: '#062e0f', opacity: (processando || RPC_DECISAO_LOCADOR_INDISPONIVEL) ? 0.5 : 1, cursor: RPC_DECISAO_LOCADOR_INDISPONIVEL ? 'not-allowed' : 'pointer' }}
                     className="text-xs font-semibold px-3 py-1.5 rounded-lg"
                   >
                     {processando ? 'Enviando...' : 'Aprovar orçamento'}
@@ -586,9 +609,9 @@ function CardDemanda({ d, onEditar, onAprovar, onRecusar, processando }: {
                 )}
                 {onRecusar && (
                   <button
-                    disabled={processando}
-                    onClick={(e) => { e.stopPropagation(); onRecusar(d) }}
-                    style={{ border: '0.5px solid #4a2424', color: '#ef4444', opacity: processando ? 0.6 : 1 }}
+                    disabled={processando || RPC_DECISAO_LOCADOR_INDISPONIVEL}
+                    onClick={(e) => { e.stopPropagation(); if (!RPC_DECISAO_LOCADOR_INDISPONIVEL) onRecusar(d) }}
+                    style={{ border: '0.5px solid #4a2424', color: '#ef4444', opacity: (processando || RPC_DECISAO_LOCADOR_INDISPONIVEL) ? 0.5 : 1, cursor: RPC_DECISAO_LOCADOR_INDISPONIVEL ? 'not-allowed' : 'pointer' }}
                     className="text-xs font-semibold px-3 py-1.5 rounded-lg"
                   >
                     Recusar — farei por conta própria
@@ -705,10 +728,10 @@ function PainelLocador({ user }: { user: PortalUser }) {
       await Promise.all(cont.data.map(async (c: any) => {
         docsPorContrato[c.id] = await Promise.all(KIT_DOC_CATEGORIAS_LOCADOR.map(async cat => {
           const { data } = await supabase.storage.from('documentos').list(`contratos/${c.id}/kit/${cat.chave}`)
-          const arquivos = (data || []).filter(a => a.id).map(a => ({
+          const arquivos = await Promise.all((data || []).filter(a => a.id).map(async a => ({
             nome: a.name,
-            url: supabase.storage.from('documentos').getPublicUrl(`contratos/${c.id}/kit/${cat.chave}/${a.name}`).data.publicUrl,
-          }))
+            url: (await resolverUrlExibicao(`contratos/${c.id}/kit/${cat.chave}/${a.name}`)) || '',
+          })))
           return { ...cat, arquivos }
         }))
       }))
@@ -718,18 +741,42 @@ function PainelLocador({ user }: { user: PortalUser }) {
     setLoading(false)
   }
 
+  // Aprovar/recusar não é mais um UPDATE direto em "demandas" — a policy
+  // do locador nessa tabela é só SELECT (ver
+  // supabase/migrations/20260714000000_portal_locador_rls.sql). A decisão
+  // passa pela RPC security definer
+  // portal_locador_decidir_demanda (supabase/migrations/20260714020000_rpc_decisao_demanda.sql),
+  // que valida vínculo real e estado antes de aplicar.
   async function aprovarDemanda(d: any) {
     setProcessando(d.id)
-    await supabase.from('demandas').update({ status: 'autorizada' }).eq('id', d.id)
-    setDemandas(prev => prev.map(x => x.id === d.id ? { ...x, status: 'autorizada' } : x))
+    const { error } = await supabase.rpc('portal_locador_decidir_demanda', {
+      p_demanda_id: d.id,
+      p_decisao: 'autorizada',
+      p_justificativa: null,
+    })
+    if (error) {
+      alert('Não foi possível aprovar: ' + error.message)
+    } else {
+      setDemandas(prev => prev.map(x => x.id === d.id ? { ...x, status: 'autorizada' } : x))
+    }
     setProcessando(null)
   }
 
   async function recusarDemanda(d: any) {
-    if (!confirm('Recusar o orçamento da imobiliária? Isso indica que você vai resolver por conta própria.')) return
+    const motivo = prompt('Motivo da recusa (obrigatório) — isso indica que você vai resolver por conta própria:')
+    if (motivo === null) return // cancelado
+    if (!motivo.trim()) { alert('É necessário informar um motivo para recusar.'); return }
     setProcessando(d.id)
-    await supabase.from('demandas').update({ status: 'recusada' }).eq('id', d.id)
-    setDemandas(prev => prev.map(x => x.id === d.id ? { ...x, status: 'recusada' } : x))
+    const { error } = await supabase.rpc('portal_locador_decidir_demanda', {
+      p_demanda_id: d.id,
+      p_decisao: 'recusada',
+      p_justificativa: motivo.trim(),
+    })
+    if (error) {
+      alert('Não foi possível recusar: ' + error.message)
+    } else {
+      setDemandas(prev => prev.map(x => x.id === d.id ? { ...x, status: 'recusada' } : x))
+    }
     setProcessando(null)
   }
 
@@ -827,10 +874,10 @@ function PainelLocatario({ user }: { user: PortalUser }) {
         [{ chave: 'contrato_assinado', label: 'Contrato de locação assinado' }, { chave: 'laudo_vistoria', label: 'Laudo de vistoria assinado' }]
           .map(async cat => {
             const { data } = await supabase.storage.from('documentos').list(`contratos/${cont.data.id}/kit/${cat.chave}`)
-            const arquivos = (data || []).filter(a => a.id).map(a => ({
+            const arquivos = await Promise.all((data || []).filter(a => a.id).map(async a => ({
               nome: a.name,
-              url: supabase.storage.from('documentos').getPublicUrl(`contratos/${cont.data.id}/kit/${cat.chave}/${a.name}`).data.publicUrl,
-            }))
+              url: (await resolverUrlExibicao(`contratos/${cont.data.id}/kit/${cat.chave}/${a.name}`)) || '',
+            })))
             return { ...cat, arquivos }
           })
       )
@@ -882,8 +929,13 @@ function PainelLocatario({ user }: { user: PortalUser }) {
       if (!res.ok) {
         setErroBoleto(data.erro || 'Erro ao gerar boleto.')
       } else {
+        // Não grava mp_payment_id aqui — /api/boleto já persiste isso (e
+        // boleto_url/linha digitável/pix) via service role antes de
+        // responder. Um UPDATE direto aqui era redundante e, por rodar com
+        // o token do próprio locatário, dependia de uma policy de UPDATE
+        // em cobrancas que a migration de hardening remove
+        // (portal_locatario_update, ver docs/SECURITY_HARDENING_REVIEW.md).
         setBoletoGerado(data)
-        await supabase.from('cobrancas').update({ mp_payment_id: data.id }).eq('id', c.id)
       }
     } catch (err) {
       setErroBoleto('Erro de conexão. Tente novamente.')
