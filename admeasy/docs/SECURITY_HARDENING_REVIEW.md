@@ -6,6 +6,156 @@ ler ou alterar dado de aplicação. Nenhum commit, push ou deploy foi
 feito.** Este documento consolida a análise, a estratégia em duas etapas e
 os artefatos criados, aguardando aprovação.
 
+## 🔴 Addendum — correção do gap crítico em `demandas.portal_locatario_insert` (2026-07-15, revisado)
+
+### Contexto
+
+A auditoria estática final da branch `security/portal-rls-hardening` (já
+mergeada na `main` via PR #25) encontrou um achado **crítico** não
+detectado nas revisões anteriores: a policy `portal_locatario_insert`
+em `demandas` (criada em `20260714010000_hardening_cobrancas_demandas.sql`)
+nunca valida `organization_id` no `WITH CHECK` — só confere
+`locatario_id`. Um locatário autenticado podia, via chamada REST
+direta (fora do app), inserir uma demanda informando um
+`organization_id` de **outra organização**, injetando dado num tenant
+alheio — a linha passaria a aparecer no painel de staff dessa
+organização, controlada por alguém de fora dela.
+
+Numa segunda passada (corrigindo o achado acima), apareceu um achado
+adicional no mesmo lugar: `imovel_id` só era sobrescrito pela trigger
+quando já vinha nulo do client — se o client mandasse um `contrato_id`
+inválido **mas também** um `imovel_id` próprio, esse `imovel_id`
+sobrevivia sem nenhuma validação.
+
+### Causa raiz
+
+Três camadas deveriam ter travado isso e nenhuma travava, para os dois
+achados:
+1. A trigger `preencher_locador_demanda_portal` (mesma migration) só
+   sobrescrevia `locador_id`/`imovel_id`, e só **condicionalmente**
+   (só quando um contrato válido era encontrado) — nunca tocava em
+   `organization_id` nem em `locatario_id`, e deixava `imovel_id`
+   como o client mandou sempre que o contrato não validasse.
+2. A policy `portal_locatario_insert` valida a posse do `contrato_id`
+   (`c.locatario_id = get_portal_cliente_id()`), mas **nunca comparava
+   `organization_id`** nem `imovel_id`/`locador_id` da linha sendo
+   inserida com o contrato referenciado.
+3. Nenhuma camada rejeitava `contrato_id` nulo — uma demanda "solta"
+   (sem contrato) sempre foi silenciosamente aceita.
+
+O gap não estava nas policies do locador (`20260714000000`) nem na RPC
+(`20260714020000`) — ambas já validavam organização desde a criação.
+
+### Demandas sem contrato existem no fluxo real? Não — investigado antes de corrigir
+
+Antes de decidir rejeitar `contrato_id` nulo, revisei
+`app/portal/page.tsx`: o formulário de nova demanda sempre monta
+`contratoId={contrato?.id||''}`, onde `contrato` vem de
+`.eq('locatario_id', user.cliente_id).in('status', ['ativo','pendente']).maybeSingle()`.
+**Não existe nenhum fluxo de produto que crie demanda deliberadamente
+sem contrato.** O único jeito de `contrato_id` chegar nulo/inválido é
+um caso de borda do frontend: `contrato` ainda carregando quando o
+usuário abre o formulário, ou o contrato do locatário já não está mais
+`'ativo'`/`'pendente'` mas o acesso ao portal não foi revogado. Por
+isso a correção passa a **rejeitar** esse caso no banco, em vez de
+inventar uma regra nova para "demanda sem contrato".
+
+### Correção — não editar migration já mergeada
+
+Como `20260714010000` já foi mergeada e pode já ter sido aplicada em
+outros ambientes, a correção é uma **migration nova e separada**:
+`supabase/migrations/20260715000000_fix_portal_demanda_organization.sql`
+(branch `hotfix/rls-demandas-organization`, **não commitada, não
+aplicada, aguardando autorização**).
+
+O que ela faz agora (versão revisada):
+- `preencher_locador_demanda_portal()`: para usuários do portal,
+  **rejeita o INSERT inteiro** (`RAISE EXCEPTION`) se `contrato_id` for
+  nulo, ou se o contrato não existir/não pertencer ao mesmo locatário
+  e à mesma organização. Se o contrato validar, sobrescreve
+  **incondicionalmente** os quatro campos de confiança —
+  `locatario_id`, `organization_id`, `locador_id`, `imovel_id` — todos
+  a partir do contrato/cliente reais, nunca do que o client enviou.
+  Não existe mais nenhum caminho onde um desses quatro campos sobrevive
+  do jeito que o client mandou.
+- `portal_locatario_insert`: exige `organization_id = get_portal_organization_id()`,
+  `contrato_id is not null`, e que o contrato referenciado tenha o
+  mesmo `locatario_id`, `organization_id`, `imovel_id` e `locador_id`
+  da linha sendo inserida — os quatro (cinco, incluindo `locador_id`)
+  campos precisam ser consistentes entre si, não só cada um
+  isoladamente "parecer" válido.
+- Garante `get_portal_organization_id()` via `CREATE OR REPLACE`
+  idempotente — elimina a dependência de ordem com
+  `20260714000000_portal_locador_rls.sql`.
+- Trava de segurança: um bloco `DO $$ ... RAISE EXCEPTION` no início
+  falha alto se `20260714010000` ainda não foi aplicada.
+- Não mexe em `org_isolation`, não concede `DELETE`, não amplia
+  `UPDATE` — escopo estritamente limitado aos dois gaps encontrados.
+
+### Impacto no frontend (não corrigido nesta migration)
+
+A partir da aplicação desta correção, o INSERT de uma demanda sem
+`contrato_id` válido passa a falhar com exceção — hoje isso aconteceria
+silenciosamente (demanda "solta" era aceita). Recomendo, como follow-up
+de frontend separado (fora do escopo desta migration): desabilitar ou
+ocultar o botão "Nova solicitação" quando `contrato` for `null`, e
+tratar o erro dessa exceção com uma mensagem amigável em vez de deixar
+aparecer um erro genérico de banco.
+
+### Nova ordem de aplicação (atualizada)
+
+```
+20260714010000_hardening_cobrancas_demandas.sql
+20260715000000_fix_portal_demanda_organization.sql   ← nova, aplicar logo em seguida
+20260714000000_portal_locador_rls.sql
+20260714020000_rpc_decisao_demanda.sql
+```
+
+A correção não depende de `20260714000000` ter rodado antes (garante
+sua própria cópia de `get_portal_organization_id()`), mas depende
+estritamente de `20260714010000` já ter rodado (a trava de segurança
+do item acima impede aplicar fora dessa ordem).
+
+**Regra operacional**: se `20260714010000` for reaplicada sozinha
+depois desta correção (por exemplo, num ambiente novo que rode todas
+as migrations do zero fora de ordem), ela reintroduz a versão
+vulnerável da função/policy — `20260715000000` precisa ser reaplicada
+logo em seguida sempre que isso acontecer.
+
+### Rollback
+
+Documentado no próprio arquivo, comentado, não executável
+automaticamente — reverte para o estado (já conhecido como
+vulnerável) de `20260714010000`. Não remove
+`get_portal_organization_id()` no rollback, já que `20260714000000` e
+a RPC podem depender dela.
+
+### Testes necessários antes de aplicar
+
+1. Como locatário, tentar inserir uma demanda com `organization_id` de
+   outra organização via REST direto (não pelo app), com um
+   `contrato_id` válido — esperado: a linha é gravada com o
+   `organization_id`/`imovel_id`/`locador_id` reais do contrato, o
+   valor enviado é ignorado.
+2. Repetir o teste 1 com `contrato_id` nulo — esperado: `INSERT`
+   rejeitado com a exceção "É necessário informar um contrato válido...".
+3. Repetir com `contrato_id` de outro locatário ou de outra
+   organização — esperado: rejeitado com "Contrato inválido ou não
+   vinculado a este usuário.".
+4. Repetir enviando um `imovel_id` próprio junto com um `contrato_id`
+   inválido — esperado: rejeitado (não silenciosamente aceito com o
+   `imovel_id` forjado).
+5. Fluxo legítimo do app (criar demanda pelo Portal do locatário, com
+   o contrato real do usuário) — confirmar que continua funcionando
+   exatamente como antes.
+6. Simular o caso de borda do frontend (contrato `null` no momento do
+   envio) — confirmar que o erro aparece de forma tratável (mesmo que
+   feio, sem quebrar a página) — e priorizar o follow-up de frontend
+   antes de aplicar em produção.
+7. Reaplicar a migration duas vezes seguidas — confirmar idempotência.
+8. Aplicar sem `20260714010000` ter rodado antes — confirmar que a
+   trava de segurança falha com a mensagem esperada, não silenciosamente.
+
 ## 🟢 Addendum — nomes reais de `cobrancas`/`demandas` confirmados ao vivo (2026-07-15)
 
 Você rodou a consulta somente-leitura em `pg_policies` que eu pedi no

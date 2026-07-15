@@ -315,6 +315,28 @@ qualquer mudança de status/orçamento passa a exigir RPC (ver Seção 7).
 > segue com a mesma recomendação), não um UPDATE direto. **Ainda não
 > aplicada.**
 
+> 🔴 **Atualizado de novo em 2026-07-15 (auditoria pós-merge, revisado)**:
+> a correção acima, ao trocar `portal_locatario` por
+> `portal_locatario_insert`, introduziu dois gaps não detectados na
+> hora: (1) crítico — o `WITH CHECK` nunca validava `organization_id`,
+> só `locatario_id`, permitindo um locatário inserir demanda em
+> **outra organização** via REST direto; (2) adicional — `imovel_id`
+> só era sobrescrito quando já vinha nulo do client, sobrevivendo sem
+> validação se enviado junto com um `contrato_id` inválido. Corrigidos
+> juntos em migration separada:
+> `supabase/migrations/20260715000000_fix_portal_demanda_organization.sql`
+> (branch `hotfix/rls-demandas-organization`) — a trigger
+> `preencher_locador_demanda_portal` passa a **rejeitar o INSERT**
+> quando `contrato_id` é nulo ou inválido (investigado: não existe
+> fluxo de produto que crie demanda sem contrato, só um caso de borda
+> de frontend — ver `docs/SECURITY_HARDENING_REVIEW.md`), e, quando o
+> contrato é válido, sobrescreve incondicionalmente `locatario_id`,
+> `organization_id`, `locador_id` e `imovel_id` — nunca aceita nenhum
+> desses quatro campos do jeito que o client enviou. A policy passa a
+> exigir os quatro (cinco, com `locador_id`) campos consistentes entre
+> si. Detalhe completo em `docs/SECURITY_HARDENING_REVIEW.md`. **Ainda
+> não commitada, não aplicada.**
+
 ### `portal_proprio_registro` em `clientes` — ok, mas leitura ampla da própria linha
 
 `for select using (usuario_portal_id = auth.uid())`, sem restringir
