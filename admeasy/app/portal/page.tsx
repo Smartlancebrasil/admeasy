@@ -299,6 +299,17 @@ function ModalRescisao({ contrato, onFechar }: { contrato: any; onFechar: () => 
   )
 }
 
+// Traduz o erro do Postgres/Supabase para uma mensagem amigável, sem
+// expor código/detalhe técnico ao locatário. Os dois primeiros casos
+// vêm das exceções da trigger preencher_locador_demanda_portal
+// (supabase/migrations/20260715000000_fix_portal_demanda_organization.sql)
+// que rejeita a criação de demanda sem contrato válido.
+function mensagemErroDemanda(error: any): string {
+  if (error?.code === '23514') return 'Não há contrato ativo disponível para abrir uma solicitação.'
+  if (error?.code === '42501') return 'Não foi possível vincular esta solicitação ao seu contrato. Fale com a imobiliária.'
+  return 'Não foi possível enviar sua solicitação agora. Tente novamente em instantes.'
+}
+
 // ── FORMULÁRIO DE DEMANDA (abrir nova ou editar uma "aberta") ─────────
 function FormularioDemanda({ clienteId, contratoId, organizationId, editando, onSalvar, onFechar }: {
   clienteId: string; contratoId: string; organizationId: string
@@ -353,10 +364,10 @@ function FormularioDemanda({ clienteId, contratoId, organizationId, editando, on
   async function enviar(e: React.FormEvent) {
     e.preventDefault()
     if (!titulo.trim()) { setErro('Informe o assunto.'); return }
-    setSalvando(true)
-    setErro('')
 
     if (editando) {
+      setSalvando(true)
+      setErro('')
       // Edição só é permitida enquanto a demanda ainda está "aberta" (a tela
       // que chama este formulário já garante isso, mas a query abaixo não
       // sobrescreve status/decisão de forma alguma).
@@ -365,10 +376,23 @@ function FormularioDemanda({ clienteId, contratoId, organizationId, editando, on
         fotos: anexos.map(a => a.path),
       }).eq('id', editando.id)
       setSalvando(false)
-      if (error) { setErro('Erro: ' + error.message); return }
+      if (error) { setErro(mensagemErroDemanda(error)); return }
       onSalvar(); onFechar()
       return
     }
+
+    // Nunca tenta criar uma demanda nova sem contrato — o banco já rejeita
+    // isso (ver mensagemErroDemanda), mas checar aqui evita até a chamada
+    // de rede e cobre o caso do botão "Nova solicitação" ser acionado por
+    // algum caminho que não passou pelo disabled (ex.: contrato mudando de
+    // estado entre o clique e o envio do formulário).
+    if (!contratoId) {
+      setErro('Não há contrato ativo disponível para abrir uma solicitação.')
+      return
+    }
+
+    setSalvando(true)
+    setErro('')
 
     // Nova demanda: "numero" (protocolo) não é enviado — o gatilho no banco
     // preenche sozinho. Usamos .select() para ler de volta o protocolo
@@ -381,7 +405,7 @@ function FormularioDemanda({ clienteId, contratoId, organizationId, editando, on
     }]).select('numero').single()
 
     setSalvando(false)
-    if (error) { setErro('Erro: ' + error.message); return }
+    if (error) { setErro(mensagemErroDemanda(error)); return }
     setProtocoloGerado(data?.numero || null)
   }
 
@@ -1223,10 +1247,24 @@ function PainelLocatario({ user }: { user: PortalUser }) {
 
       {aba === 'demandas' && (
         <div>
-          <button onClick={() => setModalDemanda(true)} style={{ background: '#1A7FFF' }}
-            className="w-full py-3 rounded-xl text-white text-sm font-semibold mb-4 flex items-center justify-center gap-2">
+          {/* "loading" já é tratado pelo "if (loading) return ..." no topo do
+              componente — quando chegamos aqui, contrato já terminou de
+              carregar (populado ou null). O botão fica desabilitado quando
+              não existe contrato ativo/pendente ("contrato" só é preenchido
+              nesse caso — ver a query em carregar()), para nunca deixar
+              tentar abrir uma solicitação sem contrato válido. */}
+          <button
+            onClick={() => { if (contrato?.id) setModalDemanda(true) }}
+            disabled={!contrato?.id}
+            style={{ background: '#1A7FFF', opacity: contrato?.id ? 1 : 0.5, cursor: contrato?.id ? 'pointer' : 'not-allowed' }}
+            className="w-full py-3 rounded-xl text-white text-sm font-semibold mb-2 flex items-center justify-center gap-2">
             <Plus size={15} />Nova solicitação
           </button>
+          {!contrato?.id && (
+            <p style={{ color: '#f59e0b' }} className="text-xs text-center mb-4">
+              Não há contrato ativo disponível para abrir uma solicitação.
+            </p>
+          )}
           {demandas.length === 0
             ? <p style={{ color: '#8b9ab4' }} className="text-sm text-center py-10">Nenhuma solicitação enviada ainda.</p>
             : <div className="space-y-3">{demandas.map(d => <CardDemanda key={d.id} d={d} onEditar={setDemandaEditando} />)}</div>
