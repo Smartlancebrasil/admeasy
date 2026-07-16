@@ -25,26 +25,38 @@
 //     evita pegar credencial de produção por um nome de arquivo errado.
 //   - Por padrão roda em modo DRY-RUN (só imprime o que faria). Só
 //     grava com a flag --confirmo-homologacao.
-//   - Imprime o host da URL alvo (nunca as chaves) pra você confirmar
-//     visualmente que é mesmo o projeto de homologação antes de
-//     continuar.
+//   - NENHUMA senha fica escrita no código deste script. As 3 senhas de
+//     teste vêm exclusivamente de HOMOLOG_STAFF_PASSWORD /
+//     HOMOLOG_LOCADOR_PASSWORD / HOMOLOG_LOCATARIO_PASSWORD, lidas de
+//     .env.homolog.local — o script aborta se qualquer uma estiver vazia.
+//   - EXPECTED_HOMOLOG_PROJECT_REF (também só em .env.homolog.local) é
+//     obrigatório e precisa bater EXATAMENTE com o project ref extraído
+//     de NEXT_PUBLIC_SUPABASE_URL — aborta se estiver vazio ou se não
+//     bater. Isso é a checagem principal de "estou no projeto certo";
+//     imprimir o host sozinho (como antes) dependia de conferência
+//     visual manual, esta é uma trava automática.
 //   - BLOQUEIA (mesmo em dry-run) se o host alvo bater com o project
 //     ref de produção documentado em DEPLOY.md — lido em tempo de
 //     execução daquele arquivo, nunca copiado/hardcoded aqui, pra não
-//     duplicar o dado em mais um lugar do repositório.
+//     duplicar o dado em mais um lugar do repositório. Mantido como
+//     camada adicional, independente da checagem de
+//     EXPECTED_HOMOLOG_PROJECT_REF acima.
 //   - Cria os 3 usuários de teste via Auth Admin API (mesmo padrão já
 //     usado em app/api/cadastro/route.ts e
 //     app/api/portal/gerenciar-acesso/route.ts) — nunca insere direto
 //     em auth.users.
-//   - Nenhum segredo embutido no código — as duas chaves e a URL só
-//     existem em .env.homolog.local (gitignored), nunca neste arquivo.
+//   - Nenhum segredo embutido no código — as chaves, a URL, as 3 senhas
+//     e o project ref esperado só existem em .env.homolog.local
+//     (gitignored), nunca neste arquivo.
 //   - Nenhum dado real de cliente — todos os registros criados são
 //     fictícios, com nomes/e-mails marcados ("Teste",
 //     "*.homolog@teste.local").
 //
 // Uso:
-//   node scripts/seed-homologacao.mjs                        (dry-run)
-//   node scripts/seed-homologacao.mjs --confirmo-homologacao  (grava)
+//   node scripts/seed-homologacao.mjs                                   (dry-run: cria)
+//   node scripts/seed-homologacao.mjs --confirmo-homologacao             (grava: cria)
+//   node scripts/seed-homologacao.mjs --rollback                         (dry-run: reverte)
+//   node scripts/seed-homologacao.mjs --rollback --confirmo-homologacao  (grava: reverte)
 
 import { readFileSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -91,6 +103,7 @@ function hostDeProducaoDocumentado() {
 }
 
 const CONFIRMADO = process.argv.includes('--confirmo-homologacao')
+const ROLLBACK = process.argv.includes('--rollback')
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL
 const chaveServico = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -99,10 +112,41 @@ if (!url || !chaveServico) {
   process.exit(1)
 }
 
+// Senhas dos 3 usuários de teste e o project ref esperado — exclusivamente
+// de env, nunca escritos neste arquivo. Aborta se qualquer um estiver
+// vazio (nenhum valor default/fallback é aceito).
+const SENHA_STAFF = process.env.HOMOLOG_STAFF_PASSWORD
+const SENHA_LOCADOR = process.env.HOMOLOG_LOCADOR_PASSWORD
+const SENHA_LOCATARIO = process.env.HOMOLOG_LOCATARIO_PASSWORD
+const PROJECT_REF_ESPERADO = process.env.EXPECTED_HOMOLOG_PROJECT_REF
+
+const variaveisFaltando = []
+if (!SENHA_STAFF) variaveisFaltando.push('HOMOLOG_STAFF_PASSWORD')
+if (!SENHA_LOCADOR) variaveisFaltando.push('HOMOLOG_LOCADOR_PASSWORD')
+if (!SENHA_LOCATARIO) variaveisFaltando.push('HOMOLOG_LOCATARIO_PASSWORD')
+if (!PROJECT_REF_ESPERADO) variaveisFaltando.push('EXPECTED_HOMOLOG_PROJECT_REF')
+if (variaveisFaltando.length > 0) {
+  console.error(`\n🔴 BLOQUEADO: variável(is) obrigatória(s) vazia(s) em .env.homolog.local: ${variaveisFaltando.join(', ')}`)
+  console.error('Preencha todas antes de rodar — nenhuma tem valor default.')
+  process.exit(1)
+}
+
 const host = new URL(url).host
 
-// Bloqueio ativo: nunca deixa rodar (nem em dry-run) contra o host
-// documentado como produção.
+// Extrai o project ref da URL (subdomínio antes de ".supabase.co") e
+// exige correspondência EXATA com EXPECTED_HOMOLOG_PROJECT_REF. Esta é
+// a trava automática principal — o print do host abaixo é só uma
+// conferência visual adicional, não a única checagem.
+const projectRefAtual = host.split('.')[0]
+if (projectRefAtual !== PROJECT_REF_ESPERADO) {
+  console.error(`\n🔴 BLOQUEADO: project ref de NEXT_PUBLIC_SUPABASE_URL ("${projectRefAtual}") não bate`)
+  console.error(`com EXPECTED_HOMOLOG_PROJECT_REF ("${PROJECT_REF_ESPERADO}"). Este script só roda`)
+  console.error('quando os dois coincidem exatamente. Confira .env.homolog.local antes de tentar de novo.')
+  process.exit(1)
+}
+
+// Bloqueio ativo adicional: nunca deixa rodar (nem em dry-run) contra o
+// host documentado como produção — independente da checagem acima.
 const hostProducao = hostDeProducaoDocumentado()
 if (hostProducao && host === hostProducao) {
   console.error(`\n🔴 BLOQUEADO: o host de .env.homolog.local (${host}) é igual ao`)
@@ -113,17 +157,20 @@ if (hostProducao && host === hostProducao) {
 }
 
 console.log(`Projeto alvo (confira visualmente antes de continuar): ${host}`)
+console.log(`Project ref conferido: ${projectRefAtual} === EXPECTED_HOMOLOG_PROJECT_REF`)
+console.log(ROLLBACK ? '=== MODO ROLLBACK ===' : '=== MODO CRIAÇÃO ===')
 console.log(CONFIRMADO ? '=== MODO GRAVAÇÃO (--confirmo-homologacao) ===' : '=== MODO DRY-RUN (nada será gravado) ===')
 
 const supabaseAdmin = createClient(url, chaveServico, { auth: { autoRefreshToken: false, persistSession: false } })
 
 // Dados fictícios fixos — nomes/e-mails fáceis de reconhecer e de
 // limpar depois (tudo com sufixo ".homolog@teste.local" / "Teste").
+// Senhas NUNCA ficam escritas aqui — vêm só das variáveis validadas acima.
 const DADOS = {
   organizacao: { nome: 'Imobiliária Teste Homologação' },
-  staff: { email: 'staff.homolog@teste.local', senha: 'TesteHomolog123!', nome: 'Staff Teste' },
-  locador: { email: 'locador.homolog@teste.local', senha: 'TesteHomolog123!', nome: 'Locador Teste', cpf: '00000000000' },
-  locatario: { email: 'locatario.homolog@teste.local', senha: 'TesteHomolog123!', nome: 'Locatário Teste', cpf: '11111111111' },
+  staff: { email: 'staff.homolog@teste.local', senha: SENHA_STAFF, nome: 'Staff Teste' },
+  locador: { email: 'locador.homolog@teste.local', senha: SENHA_LOCADOR, nome: 'Locador Teste', cpf: '00000000000' },
+  locatario: { email: 'locatario.homolog@teste.local', senha: SENHA_LOCATARIO, nome: 'Locatário Teste', cpf: '11111111111' },
   imovel: { endereco: 'Rua Fictícia', numero: '100', bairro: 'Bairro Teste', cidade: 'Cidade Teste', estado: 'SP' },
 }
 
@@ -242,4 +289,66 @@ async function main() {
   console.log('\nSeed concluído. Use as credenciais em DADOS (acima) para logar como cada perfil e testar.')
 }
 
-main()
+// ============================================================
+// Rollback — remove exatamente o que main() cria, nada mais.
+// ============================================================
+//
+// Identifica os registros pelo nome fixo da organização fictícia
+// (DADOS.organizacao.nome) — nunca por "apagar tudo" ou por um
+// intervalo de datas, pra não arriscar remover dado real de outro
+// teste que porventura já exista em homologação. Como a organização
+// fictícia é isolada (nenhum dado de outro teste deveria compartilhar
+// esse organization_id), apagar em cascata por organization_id é
+// seguro dentro desse escopo.
+//
+// Auth users são removidos à parte, por e-mail exato (Admin API não
+// tem "delete by organization_id") — mesmos 3 e-mails fixos usados na
+// criação.
+async function rollback() {
+  const { data: org, error: erroBusca } = await supabaseAdmin
+    .from('organizations')
+    .select('id')
+    .eq('nome', DADOS.organizacao.nome)
+    .maybeSingle()
+  if (erroBusca) { console.error('Erro ao buscar organização:', erroBusca.message); process.exit(1) }
+
+  console.log('\nPlano de rollback:')
+  if (!org) {
+    console.log(`- Nenhuma organização "${DADOS.organizacao.nome}" encontrada — nada de tabela para remover.`)
+  } else {
+    console.log(`- Organização encontrada: ${org.id}`)
+    console.log('- Remover (nessa ordem, por organization_id): demandas, cobrancas, contratos, imoveis, clientes, usuarios_organizacao, users, organizations.')
+  }
+  console.log(`- Remover 3 usuários de auth.users por e-mail: ${DADOS.staff.email}, ${DADOS.locador.email}, ${DADOS.locatario.email}`)
+
+  if (!CONFIRMADO) {
+    console.log('\nDry-run — nada foi removido. Rode com --rollback --confirmo-homologacao para reverter de verdade.')
+    return
+  }
+
+  if (org) {
+    const tabelasPorOrg = ['demandas', 'cobrancas', 'contratos', 'imoveis', 'clientes', 'usuarios_organizacao', 'users']
+    for (const tabela of tabelasPorOrg) {
+      const { error } = await supabaseAdmin.from(tabela).delete().eq('organization_id', org.id)
+      if (error) { console.error(`Erro ao limpar ${tabela}:`, error.message); process.exit(1) }
+      console.log(`Removido: ${tabela} (organization_id = ${org.id})`)
+    }
+    const { error: erroOrg } = await supabaseAdmin.from('organizations').delete().eq('id', org.id)
+    if (erroOrg) { console.error('Erro ao remover organização:', erroOrg.message); process.exit(1) }
+    console.log(`Removido: organizations (${org.id})`)
+  }
+
+  const { data: listaAuth, error: erroLista } = await supabaseAdmin.auth.admin.listUsers()
+  if (erroLista) { console.error('Erro ao listar auth.users:', erroLista.message); process.exit(1) }
+  for (const emailAlvo of [DADOS.staff.email, DADOS.locador.email, DADOS.locatario.email]) {
+    const usuario = listaAuth.users.find((u) => u.email === emailAlvo)
+    if (!usuario) { console.log(`auth.users: ${emailAlvo} não encontrado (já removido?).`); continue }
+    const { error: erroDelete } = await supabaseAdmin.auth.admin.deleteUser(usuario.id)
+    if (erroDelete) { console.error(`Erro ao remover auth.users ${emailAlvo}:`, erroDelete.message); process.exit(1) }
+    console.log(`Removido: auth.users (${emailAlvo})`)
+  }
+
+  console.log('\nRollback concluído.')
+}
+
+ROLLBACK ? rollback() : main()
