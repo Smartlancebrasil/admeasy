@@ -6,7 +6,6 @@ const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
-const resend = new Resend(process.env.RESEND_API_KEY)
 
 function addDias(dataISO: string, dias: number) {
   const d = new Date(dataISO + 'T00:00:00')
@@ -69,6 +68,16 @@ export async function GET(req: NextRequest) {
   if (auth !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ erro: 'Não autorizado.' }, { status: 401 })
   }
+
+  const resendApiKey = process.env.RESEND_API_KEY
+  if (!resendApiKey) {
+    console.error('Cron de lembretes: RESEND_API_KEY não configurada.')
+    return NextResponse.json(
+      { erro: 'Serviço de e-mail não configurado.' },
+      { status: 503 }
+    )
+  }
+  const resend = new Resend(resendApiKey)
 
   const hoje = new Date().toISOString().split('T')[0]
   const em10dias = addDias(hoje, 10)

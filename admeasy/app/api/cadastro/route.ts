@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { stripe } from '@/lib/stripe'
+import { getStripe } from '@/lib/stripe'
 
 // Cliente com a service role key — só existe no servidor, nunca no navegador.
 // É o mesmo padrão já usado em app/api/portal/gerenciar-acesso/route.ts.
@@ -98,6 +98,17 @@ export async function POST(req: NextRequest) {
     //    (mensal ou anual, dependendo do ciclo escolhido) com 7 dias grátis.
     //    Nada é cobrado agora; o Stripe só cobra depois que o trial acabar.
     const valorCentavos = Math.round((ciclo_cobranca === 'anual' ? plano.preco_anual_total : plano.preco_mensal) * 100)
+
+    let stripe: ReturnType<typeof getStripe>
+    try {
+      stripe = getStripe()
+    } catch (err: any) {
+      console.error('Cadastro: Stripe não configurado.', err?.message)
+      return NextResponse.json(
+        { erro: 'Serviço de pagamento não configurado.' },
+        { status: 503 }
+      )
+    }
 
     const customer = await stripe.customers.create({
       email,

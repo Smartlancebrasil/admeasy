@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { stripe } from '@/lib/stripe'
+import { getStripe } from '@/lib/stripe'
 import Stripe from 'stripe'
 
 const supabaseAdmin = createClient(
@@ -9,6 +9,17 @@ const supabaseAdmin = createClient(
 )
 
 export async function POST(req: NextRequest) {
+  let stripe: ReturnType<typeof getStripe>
+  try {
+    stripe = getStripe()
+  } catch (err: any) {
+    console.error('Webhook Stripe: Stripe não configurado.', err?.message)
+    return NextResponse.json(
+      { erro: 'Serviço de pagamento não configurado.' },
+      { status: 503 }
+    )
+  }
+
   const corpo = await req.text()
   const assinatura = req.headers.get('stripe-signature')
 

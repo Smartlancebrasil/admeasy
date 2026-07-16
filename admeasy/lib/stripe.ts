@@ -1,5 +1,13 @@
 import Stripe from 'stripe'
 
-// Sem apiVersion fixo: usa a versão padrão da lib instalada (evita ficar
-// desatualizado toda vez que o pacote 'stripe' for atualizado no projeto).
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
+export function getStripe() {
+  const apiKey = process.env.STRIPE_SECRET_KEY
+
+  if (!apiKey) {
+    throw new Error('STRIPE_SECRET_KEY não configurada.')
+  }
+
+  return new Stripe(apiKey, {
+    apiVersion: '2026-06-24.dahlia',
+  })
+}
