@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+function criarSupabaseAdmin() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error('Configuração do Supabase ausente.')
+  }
+
+  return createClient(supabaseUrl, serviceRoleKey)
+}
 
 function addDias(dataISO: string, dias: number) {
   const d = new Date(dataISO + 'T00:00:00')
@@ -67,6 +73,17 @@ export async function GET(req: NextRequest) {
   const auth = req.headers.get('authorization')
   if (auth !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ erro: 'Não autorizado.' }, { status: 401 })
+  }
+
+  let supabaseAdmin: SupabaseClient
+  try {
+    supabaseAdmin = criarSupabaseAdmin()
+  } catch (err: any) {
+    console.error('Cron de lembretes: configuração do Supabase ausente.', err?.message)
+    return NextResponse.json(
+      { erro: 'Serviço temporariamente indisponível.' },
+      { status: 503 }
+    )
   }
 
   const resendApiKey = process.env.RESEND_API_KEY
