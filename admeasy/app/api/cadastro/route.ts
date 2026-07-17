@@ -2,17 +2,30 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getStripe } from '@/lib/stripe'
 
-// Cliente com a service role key — só existe no servidor, nunca no navegador.
-// É o mesmo padrão já usado em app/api/portal/gerenciar-acesso/route.ts.
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
-
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://admeasy.vercel.app'
 
 export async function POST(req: NextRequest) {
   try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+    if (!supabaseUrl || !serviceRoleKey) {
+      console.error('Cadastro: configuração do Supabase ausente.')
+      return NextResponse.json(
+        { erro: 'Serviço temporariamente indisponível.' },
+        { status: 503 }
+      )
+    }
+
+    // Cliente com a service role key — só existe no servidor, nunca no navegador.
+    // É o mesmo padrão já usado em app/api/portal/gerenciar-acesso/route.ts.
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    })
+
     const {
       plano_id,
       ciclo_cobranca,
