@@ -1,19 +1,34 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
+
+function criarClientesSupabase() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl || !anonKey || !serviceRoleKey) {
+    return null
+  }
+
+  return {
+    supabaseAuth: createClient(supabaseUrl, anonKey),
+    supabaseAdmin: createClient(supabaseUrl, serviceRoleKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    }),
+  }
+}
 
 // Verifica o token do usuário autenticado (enviado pelo cliente no header
 // Authorization) direto no Supabase Auth — nunca confia em identidade
 // declarada pelo corpo da requisição.
-async function autenticarChamador(request: Request): Promise<{ userId: string } | null> {
+async function autenticarChamador(request: Request, supabaseAuth: SupabaseClient): Promise<{ userId: string } | null> {
   const authHeader = request.headers.get('authorization') || ''
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
   if (!token) return null
 
-  const supabaseAuth = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
   const { data, error } = await supabaseAuth.auth.getUser(token)
   if (error || !data?.user) return null
   return { userId: data.user.id }
@@ -21,7 +36,19 @@ async function autenticarChamador(request: Request): Promise<{ userId: string } 
 
 export async function POST(request: Request) {
   try {
-    const chamador = await autenticarChamador(request)
+    const clientes = criarClientesSupabase()
+
+    if (!clientes) {
+      console.error('Portal/gerenciar-acesso: configuração do Supabase ausente.')
+      return NextResponse.json(
+        { error: 'Serviço temporariamente indisponível.' },
+        { status: 503 }
+      )
+    }
+
+    const { supabaseAuth, supabaseAdmin } = clientes
+
+    const chamador = await autenticarChamador(request, supabaseAuth)
     if (!chamador) {
       return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 })
     }
