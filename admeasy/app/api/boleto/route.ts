@@ -1,8 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { createClient } from '@supabase/supabase-js'
 
 export async function POST(req: NextRequest) {
   try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    if (!supabaseUrl || !serviceRoleKey) {
+      console.error('API de boleto: configuração do Supabase ausente.')
+      return NextResponse.json(
+        { erro: 'Serviço temporariamente indisponível.' },
+        { status: 503 }
+      )
+    }
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    })
+
     const body = await req.json()
     const {
       valor,
