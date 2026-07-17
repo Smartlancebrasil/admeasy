@@ -3,12 +3,26 @@ import { createClient } from '@supabase/supabase-js'
 import { getStripe } from '@/lib/stripe'
 import Stripe from 'stripe'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
-
 export async function POST(req: NextRequest) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
+
+  if (!supabaseUrl || !serviceRoleKey || !webhookSecret) {
+    console.error('Webhook Stripe: configuração obrigatória ausente.')
+    return NextResponse.json(
+      { erro: 'Serviço temporariamente indisponível.' },
+      { status: 503 }
+    )
+  }
+
+  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  })
+
   let stripe: ReturnType<typeof getStripe>
   try {
     stripe = getStripe()
@@ -25,7 +39,7 @@ export async function POST(req: NextRequest) {
 
   let evento: Stripe.Event
   try {
-    evento = stripe.webhooks.constructEvent(corpo, assinatura!, process.env.STRIPE_WEBHOOK_SECRET!)
+    evento = stripe.webhooks.constructEvent(corpo, assinatura!, webhookSecret)
   } catch (err: any) {
     return NextResponse.json({ erro: `Assinatura inválida: ${err.message}` }, { status: 400 })
   }
