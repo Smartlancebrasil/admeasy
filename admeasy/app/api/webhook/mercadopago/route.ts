@@ -2,11 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
-
 // Valida a assinatura do Mercado Pago. MERCADOPAGO_WEBHOOK_SECRET é obrigatória —
 // sem ela, a chamada é rejeitada (nunca aceitamos webhook sem validar quem está chamando).
 function validarAssinatura(req: NextRequest, secret: string): boolean {
@@ -33,6 +28,24 @@ function validarAssinatura(req: NextRequest, secret: string): boolean {
 
 export async function POST(req: NextRequest) {
   try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+    if (!supabaseUrl || !serviceRoleKey) {
+      console.error('Webhook Mercado Pago: configuração do Supabase ausente.')
+      return NextResponse.json(
+        { erro: 'Serviço temporariamente indisponível.' },
+        { status: 503 }
+      )
+    }
+
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    })
+
     const secret = process.env.MERCADOPAGO_WEBHOOK_SECRET
     if (!secret) {
       console.error('Webhook Mercado Pago: MERCADOPAGO_WEBHOOK_SECRET não configurado — rejeitando chamada.')

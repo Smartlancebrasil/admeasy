@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { normalizarParaPath } from '@/lib/storagePath'
 import { EXTENSOES_PERMITIDAS, MIME_PERMITIDOS, extensaoDoNome } from '@/lib/documentosPermitidos'
 
@@ -29,15 +28,31 @@ import { EXTENSOES_PERMITIDAS, MIME_PERMITIDOS, extensaoDoNome } from '@/lib/doc
 
 const VALIDADE_SEGUNDOS = 300 // 5 minutos
 
-async function autenticarChamador(request: NextRequest): Promise<{ userId: string } | null> {
+function criarClientesSupabase() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl || !anonKey || !serviceRoleKey) {
+    return null
+  }
+
+  return {
+    supabaseAuth: createClient(supabaseUrl, anonKey),
+    supabaseAdmin: createClient(supabaseUrl, serviceRoleKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    }),
+  }
+}
+
+async function autenticarChamador(request: NextRequest, supabaseAuth: SupabaseClient): Promise<{ userId: string } | null> {
   const authHeader = request.headers.get('authorization') || ''
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
   if (!token) return null
 
-  const supabaseAuth = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
   const { data, error } = await supabaseAuth.auth.getUser(token)
   if (error || !data?.user) return null
   return { userId: data.user.id }
@@ -56,7 +71,19 @@ const CATEGORIAS_PERMITIDAS_LOCADOR = new Set([
 
 export async function POST(request: NextRequest) {
   try {
-    const chamador = await autenticarChamador(request)
+    const clientes = criarClientesSupabase()
+
+    if (!clientes) {
+      console.error('Documentos/url-assinada: configuração do Supabase ausente.')
+      return NextResponse.json(
+        { erro: 'Serviço temporariamente indisponível.' },
+        { status: 503 }
+      )
+    }
+
+    const { supabaseAuth, supabaseAdmin } = clientes
+
+    const chamador = await autenticarChamador(request, supabaseAuth)
     if (!chamador) {
       return NextResponse.json({ erro: 'Não autenticado.' }, { status: 401 })
     }
