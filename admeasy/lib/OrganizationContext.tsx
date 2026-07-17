@@ -62,6 +62,23 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
         return
       }
 
+      // Checagem de identidade de portal SEMPRE primeiro, antes de confiar
+      // em qualquer vínculo de usuarios_organizacao — clientes.usuario_portal_id
+      // é a fonte de verdade de "isto é um locador/locatário" em todo o
+      // resto do app (lib/portal-auth.ts, get_portal_cliente_id()). Cobre
+      // o caso de um vínculo indevido em usuarios_organizacao mesmo que o
+      // valor de "papel" ali não seja 'locador'/'locatario'.
+      const { data: clienteVinculado } = await supabase
+        .from('clientes')
+        .select('id')
+        .eq('usuario_portal_id', user.id)
+        .maybeSingle()
+
+      if (clienteVinculado) {
+        router.replace('/portal')
+        return
+      }
+
       const { data, error } = await supabase
         .from('usuarios_organizacao')
         .select('papel, organization:organizations(id, nome, plano, status_assinatura, cor_primaria, logo_url)')
