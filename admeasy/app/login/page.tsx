@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 
+type PapelUsuario = 'admin' | 'corretor' | 'locador' | 'locatario'
+
 export default function LoginPage() {
   const router = useRouter()
   const [email, setEmail] = useState('')
@@ -27,26 +29,55 @@ export default function LoginPage() {
       return
     }
 
-    // Se quem logou faz parte da equipe AdmEasy (admin master), vai pro
-    // painel de administração da plataforma em vez do dashboard normal.
-    const { data: admin } = await supabase
-      .from('admeasy_admins')
-      .select('user_id')
-      .eq('user_id', data.user.id)
-      .maybeSingle()
+    const [{ data: adminMaster }, { data: vinculo, error: erroVinculo }] = await Promise.all([
+      supabase
+        .from('admeasy_admins')
+        .select('user_id')
+        .eq('user_id', data.user.id)
+        .maybeSingle(),
+      supabase
+        .from('usuarios_organizacao')
+        .select('papel')
+        .eq('user_id', data.user.id)
+        .maybeSingle(),
+    ])
 
-    router.push(admin ? '/admin' : '/dashboard')
+    if (adminMaster) {
+      router.replace('/admin')
+      return
+    }
+
+    if (erroVinculo || !vinculo) {
+      await supabase.auth.signOut()
+      setErro('Seu usuário não possui um perfil de acesso válido. Fale com o administrador.')
+      setLoading(false)
+      return
+    }
+
+    const papel = vinculo.papel as PapelUsuario
+
+    if (papel === 'locador' || papel === 'locatario') {
+      router.replace('/portal')
+      return
+    }
+
+    if (papel === 'admin' || papel === 'corretor') {
+      router.replace('/dashboard')
+      return
+    }
+
+    await supabase.auth.signOut()
+    setErro('Seu perfil não possui permissão de acesso.')
+    setLoading(false)
   }
 
   return (
     <div style={{ background: '#0d1117' }} className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        {/* Logo */}
         <div className="text-center mb-8">
           <img src="/logo-admeasy.png" alt="AdmEasy" className="w-28 h-auto object-contain mx-auto" />
         </div>
 
-        {/* Card */}
         <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-2xl p-8">
           <h2 style={{ color: '#f4f4f3' }} className="text-lg font-semibold mb-6">Entrar na sua conta</h2>
 
