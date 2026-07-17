@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
 // ============================================================
 // PROPOSTA — não commitada, não deployada, não wireada em nenhuma
@@ -18,15 +17,35 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 // deve ter caminho de exclusão, direto ou indireto, por design.
 // ============================================================
 
-async function autenticarStaff(request: NextRequest): Promise<{ userId: string; organizationId: string } | null> {
+function criarClientesSupabase() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl || !anonKey || !serviceRoleKey) {
+    return null
+  }
+
+  return {
+    supabaseAuth: createClient(supabaseUrl, anonKey),
+    supabaseAdmin: createClient(supabaseUrl, serviceRoleKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    }),
+  }
+}
+
+async function autenticarStaff(
+  request: NextRequest,
+  supabaseAuth: SupabaseClient,
+  supabaseAdmin: SupabaseClient
+): Promise<{ userId: string; organizationId: string } | null> {
   const authHeader = request.headers.get('authorization') || ''
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
   if (!token) return null
 
-  const supabaseAuth = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
   const { data, error } = await supabaseAuth.auth.getUser(token)
   if (error || !data?.user) return null
 
@@ -42,7 +61,19 @@ async function autenticarStaff(request: NextRequest): Promise<{ userId: string; 
 
 export async function POST(request: NextRequest) {
   try {
-    const staff = await autenticarStaff(request)
+    const clientes = criarClientesSupabase()
+
+    if (!clientes) {
+      console.error('Documentos/excluir: configuração do Supabase ausente.')
+      return NextResponse.json(
+        { erro: 'Serviço temporariamente indisponível.' },
+        { status: 503 }
+      )
+    }
+
+    const { supabaseAuth, supabaseAdmin } = clientes
+
+    const staff = await autenticarStaff(request, supabaseAuth, supabaseAdmin)
     if (!staff) {
       return NextResponse.json({ erro: 'Apenas usuários internos podem excluir documentos administrativos.' }, { status: 403 })
     }
