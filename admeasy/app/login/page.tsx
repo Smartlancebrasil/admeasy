@@ -20,28 +20,25 @@ export default function LoginPage() {
     setEnviandoRecuperacao(true)
     setMensagemRecuperacao('')
 
-    const redirectTo = `${window.location.origin}/redefinir-senha`
+    // URL canônica fixa (sem www) — nunca window.location.origin, que
+    // variava conforme o usuário acessasse com ou sem "www" e gerava um
+    // redirectTo fora da allowlist do Supabase (404 "Invalid path
+    // specified in request URL", diagnosticado em produção).
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://admeasy.com.br'
+    const redirectTo = `${appUrl.replace(/\/$/, '')}/redefinir-senha`
     const { error } = await supabase.auth.resetPasswordForEmail(emailRecuperacao, {
       redirectTo,
     })
 
     setEnviandoRecuperacao(false)
-
-    // DIAGNÓSTICO TEMPORÁRIO EM PRODUÇÃO — remover assim que o erro real
-    // for identificado (ver hotfix de remoção correspondente). Mostra só
-    // campos seguros do erro (nunca token/senha/API key/headers/corpo
-    // completo da resposta).
-    if (error) {
-      const code = (error as any).code ?? 's/código'
-      const status = (error as any).status ?? 's/status'
-      setMensagemRecuperacao(`[DIAGNÓSTICO] code=${code} status=${status} message=${error.message} redirectTo=${redirectTo}`)
-      return
-    }
-
     // Mensagem sempre genérica, mesmo em erro — não confirma nem nega se
     // o e-mail existe na base (mesmo padrão de outras rotas de auth
     // deste projeto).
-    setMensagemRecuperacao('Se este e-mail estiver cadastrado, você vai receber um link para redefinir sua senha.')
+    setMensagemRecuperacao(
+      error
+        ? 'Não foi possível enviar o link agora. Tente novamente em instantes.'
+        : 'Se este e-mail estiver cadastrado, você vai receber um link para redefinir sua senha.'
+    )
   }
 
   async function handleLogin(e: React.FormEvent) {
