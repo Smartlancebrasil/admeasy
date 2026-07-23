@@ -1,11 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 
-export default function LoginPage() {
+function ConteudoLogin() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [email, setEmail] = useState('')
   const [senha, setSenha] = useState('')
   const [loading, setLoading] = useState(false)
@@ -14,6 +15,15 @@ export default function LoginPage() {
   const [emailRecuperacao, setEmailRecuperacao] = useState('')
   const [enviandoRecuperacao, setEnviandoRecuperacao] = useState(false)
   const [mensagemRecuperacao, setMensagemRecuperacao] = useState('')
+
+  // Link "Solicitar novo link" (de /redefinir-senha ou /confirmar-recuperacao
+  // quando o link original expirou) já abre direto no formulário de
+  // recuperação, sem precisar clicar em "Esqueci minha senha" de novo.
+  useEffect(() => {
+    if (searchParams.get('recuperar') === '1') {
+      setModoRecuperacao(true)
+    }
+  }, [searchParams])
 
   async function handleRecuperarSenha(e: React.FormEvent) {
     e.preventDefault()
@@ -178,5 +188,13 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <ConteudoLogin />
+    </Suspense>
   )
 }

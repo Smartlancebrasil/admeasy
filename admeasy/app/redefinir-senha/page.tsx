@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import { interpretarErroHash, decidirEstadoAposVerificacao } from '@/lib/passwordRecoverySeguranca'
 
 type Estado = 'carregando' | 'pronto' | 'invalido' | 'sucesso'
 
@@ -15,17 +16,20 @@ export default function RedefinirSenhaPage() {
   const [salvando, setSalvando] = useState(false)
 
   useEffect(() => {
-    // O Supabase, quando o link expirou ou já foi usado, redireciona pra
-    // cá mesmo assim — mas com um erro explícito no hash (ex.:
-    // #error=access_denied&error_code=otp_expired&...). Checar isso
-    // primeiro evita esperar o timeout de baixo pra mostrar a mensagem
-    // certa.
-    if (typeof window !== 'undefined' && window.location.hash) {
-      const paramsErro = new URLSearchParams(window.location.hash.slice(1))
-      if (paramsErro.get('error')) {
-        setEstado('invalido')
-        return
-      }
+    // Detecta IMEDIATAMENTE error/error_code/error_description no hash
+    // — o Supabase manda isso quando o link expirou ou já foi usado
+    // (ex.: #error=access_denied&error_code=otp_expired&...). Nunca
+    // expõe error_code/error_description brutos na UI (podem conter
+    // detalhe interno do Supabase) — só decide o estado.
+    const hashAtual = typeof window !== 'undefined' ? window.location.hash : ''
+    const erroHash = interpretarErroHash(hashAtual)
+
+    if (erroHash.temErro) {
+      // Log só local/console, nunca token — code/description do Supabase
+      // não são segredo (não são token), mas mesmo assim não vão pra UI.
+      console.warn('[redefinir-senha] link rejeitado pelo Supabase:', erroHash.code, erroHash.description)
+      setEstado(decidirEstadoAposVerificacao({ erroNoHash: true, eventoRecoveryRecebido: false, sessaoExistente: false }))
+      return
     }
 
     let resolvido = false
@@ -40,19 +44,19 @@ export default function RedefinirSenhaPage() {
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'PASSWORD_RECOVERY' && session) {
         resolvido = true
-        setEstado('pronto')
+        setEstado(decidirEstadoAposVerificacao({ erroNoHash: false, eventoRecoveryRecebido: true, sessaoExistente: true }))
       }
     })
 
-    // Fallback: em alguns casos o hash já pode ter sido processado antes
-    // deste efeito rodar (ex.: fast refresh, navegação client-side) — se
-    // nenhum evento PASSWORD_RECOVERY chegar num tempo curto, confere se
-    // já existe sessão válida por outro caminho antes de desistir.
+    // Timeout/fallback — nunca fica "Verificando o link..." pra sempre.
+    // Se nenhum evento PASSWORD_RECOVERY chegar num tempo curto, confere
+    // se já existe sessão válida por outro caminho antes de desistir e
+    // tratar como inválido.
     const timeout = setTimeout(async () => {
       if (resolvido) return
       const { data: { session } } = await supabase.auth.getSession()
-      setEstado(session ? 'pronto' : 'invalido')
-    }, 1500)
+      setEstado(decidirEstadoAposVerificacao({ erroNoHash: false, eventoRecoveryRecebido: false, sessaoExistente: !!session }))
+    }, 4000)
 
     return () => {
       listener.subscription.unsubscribe()
@@ -77,7 +81,7 @@ export default function RedefinirSenhaPage() {
     const { error } = await supabase.auth.updateUser({ password: senha })
 
     if (error) {
-      // Nunca expor error.message bruto (pode vazer detalhe interno do
+      // Nunca expor error.message bruto (pode vazar detalhe interno do
       // Supabase) — mensagem genérica, mesma cautela já usada no resto
       // do app pra erros de auth.
       setErro('Não foi possível redefinir sua senha. Solicite um novo link e tente novamente.')
@@ -112,12 +116,21 @@ export default function RedefinirSenhaPage() {
                 Este link de redefinição de senha não é mais válido — pode já ter sido usado ou ter expirado.
                 Solicite um novo link na tela de login.
               </p>
-              <button
-                onClick={() => router.replace('/login')}
-                className="btn btn-primary w-full justify-center py-2.5"
-              >
-                Voltar para o login
-              </button>
+              <div className="space-y-2">
+                <button
+                  onClick={() => router.replace('/login?recuperar=1')}
+                  className="btn btn-primary w-full justify-center py-2.5"
+                >
+                  Solicitar novo link
+                </button>
+                <button
+                  onClick={() => router.replace('/login')}
+                  style={{ color: '#5b5e6b' }}
+                  className="text-xs text-center w-full hover:underline py-1"
+                >
+                  Voltar para o login
+                </button>
+              </div>
             </>
           )}
 
