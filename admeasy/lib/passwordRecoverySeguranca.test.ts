@@ -4,9 +4,16 @@
 //
 //   node --test lib/passwordRecoverySeguranca.test.ts
 //
-// Cobre os 6 cenários pedidos: link válido, otp_expired, hash com
-// access_denied, ausência de sessão, domínio de ConfirmationURL
-// inválido, timeout de verificação.
+// Cobre os cenários pedidos: link válido, otp_expired, hash com
+// access_denied, ausência de sessão, timeout de verificação, type
+// inválido, token_hash ausente/malformado, e a checagem de origem
+// usada como defesa extra contra CSRF em /api/auth/recuperacao/token.
+//
+// O que NÃO dá pra testar aqui (precisa de Request/Response reais do
+// Next.js rodando, e de import via alias @/ que o loader nativo do
+// Node não resolve): consumo único do cookie e "token expirado" (cookie
+// ausente) nas rotas de fato. Esses dois ficam cobertos pelo checklist
+// manual — ver o relatório de entrega.
 // ============================================================
 
 import { test } from 'node:test'
@@ -14,7 +21,8 @@ import assert from 'node:assert/strict'
 import {
   interpretarErroHash,
   decidirEstadoAposVerificacao,
-  validarDominioConfirmacao,
+  validarEntradaRecuperacao,
+  origemConfiavel,
 } from './passwordRecoverySeguranca.ts'
 
 // ── interpretarErroHash ─────────────────────────────────────
@@ -104,51 +112,73 @@ test('decidirEstadoAposVerificacao: timeout mas sessão já existia por outro ca
   assert.equal(estado, 'pronto')
 })
 
-// ── validarDominioConfirmacao ───────────────────────────────
+// ── validarEntradaRecuperacao ───────────────────────────────
 
-const SUPABASE_URL_TESTE = 'https://exemplo-projeto.supabase.co'
-
-test('validarDominioConfirmacao: ConfirmationURL real do Supabase configurado -> válido', () => {
-  const ok = validarDominioConfirmacao(
-    'https://exemplo-projeto.supabase.co/auth/v1/verify?token=abc&type=recovery&redirect_to=https://admeasy.com.br/redefinir-senha',
-    SUPABASE_URL_TESTE
-  )
+test('validarEntradaRecuperacao: token_hash bem formado + type=recovery -> válido', () => {
+  const ok = validarEntradaRecuperacao('a1b2c3d4e5f6g7h8i9j0-valido_123', 'recovery')
   assert.equal(ok, true)
 })
 
-test('validarDominioConfirmacao: domínio diferente do Supabase configurado -> inválido', () => {
-  const ok = validarDominioConfirmacao(
-    'https://site-malicioso.com/auth/v1/verify?token=abc&type=recovery',
-    SUPABASE_URL_TESTE
-  )
+test('validarEntradaRecuperacao: type ausente -> inválido', () => {
+  const ok = validarEntradaRecuperacao('a1b2c3d4e5f6g7h8i9j0-valido_123', null)
   assert.equal(ok, false)
 })
 
-test('validarDominioConfirmacao: subdomínio parecido mas diferente -> inválido', () => {
-  const ok = validarDominioConfirmacao(
-    'https://exemplo-projeto.supabase.co.evil.com/auth/v1/verify?token=abc',
-    SUPABASE_URL_TESTE
-  )
+test('validarEntradaRecuperacao: type diferente de "recovery" (ex.: signup) -> inválido', () => {
+  const ok = validarEntradaRecuperacao('a1b2c3d4e5f6g7h8i9j0-valido_123', 'signup')
   assert.equal(ok, false)
 })
 
-test('validarDominioConfirmacao: protocolo http (não https) -> inválido', () => {
-  const ok = validarDominioConfirmacao(
-    'http://exemplo-projeto.supabase.co/auth/v1/verify?token=abc',
-    SUPABASE_URL_TESTE
-  )
+test('validarEntradaRecuperacao: token_hash ausente -> inválido', () => {
+  const ok = validarEntradaRecuperacao(null, 'recovery')
   assert.equal(ok, false)
 })
 
-test('validarDominioConfirmacao: caminho fora de /auth/v1/verify -> inválido', () => {
-  const ok = validarDominioConfirmacao(
-    'https://exemplo-projeto.supabase.co/rest/v1/outra-coisa',
-    SUPABASE_URL_TESTE
-  )
+test('validarEntradaRecuperacao: token_hash vazio -> inválido', () => {
+  const ok = validarEntradaRecuperacao('', 'recovery')
   assert.equal(ok, false)
 })
 
-test('validarDominioConfirmacao: URL malformada -> inválido, nunca lança exceção', () => {
-  const ok = validarDominioConfirmacao('isso não é uma URL', SUPABASE_URL_TESTE)
+test('validarEntradaRecuperacao: token_hash curto demais -> inválido', () => {
+  const ok = validarEntradaRecuperacao('curto', 'recovery')
   assert.equal(ok, false)
+})
+
+test('validarEntradaRecuperacao: token_hash com caracteres fora do esperado (tentativa de payload) -> inválido', () => {
+  const ok = validarEntradaRecuperacao('<script>alert(1)</script>xxxxxxxxxxxx', 'recovery')
+  assert.equal(ok, false)
+})
+
+test('validarEntradaRecuperacao: token_hash absurdamente longo -> inválido', () => {
+  const ok = validarEntradaRecuperacao('a'.repeat(300), 'recovery')
+  assert.equal(ok, false)
+})
+
+// ── origemConfiavel (defesa extra contra CSRF em /api/auth/recuperacao/token) ──
+
+const ORIGEM_ESPERADA = 'https://admeasy.com.br'
+
+test('origemConfiavel: Sec-Fetch-Site=same-origin -> confiável', () => {
+  const ok = origemConfiavel({ secFetchSite: 'same-origin', origin: null, origemEsperada: ORIGEM_ESPERADA })
+  assert.equal(ok, true)
+})
+
+test('origemConfiavel: Sec-Fetch-Site=cross-site -> não confiável', () => {
+  const ok = origemConfiavel({ secFetchSite: 'cross-site', origin: null, origemEsperada: ORIGEM_ESPERADA })
+  assert.equal(ok, false)
+})
+
+test('origemConfiavel: sem Sec-Fetch-Site, Origin igual ao esperado -> confiável', () => {
+  const ok = origemConfiavel({ secFetchSite: null, origin: ORIGEM_ESPERADA, origemEsperada: ORIGEM_ESPERADA })
+  assert.equal(ok, true)
+})
+
+test('origemConfiavel: sem Sec-Fetch-Site, Origin de outro site -> não confiável', () => {
+  const ok = origemConfiavel({ secFetchSite: null, origin: 'https://site-malicioso.com', origemEsperada: ORIGEM_ESPERADA })
+  assert.equal(ok, false)
+})
+
+test('origemConfiavel: nenhum dos dois headers presente -> confia no SameSite do cookie (permite)', () => {
+  const ok = origemConfiavel({ secFetchSite: null, origin: null, origemEsperada: ORIGEM_ESPERADA })
+  assert.equal(ok, true)
 })

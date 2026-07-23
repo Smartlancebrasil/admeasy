@@ -34,8 +34,20 @@ export default function RedefinirSenhaPage() {
 
     let resolvido = false
 
-    // Fluxo real deste projeto: o client Supabase usa flowType implícito
-    // (sem PKCE, ver lib/supabase.ts) — o link de recuperação chega com
+    // Checagem imediata de sessão já existente — cobre o caso de vir
+    // de /confirmar-recuperacao, onde o verifyOtp (client-side) já
+    // rodou e já deixou a sessão pronta em localStorage antes desta
+    // página montar. Sem isso, o usuário ficaria vendo "Verificando o
+    // link..." pelos 4s inteiros do timeout à toa.
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (resolvido || !session) return
+      resolvido = true
+      setEstado(decidirEstadoAposVerificacao({ erroNoHash: false, eventoRecoveryRecebido: false, sessaoExistente: true }))
+    })
+
+    // Fluxo do link direto por e-mail (sem passar por /confirmar-
+    // recuperacao): o client Supabase usa flowType implícito (sem
+    // PKCE, ver lib/supabase.ts) — o link de recuperação chega com
     // #access_token=...&type=recovery no hash. Com detectSessionInUrl
     // (padrão do SDK), o próprio supabase-js processa esse hash ao
     // carregar a página e dispara o evento PASSWORD_RECOVERY — é esse
