@@ -44,6 +44,12 @@ type Contrato = {
   data_inicio?: string
   honorarios_aplicavel?: boolean
   valor_honorarios?: number
+  valor_condominio?: number
+  valor_iptu?: number
+  valor_seguro_incendio?: number
+  tipo_garantia?: string
+  valor_seguro_fianca?: number
+  responsavel_pagamento_premio?: string
   imovel?: { titulo: string } | { titulo: string }[]
   locatario?: { nome: string } | { nome: string }[]
   locador?: { nome: string } | { nome: string }[]
@@ -181,7 +187,7 @@ export default function FinanceiroPage() {
   async function buscarContratos(orgId: string) {
     const { data } = await supabase
       .from('contratos')
-      .select(`id, numero, valor_mensal, taxa_administracao, dia_vencimento, data_inicio, honorarios_aplicavel, valor_honorarios, imovel:imoveis(titulo), locatario:clientes!contratos_locatario_id_fkey(nome), locador:clientes!contratos_locador_id_fkey(nome)`)
+      .select(`id, numero, valor_mensal, taxa_administracao, dia_vencimento, data_inicio, honorarios_aplicavel, valor_honorarios, valor_condominio, valor_iptu, valor_seguro_incendio, tipo_garantia, valor_seguro_fianca, responsavel_pagamento_premio, imovel:imoveis(titulo), locatario:clientes!contratos_locatario_id_fkey(nome), locador:clientes!contratos_locador_id_fkey(nome)`)
       .eq('organization_id', orgId)
       .eq('status', 'ativo')
     if (data) {
@@ -299,6 +305,26 @@ export default function FinanceiroPage() {
     const valor = parseFloat(form.valor_aluguel)
     const taxaPct = form.taxa_adm_pct
 
+    const mesNome = meses[form.mes - 1].toLowerCase()
+    const mesRef = `${mesNome}/${form.ano}`
+    const competencia = `${form.ano}-${String(form.mes).padStart(2,'0')}-01`
+    const dataVenc = `${form.ano}-${String(form.mes).padStart(2,'0')}-${String(form.dia_vencimento).padStart(2,'0')}`
+
+    // Nunca gera uma segunda cobrança pra mesma competência do mesmo
+    // contrato — evita duplicidade entre este caminho manual e a
+    // geração automática que já roda na criação do contrato.
+    const { count: countCompetencia } = await supabase
+      .from('cobrancas')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', organizacao.id)
+      .eq('contrato_id', form.contrato_id)
+      .eq('competencia', competencia)
+    if ((countCompetencia || 0) > 0) {
+      setErro(`Já existe uma cobrança para ${mesRef} neste contrato — não é possível gerar outra para a mesma competência.`)
+      setSalvando(false)
+      return
+    }
+
     // Se o contrato cobra honorários de locação, a 1ª cobrança fica 100%
     // com a imobiliária (nenhum repasse ao proprietário nesse mês)
     let ehPrimeiraCobranca = false
@@ -314,14 +340,22 @@ export default function FinanceiroPage() {
     const valorTaxa = ehPrimeiraCobranca ? valor : valor * (taxaPct / 100)
     const valorRepasse = ehPrimeiraCobranca ? 0 : valor - valorTaxa
 
-    const mesNome = meses[form.mes - 1].toLowerCase()
-    const mesRef = `${mesNome}/${form.ano}`
-    const competencia = `${form.ano}-${String(form.mes).padStart(2,'0')}-01`
-    const dataVenc = `${form.ano}-${String(form.mes).padStart(2,'0')}-${String(form.dia_vencimento).padStart(2,'0')}`
-
     const dataRepasse = new Date(dataVenc + 'T00:00:00')
     dataRepasse.setDate(dataRepasse.getDate() + 2)
     const dataRepasseStr = dataRepasse.toISOString().split('T')[0]
+
+    // Mesma composição do caminho automático (criação do contrato) —
+    // condomínio, IPTU e seguro incêndio sempre entram; o prêmio do
+    // seguro-fiança só entra no total quando o responsável pelo
+    // pagamento é o locatário (nunca quando é o locador), e nunca é
+    // usado pra reajuste do aluguel.
+    const valorCondominio = contratoSel.valor_condominio || 0
+    const valorIptu = contratoSel.valor_iptu || 0
+    const valorSeguroIncendio = contratoSel.valor_seguro_incendio || 0
+    const ehSeguroFianca = contratoSel.tipo_garantia === 'seguro_fianca'
+    const valorSeguroFianca = ehSeguroFianca ? (contratoSel.valor_seguro_fianca || 0) : 0
+    const premioPagoPeloLocatario = ehSeguroFianca && (contratoSel.responsavel_pagamento_premio || 'locatario') !== 'locador'
+    const valorTotal = valor + valorCondominio + valorIptu + valorSeguroIncendio + (premioPagoPeloLocatario ? valorSeguroFianca : 0)
 
     const payload = {
       contrato_id: form.contrato_id,
@@ -331,6 +365,14 @@ export default function FinanceiroPage() {
       mes_referencia: mesRef,
       competencia,
       valor_aluguel: valor,
+      valor_condominio: valorCondominio,
+      valor_iptu: valorIptu,
+      valor_seguro_incendio: valorSeguroIncendio,
+      // 0 quando o locador paga — nunca aparece na cobrança do
+      // locatário (o valor continua em contratos.valor_seguro_fianca
+      // pra referência administrativa).
+      valor_seguro_fianca: premioPagoPeloLocatario ? valorSeguroFianca : 0,
+      valor_total: valorTotal,
       taxa_administracao_pct: taxaPct,
       valor_taxa_adm: valorTaxa,
       valor_repasse: valorRepasse,

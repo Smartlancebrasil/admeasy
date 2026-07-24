@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { getPortalUser, logoutPortal, alterarSenhaPortal, PortalUser } from '@/lib/portal-auth'
 import { supabase } from '@/lib/supabase'
 import { resolverUrlExibicao } from '@/lib/documentosSignedUrl'
+import { SEGURADORA_FIANCA_PADRAO } from '@/lib/contratos/clausulaSeguroFianca'
 import { LogOut, Key, Plus, X, Upload, ChevronDown, ChevronUp, FileDown, Copy, Check, AlertCircle, QrCode, Edit2, Hourglass, Calculator, FileText, Download, Building2 } from 'lucide-react'
 
 function formatVal(v: number) {
@@ -990,7 +991,28 @@ function PainelLocatario({ user }: { user: PortalUser }) {
       const w = doc.splitTextToSize(val, MR-ML-48)
       doc.text(w, ML+46, y); y += w.length * 5.5
     })
-    y += 6; doc.setDrawColor(200).line(ML, y, MR, y); y += 8
+    // Discrimina os componentes da cobrança (mesmos valores gravados na
+    // cobrança do mês, não os do contrato — evita divergência se o
+    // contrato tiver mudado desde então).
+    const itensCobranca = ([
+      ['Aluguel', c.valor_aluguel || 0],
+      ['Condomínio', c.valor_condominio || 0],
+      ['IPTU', c.valor_iptu || 0],
+      ['Seguro incêndio', c.valor_seguro_incendio || 0],
+      [`Seguro-fiança ${SEGURADORA_FIANCA_PADRAO}`, c.valor_seguro_fianca || 0],
+    ] as [string, number][]).filter(([, v]) => v > 0)
+    if (itensCobranca.length > 1) {
+      y += 4
+      doc.setFontSize(9)
+      itensCobranca.forEach(([label, v]) => {
+        doc.setFont('helvetica', 'normal').setTextColor(90)
+        doc.text(label, ML, y)
+        doc.text(formatVal(v), MR, y, { align: 'right' })
+        y += 5
+      })
+      doc.setTextColor(0)
+    }
+    y += 2; doc.setDrawColor(200).line(ML, y, MR, y); y += 8
     doc.setFontSize(13).setFont('helvetica', 'bold').text('Valor recebido:', ML, y)
     doc.setTextColor(0,140,0); doc.text(formatVal(valorCobranca(c)), MR, y, { align: 'right' })
     doc.setTextColor(0)
@@ -1008,8 +1030,13 @@ function PainelLocatario({ user }: { user: PortalUser }) {
   const somaCondominio = contrato?.valor_condominio || 0
   const somaIptu = contrato?.valor_iptu || 0
   const somaSeguroIncendio = contrato?.valor_seguro_incendio || 0
-  const somaSeguroFianca = contrato?.tipo_garantia === 'seguro_fianca' ? (contrato?.valor_seguro_fianca || 0) : 0
-  const somaTotalContrato = somaAluguel + somaCondominio + somaIptu + somaSeguroIncendio + somaSeguroFianca
+  const ehSeguroFiancaContrato = contrato?.tipo_garantia === 'seguro_fianca'
+  const somaSeguroFianca = ehSeguroFiancaContrato ? (contrato?.valor_seguro_fianca || 0) : 0
+  // O prêmio só integra o total cobrado do locatário quando ele é quem
+  // paga — quando é o locador, a linha continua discriminada (pra
+  // transparência), só não soma no total nem gera cobrança.
+  const premioIntegraTotal = ehSeguroFiancaContrato && (contrato?.responsavel_pagamento_premio || 'locatario') !== 'locador'
+  const somaTotalContrato = somaAluguel + somaCondominio + somaIptu + somaSeguroIncendio + (premioIntegraTotal ? somaSeguroFianca : 0)
 
   return (
     <div>
@@ -1047,13 +1074,18 @@ function PainelLocatario({ user }: { user: PortalUser }) {
                       ['Condomínio', somaCondominio],
                       ['IPTU', somaIptu],
                       ['Seguro incêndio', somaSeguroIncendio],
-                      ...(somaSeguroFianca > 0 ? [['Seguro fiança', somaSeguroFianca] as [string, number]] : []),
+                      ...(somaSeguroFianca > 0 ? [[`Seguro-fiança ${SEGURADORA_FIANCA_PADRAO}`, somaSeguroFianca] as [string, number]] : []),
                     ].map(([l, v]) => (
                       <div key={l as string} className="flex justify-between text-sm">
                         <span style={{ color: '#8b9ab4' }}>{l}</span>
                         <span className="text-white">{formatVal(v as number)}</span>
                       </div>
                     ))}
+                    {somaSeguroFianca > 0 && !premioIntegraTotal && (
+                      <p style={{ color: '#f5a35b' }} className="text-[10px]">
+                        Prêmio pago pelo locador — não integra o total cobrado do locatário.
+                      </p>
+                    )}
                     <div style={{ borderTop: '0.5px solid #1e3a5f' }} className="flex justify-between pt-1.5 mt-1.5">
                       <span style={{ color: '#5b9bf5' }} className="text-sm font-semibold">Total mensal</span>
                       <span className="text-white text-sm font-bold">{formatVal(somaTotalContrato)}</span>
@@ -1184,7 +1216,7 @@ function PainelLocatario({ user }: { user: PortalUser }) {
                                           ['Condomínio', c.valor_condominio],
                                           ['IPTU', c.valor_iptu],
                                           ['Seguro incêndio', c.valor_seguro_incendio],
-                                          ['Seguro fiança', c.valor_seguro_fianca],
+                                          [`Seguro-fiança ${SEGURADORA_FIANCA_PADRAO}`, c.valor_seguro_fianca],
                                         ].filter(([, v]) => (v as number) > 0).map(([l, v]) => (
                                           <div key={l as string} className="flex justify-between" style={{ color: '#8b9ab4' }}>
                                             <span>{l}</span><span>{formatVal(v as number)}</span>
