@@ -57,6 +57,15 @@
 //   node scripts/seed-homologacao.mjs --confirmo-homologacao             (grava: cria)
 //   node scripts/seed-homologacao.mjs --rollback                         (dry-run: reverte)
 //   node scripts/seed-homologacao.mjs --rollback --confirmo-homologacao  (grava: reverte)
+//   node scripts/seed-homologacao.mjs --reset-senha-staff                                   (dry-run: só localiza)
+//   node scripts/seed-homologacao.mjs --reset-senha-staff --confirmo-homologacao             (grava: redefine a senha)
+//
+// --reset-senha-staff: redefine SOMENTE a senha de auth.users do e-mail
+// staff.homolog@teste.local, usando o valor atual de HOMOLOG_STAFF_PASSWORD
+// em .env.homolog.local. Não recria nada, não roda rollback, não toca em
+// organização/perfil/papel/outros usuários — usa as mesmas proteções de
+// projeto (checagem de project ref e bloqueio de host de produção) já
+// aplicadas acima. A senha nunca é impressa no terminal.
 
 import { readFileSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -104,6 +113,12 @@ function hostDeProducaoDocumentado() {
 
 const CONFIRMADO = process.argv.includes('--confirmo-homologacao')
 const ROLLBACK = process.argv.includes('--rollback')
+const RESET_SENHA_STAFF = process.argv.includes('--reset-senha-staff')
+
+if (RESET_SENHA_STAFF && ROLLBACK) {
+  console.error('\n🔴 BLOQUEADO: --reset-senha-staff e --rollback não podem ser usados juntos.')
+  process.exit(1)
+}
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL
 const chaveServico = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -158,7 +173,7 @@ if (hostProducao && host === hostProducao) {
 
 console.log(`Projeto alvo (confira visualmente antes de continuar): ${host}`)
 console.log(`Project ref conferido: ${projectRefAtual} === EXPECTED_HOMOLOG_PROJECT_REF`)
-console.log(ROLLBACK ? '=== MODO ROLLBACK ===' : '=== MODO CRIAÇÃO ===')
+console.log(RESET_SENHA_STAFF ? '=== MODO RESET DE SENHA (staff) ===' : ROLLBACK ? '=== MODO ROLLBACK ===' : '=== MODO CRIAÇÃO ===')
 console.log(CONFIRMADO ? '=== MODO GRAVAÇÃO (--confirmo-homologacao) ===' : '=== MODO DRY-RUN (nada será gravado) ===')
 
 const supabaseAdmin = createClient(url, chaveServico, { auth: { autoRefreshToken: false, persistSession: false } })
@@ -351,4 +366,37 @@ async function rollback() {
   console.log('\nRollback concluído.')
 }
 
-ROLLBACK ? rollback() : main()
+// ============================================================
+// Reset de senha — SOMENTE auth.users do e-mail staff.homolog@teste.local.
+// Não recria nada, não roda rollback, não toca organização, perfil,
+// papel ou os outros dois usuários (locador/locatário). A senha nova
+// vem exclusivamente de HOMOLOG_STAFF_PASSWORD (já validada como não
+// vazia mais acima) — nunca impressa aqui, nem em caso de erro.
+// ============================================================
+async function resetSenhaStaff() {
+  const { data: listaAuth, error: erroLista } = await supabaseAdmin.auth.admin.listUsers()
+  if (erroLista) { console.error('Erro ao listar auth.users:', erroLista.message); process.exit(1) }
+
+  const usuario = listaAuth.users.find((u) => u.email === DADOS.staff.email)
+
+  console.log('\nPlano de reset de senha:')
+  if (!usuario) {
+    console.log(`- Usuário ${DADOS.staff.email} NÃO encontrado em auth.users neste projeto.`)
+    console.log('- Nada a fazer — use o modo de criação (sem flags) se o usuário realmente não existir.')
+    return
+  }
+  console.log(`- Usuário encontrado: ${DADOS.staff.email} (id ${usuario.id})`)
+  console.log('- Ação: redefinir apenas a senha deste usuário em auth.users, usando o valor atual de HOMOLOG_STAFF_PASSWORD.')
+  console.log('- Não afeta: organizations, public.users, usuarios_organizacao, locador, locatário, nem qualquer outra tabela.')
+
+  if (!CONFIRMADO) {
+    console.log('\nDry-run — nenhuma escrita foi realizada. Rode com --reset-senha-staff --confirmo-homologacao para aplicar.')
+    return
+  }
+
+  const { error: erroUpdate } = await supabaseAdmin.auth.admin.updateUserById(usuario.id, { password: DADOS.staff.senha })
+  if (erroUpdate) { console.error('Erro ao redefinir senha:', erroUpdate.message); process.exit(1) }
+  console.log(`\nSenha redefinida para ${DADOS.staff.email} (valor atual de HOMOLOG_STAFF_PASSWORD em .env.homolog.local).`)
+}
+
+RESET_SENHA_STAFF ? resetSenhaStaff() : (ROLLBACK ? rollback() : main())
