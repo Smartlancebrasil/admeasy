@@ -8,6 +8,7 @@ import { FileText, Plus, X, AlertTriangle, Edit2, FileDown, UserPlus, Upload, Tr
 import { registrarLog } from '@/lib/logs'
 import { resolverUrlExibicao } from '@/lib/documentosSignedUrl'
 import { uploadDocumentoAdministrativo, excluirDocumentoAdministrativo } from '@/lib/documentosAdmin'
+import { gerarClausulaSeguroFianca, temDadosCompletosSeguroFianca, SEGURADORA_FIANCA_PADRAO } from '@/lib/contratos/clausulaSeguroFianca'
 
 type Contrato = {
   id: string
@@ -26,6 +27,11 @@ type Contrato = {
   comissao_seguro_fianca?: number
   seguradora_fianca?: string
   apolice_fianca?: string
+  responsavel_pagamento_premio?: string
+  inicio_vigencia_seguro?: string
+  fim_vigencia_seguro?: string
+  cobertura_danos_imovel?: boolean
+  cobertura_pintura_interna?: boolean
   parcelas_caucao?: number
   indice_reajuste: string
   mes_reajuste?: number
@@ -387,6 +393,8 @@ const formVazio = {
   valor_mensal:'', valor_condominio:'', valor_iptu:'', valor_seguro_incendio:'', valor_seguro_fianca:'',
   comissao_seguro_incendio:'', comissao_seguro_fianca:'',
   seguradora_fianca:'', apolice_fianca:'',
+  responsavel_pagamento_premio:'', inicio_vigencia_seguro:'', fim_vigencia_seguro:'',
+  cobertura_danos_imovel:'', cobertura_pintura_interna:'',
   valor_caucao:'',
   parcelas_caucao: '1',
   indice_reajuste:'igpm', mes_reajuste:'1',
@@ -682,13 +690,22 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
   const parcelasNum = parseInt(form.parcelas_caucao) || 1
   const valorParcela = caucaoVal > 0 && parcelasNum > 1 ? caucaoVal / parcelasNum : caucaoVal
 
+  // Prêmio do seguro-fiança só integra o total do boleto do locatário
+  // quando ele é quem paga — nunca quando o responsável é o locador, e
+  // nunca é usado pra base de reajuste do aluguel (fica de fora de
+  // valor_mensal/valor_atual em todo o arquivo).
+  const ehSeguroFianca = form.tipo_garantia === 'seguro_fianca'
+  const ehCaucao = form.tipo_garantia === 'caucao'
+  const premioSeguroFianca = ehSeguroFianca ? (parseFloat(form.valor_seguro_fianca) || 0) : 0
+  const premioPagoPeloLocatario = ehSeguroFianca && (form.responsavel_pagamento_premio || 'locatario') !== 'locador'
+
   const somaMensal =
     (parseFloat(form.valor_mensal) || 0) +
     (parseFloat(form.valor_condominio) || 0) +
     (parseFloat(form.valor_iptu) || 0) +
     (parseFloat(form.valor_seguro_incendio) || 0) +
-    (form.tipo_garantia === 'seguro_fianca' ? (parseFloat(form.valor_seguro_fianca) || 0) : 0) +
-    (parcelasNum > 1 ? valorParcela : 0)
+    (premioPagoPeloLocatario ? premioSeguroFianca : 0) +
+    (ehCaucao && parcelasNum > 1 ? valorParcela : 0)
 
   useEffect(() => { if (form.id) carregarKit() }, [form.id])
 
@@ -734,8 +751,38 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
     setUploadandoKit(null)
   }
 
+  // Validação da garantia por seguro-fiança — nunca salva a cláusula
+  // completa com dado essencial faltando. Contratos legados sem esses
+  // dados continuam abrindo normalmente (não passam por aqui de novo
+  // até serem editados e salvos).
+  function validarSeguroFianca(): string {
+    if (form.tipo_garantia !== 'seguro_fianca') return ''
+    if (!form.apolice_fianca) return 'Informe o número da apólice do seguro-fiança.'
+    // Sem fallback aqui — salvar um contrato novo ou editado exige a
+    // escolha explícita de quem paga o prêmio. O fallback pra
+    // 'locatario' só existe na LEITURA de contratos legados (já
+    // salvos antes deste campo existir) e na composição de cobranças
+    // antigas — nunca pra aprovar um salvamento novo.
+    if (form.responsavel_pagamento_premio !== 'locatario' && form.responsavel_pagamento_premio !== 'locador') {
+      return 'Informe quem será responsável pelo pagamento do prêmio do seguro-fiança.'
+    }
+    const responsavel = form.responsavel_pagamento_premio
+    if (responsavel === 'locatario' && !(parseFloat(form.valor_seguro_fianca) > 0)) {
+      return 'Informe o prêmio mensal do seguro-fiança (obrigatório quando o responsável pelo pagamento é o locatário).'
+    }
+    if (form.valor_seguro_fianca && parseFloat(form.valor_seguro_fianca) < 0) {
+      return 'O prêmio mensal do seguro-fiança não pode ser negativo.'
+    }
+    if (!form.inicio_vigencia_seguro) return 'Informe a data de início da vigência do seguro-fiança.'
+    if (!form.fim_vigencia_seguro) return 'Informe a data de fim da vigência do seguro-fiança.'
+    if (form.fim_vigencia_seguro <= form.inicio_vigencia_seguro) return 'A data de fim da vigência deve ser posterior à data de início.'
+    return ''
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault(); setSalvando(true); setErro('')
+    const erroValidacao = validarSeguroFianca()
+    if (erroValidacao) { setErro(erroValidacao); setSalvando(false); return }
     try {
       const novoId = await onSalvar(form)
       if (novoId) setForm(f => ({ ...f, id: novoId }))
@@ -763,6 +810,54 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
       setForm(f => ({ ...f, [campo]: cliente.id }))
     }
     setModalCadastro(null)
+  }
+
+  const GARANTIA_LABEL: Record<string, string> = {
+    caucao: 'Caução', fiador: 'Fiador', seguro_fianca: 'Seguro fiança', titulo_capitalizacao: 'Título de capitalização',
+  }
+
+  // Confere se a garantia atualmente selecionada já tem dado relevante
+  // preenchido — usado só pra decidir se pede confirmação ao trocar de
+  // modalidade. Nunca apaga nada: os dados continuam no form (e são
+  // persistidos) independente da resposta.
+  function possuiDadosDaGarantia(tipo: string): boolean {
+    if (tipo === 'caucao') return !!(form.valor_caucao && parseFloat(form.valor_caucao) > 0)
+    if (tipo === 'seguro_fianca') return !!(form.valor_seguro_fianca || form.apolice_fianca)
+    if (tipo === 'fiador') return !!form.fiador_id
+    return false
+  }
+
+  // Troca a modalidade de garantia. Nunca limpa os campos da modalidade
+  // anterior (ficam salvos, só deixam de ser usados no contrato/
+  // cobrança/interface enquanto essa não for a modalidade ativa de
+  // novo) — pede confirmação só quando a troca de fato muda cláusula
+  // ou lançamentos já configurados.
+  function selecionarGarantia(valor: string) {
+    const atual = form.tipo_garantia
+    const desmarcando = atual === valor
+    const novoValor = desmarcando ? '' : valor
+
+    if (!desmarcando && atual && atual !== valor && possuiDadosDaGarantia(atual)) {
+      const ok = confirm(
+        `Este contrato já tem dados preenchidos para a garantia atual (${GARANTIA_LABEL[atual] || atual}).\n\n` +
+        `Mudar para "${GARANTIA_LABEL[valor] || valor}" muda a cláusula de garantia do contrato e os lançamentos financeiros gerados a partir de agora. Os dados de "${GARANTIA_LABEL[atual] || atual}" continuam salvos, mas deixam de ser usados enquanto essa não for a garantia ativa. Deseja continuar?`
+      )
+      if (!ok) return
+    }
+
+    setForm(f => ({
+      ...f,
+      tipo_garantia: novoValor,
+      valor_caucao: (!desmarcando && valor === 'caucao' && !f.valor_caucao && f.valor_mensal)
+        ? String((parseFloat(f.valor_mensal) || 0) * 3)
+        : f.valor_caucao,
+      responsavel_pagamento_premio: (!desmarcando && valor === 'seguro_fianca' && !f.responsavel_pagamento_premio)
+        ? 'locatario'
+        : f.responsavel_pagamento_premio,
+      seguradora_fianca: (!desmarcando && valor === 'seguro_fianca' && !f.seguradora_fianca)
+        ? SEGURADORA_FIANCA_PADRAO
+        : f.seguradora_fianca,
+    }))
   }
 
   return (
@@ -902,13 +997,7 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
                     <input
                       type="checkbox"
                       checked={marcado}
-                      onChange={() => setForm(f => ({
-                        ...f,
-                        tipo_garantia: marcado ? '' : valor,
-                        valor_caucao: (!marcado && valor === 'caucao' && !f.valor_caucao && f.valor_mensal)
-                          ? String((parseFloat(f.valor_mensal) || 0) * 3)
-                          : f.valor_caucao,
-                      }))}
+                      onChange={() => selecionarGarantia(valor as string)}
                       className="accent-blue-600"
                     />
                     {label}
@@ -995,20 +1084,56 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
 
           {form.tipo_garantia === 'seguro_fianca' && (
             <div className="sm:col-span-2">
-              <label className="label">Seguro fiança (R$) — valor mensal</label>
+              <label className="label">Seguro fiança (R$) — prêmio mensal *</label>
               <InputMoeda value={form.valor_seguro_fianca} onChange={v => setForm(f => ({...f, valor_seguro_fianca: v}))} />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
                 <div>
                   <label className="label">Seguradora</label>
-                  <input className="input" value={form.seguradora_fianca} onChange={set('seguradora_fianca')} placeholder="Ex: Porto Seguro" />
+                  <input className="input" value={form.seguradora_fianca || SEGURADORA_FIANCA_PADRAO} disabled
+                    style={{ opacity: 0.75, cursor: 'not-allowed' }} />
+                  <p style={{ color: '#5b5e6b' }} className="text-[10px] mt-1">
+                    {form.seguradora_fianca && form.seguradora_fianca !== SEGURADORA_FIANCA_PADRAO
+                      ? 'Contrato com seguradora diferente da padrão atual — mantido como está.'
+                      : `Nesta primeira implementação, a seguradora é sempre ${SEGURADORA_FIANCA_PADRAO}.`}
+                  </p>
                 </div>
                 <div>
-                  <label className="label">Nº da apólice</label>
+                  <label className="label">Nº da apólice *</label>
                   <input className="input" value={form.apolice_fianca} onChange={set('apolice_fianca')} placeholder="Ex: 123456789" />
+                </div>
+                <div>
+                  <label className="label">Responsável pelo pagamento do prêmio *</label>
+                  <select className="input" value={form.responsavel_pagamento_premio || 'locatario'} onChange={set('responsavel_pagamento_premio')}>
+                    <option value="locatario">Locatário</option>
+                    <option value="locador">Locador</option>
+                  </select>
                 </div>
                 <div>
                   <label className="label">Comissão mensal da imobiliária (R$)</label>
                   <InputMoeda value={form.comissao_seguro_fianca} onChange={v => setForm(f => ({...f, comissao_seguro_fianca: v}))} />
+                  <p style={{ color: '#5b5e6b' }} className="text-[10px] mt-1">Receita da imobiliária — nunca é somada ao boleto do locatário.</p>
+                </div>
+                <div>
+                  <label className="label">Início da vigência *</label>
+                  <input className="input" type="date" style={{ colorScheme: 'dark' }} value={form.inicio_vigencia_seguro} onChange={set('inicio_vigencia_seguro')} />
+                </div>
+                <div>
+                  <label className="label">Fim da vigência *</label>
+                  <input className="input" type="date" style={{ colorScheme: 'dark' }} min={form.inicio_vigencia_seguro || undefined} value={form.fim_vigencia_seguro} onChange={set('fim_vigencia_seguro')} />
+                </div>
+                <div className="sm:col-span-2 flex flex-col gap-2">
+                  <label className="flex items-center gap-2 cursor-pointer" style={{ color: '#a8aab5' }}>
+                    <input type="checkbox" checked={!!form.cobertura_danos_imovel}
+                      onChange={() => setForm(f => ({ ...f, cobertura_danos_imovel: f.cobertura_danos_imovel ? '' : '1' }))}
+                      className="accent-blue-600" />
+                    <span className="text-sm">Cobertura de danos ao imóvel</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer" style={{ color: '#a8aab5' }}>
+                    <input type="checkbox" checked={!!form.cobertura_pintura_interna}
+                      onChange={() => setForm(f => ({ ...f, cobertura_pintura_interna: f.cobertura_pintura_interna ? '' : '1' }))}
+                      className="accent-blue-600" />
+                    <span className="text-sm">Cobertura de pintura interna</span>
+                  </label>
                 </div>
               </div>
             </div>
@@ -1027,13 +1152,40 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
 
           <div className="sm:col-span-2">
             <div style={{ background: '#16243a', border: '0.5px solid #1e3a5f' }} className="rounded-lg p-3">
-              <p style={{ color: '#5b9bf5' }} className="text-xs font-medium">
-                Total mensal do boleto: {formatVal(somaMensal)}
-              </p>
-              <p style={{ color: '#7daee8' }} className="text-[10px] mt-1">
-                Aluguel + condomínio + IPTU + seguro incêndio{form.tipo_garantia === 'seguro_fianca' ? ' + seguro fiança' : ''}
-                {parcelasNum > 1 ? ` + parcela da caução (${formatVal(valorParcela)}/mês, nos primeiros ${parcelasNum} meses)` : ''}.
-                {' '}Serão geradas {form.data_inicio && form.data_fim ? mesesContrato(form.data_inicio, form.data_fim) : 0} cobranças ao criar o contrato.
+              <p style={{ color: '#5b9bf5' }} className="text-xs font-medium mb-2">Prévia da composição mensal</p>
+              <div className="space-y-1">
+                {[
+                  ['Aluguel', parseFloat(form.valor_mensal) || 0],
+                  ['Condomínio', parseFloat(form.valor_condominio) || 0],
+                  ['IPTU', parseFloat(form.valor_iptu) || 0],
+                  ['Seguro incêndio', parseFloat(form.valor_seguro_incendio) || 0],
+                  ...(ehSeguroFianca && premioSeguroFianca > 0
+                    ? [[`Seguro-fiança ${SEGURADORA_FIANCA_PADRAO}`, premioSeguroFianca] as [string, number]]
+                    : []),
+                ].filter(([, v]) => (v as number) > 0).map(([label, v]) => (
+                  <div key={label as string} className="flex justify-between text-xs">
+                    <span style={{ color: '#7daee8' }}>{label}</span>
+                    <span style={{ color: '#c3c2b7' }}>{formatVal(v as number)}</span>
+                  </div>
+                ))}
+                {ehCaucao && parcelasNum > 1 && (
+                  <div className="flex justify-between text-xs">
+                    <span style={{ color: '#7daee8' }}>Parcela da caução (primeiros {parcelasNum} meses)</span>
+                    <span style={{ color: '#c3c2b7' }}>{formatVal(valorParcela)}</span>
+                  </div>
+                )}
+                <div style={{ borderTop: '0.5px solid #1e3a5f' }} className="flex justify-between text-xs font-semibold pt-1 mt-1">
+                  <span style={{ color: '#5b9bf5' }}>Total mensal</span>
+                  <span style={{ color: '#5b9bf5' }}>{formatVal(somaMensal)}</span>
+                </div>
+              </div>
+              {ehSeguroFianca && premioSeguroFianca > 0 && !premioPagoPeloLocatario && (
+                <p style={{ color: '#f5a35b' }} className="text-[10px] mt-2">
+                  Prêmio pago pelo locador — não integra o boleto do locatário.
+                </p>
+              )}
+              <p style={{ color: '#7daee8' }} className="text-[10px] mt-2">
+                Serão geradas {form.data_inicio && form.data_fim ? mesesContrato(form.data_inicio, form.data_fim) : 0} cobranças ao criar o contrato.
               </p>
             </div>
           </div>
@@ -1533,7 +1685,34 @@ async function gerarContratoPdf(contratoId: string, organizationId: string, onEs
   } else if (form.tipo_garantia === 'titulo_capitalizacao') {
     clausula('7ª', `O presente contrato será garantido por título de capitalização, vinculado em favor do LOCADOR pelo valor correspondente a, no mínimo, ${caucaoValPdf > 0 ? formatVal(caucaoValPdf) : '3 (três) aluguéis'}, permanecendo caução até a efetiva entrega das chaves e quitação de todas as obrigações do presente contrato.`)
   } else if (form.tipo_garantia === 'seguro_fianca' && numApoliceSeguroFianca) {
-    clausula('7ª', `O presente contrato será garantido por seguro fiança, Apólice nº ${numApoliceSeguroFianca}, no valor de ${form.valor_seguro_fianca ? formatVal(parseFloat(form.valor_seguro_fianca)) : 'conforme apólice'}.`)
+    // Contrato legado (criado antes destes campos existirem, ou ainda
+    // não reeditado): mantém a redação genérica de sempre até o
+    // contrato ser salvo de novo com os dados completos — nunca quebra
+    // por falta de vigência/responsável/cobertura.
+    if (!temDadosCompletosSeguroFianca({
+      apoliceFianca: form.apolice_fianca,
+      responsavelPagamentoPremio: form.responsavel_pagamento_premio,
+      inicioVigencia: form.inicio_vigencia_seguro,
+      fimVigencia: form.fim_vigencia_seguro,
+    })) {
+      clausula('7ª', `O presente contrato será garantido por seguro fiança, Apólice nº ${numApoliceSeguroFianca}, no valor de ${form.valor_seguro_fianca ? formatVal(parseFloat(form.valor_seguro_fianca)) : 'conforme apólice'}.`)
+    } else {
+      const clausulaSeguro = gerarClausulaSeguroFianca({
+        apoliceFianca: numApoliceSeguroFianca,
+        responsavelPagamentoPremio: form.responsavel_pagamento_premio === 'locador' ? 'locador' : 'locatario',
+        premioMensal: parseFloat(form.valor_seguro_fianca) || 0,
+        inicioVigencia: form.inicio_vigencia_seguro,
+        fimVigencia: form.fim_vigencia_seguro,
+        coberturaDanosImovel: !!form.cobertura_danos_imovel,
+        coberturaPinturaInterna: !!form.cobertura_pintura_interna,
+        formatVal,
+        valorExtenso,
+        dataExtenso,
+      })
+      clausulaSeguro.cabecalho.split('\n').forEach(linha => paragrafo(linha, true))
+      paragrafo(clausulaSeguro.paragrafoAbertura)
+      clausulaSeguro.paragrafos.forEach(p => paragrafoRotulo(p))
+    }
   } else if (form.tipo_garantia === 'caucao' || !form.tipo_garantia) {
     if (caucaoValPdf > 0) {
       let textoCaucao = `Fica acordado que o presente contrato será garantido por meio de caução no valor de ${formatVal(caucaoValPdf)} (${valorExtenso(caucaoValPdf)})`
@@ -1743,6 +1922,9 @@ export default function ContratosPage() {
       valor_seguro_incendio: c.valor_seguro_incendio?.toString()||'', valor_seguro_fianca: c.valor_seguro_fianca?.toString()||'',
       comissao_seguro_incendio: c.comissao_seguro_incendio?.toString()||'', comissao_seguro_fianca: c.comissao_seguro_fianca?.toString()||'',
       seguradora_fianca: c.seguradora_fianca||'', apolice_fianca: c.apolice_fianca||'',
+      responsavel_pagamento_premio: c.responsavel_pagamento_premio||'',
+      inicio_vigencia_seguro: c.inicio_vigencia_seguro||'', fim_vigencia_seguro: c.fim_vigencia_seguro||'',
+      cobertura_danos_imovel: c.cobertura_danos_imovel ? '1' : '', cobertura_pintura_interna: c.cobertura_pintura_interna ? '1' : '',
       parcelas_caucao: '1',
       indice_reajuste: c.indice_reajuste||'igpm', mes_reajuste: c.mes_reajuste?.toString()||'1',
       multa_rescisao_locatario: c.multa_rescisao_locatario?.toString()||'3',
@@ -1793,10 +1975,21 @@ export default function ContratosPage() {
       valor_iptu: dados.valor_iptu ? parseFloat(dados.valor_iptu) : 0,
       valor_seguro_incendio: dados.valor_seguro_incendio ? parseFloat(dados.valor_seguro_incendio) : 0,
       comissao_seguro_incendio: dados.comissao_seguro_incendio ? parseFloat(dados.comissao_seguro_incendio) : 0,
-      valor_seguro_fianca: dados.tipo_garantia === 'seguro_fianca' && dados.valor_seguro_fianca ? parseFloat(dados.valor_seguro_fianca) : 0,
-      comissao_seguro_fianca: dados.tipo_garantia === 'seguro_fianca' && dados.comissao_seguro_fianca ? parseFloat(dados.comissao_seguro_fianca) : 0,
-      seguradora_fianca: dados.tipo_garantia === 'seguro_fianca' ? (dados.seguradora_fianca || null) : null,
-      apolice_fianca: dados.tipo_garantia === 'seguro_fianca' ? (dados.apolice_fianca || null) : null,
+      // Os dados de seguro-fiança NUNCA são apagados ao trocar de
+      // modalidade — ficam salvos mesmo com tipo_garantia diferente,
+      // só deixam de ser usados (cláusula/cobrança/interface leem
+      // sempre condicionado a tipo_garantia === 'seguro_fianca', nunca
+      // direto destes campos). Mesmo padrão pros dados de caução, que
+      // já não eram apagados antes desta mudança.
+      valor_seguro_fianca: dados.valor_seguro_fianca ? parseFloat(dados.valor_seguro_fianca) : 0,
+      comissao_seguro_fianca: dados.comissao_seguro_fianca ? parseFloat(dados.comissao_seguro_fianca) : 0,
+      seguradora_fianca: dados.seguradora_fianca || null,
+      apolice_fianca: dados.apolice_fianca || null,
+      responsavel_pagamento_premio: dados.responsavel_pagamento_premio || null,
+      inicio_vigencia_seguro: dados.inicio_vigencia_seguro || null,
+      fim_vigencia_seguro: dados.fim_vigencia_seguro || null,
+      cobertura_danos_imovel: !!dados.cobertura_danos_imovel,
+      cobertura_pintura_interna: !!dados.cobertura_pintura_interna,
       taxa_administracao: dados.taxa_administracao ? parseFloat(dados.taxa_administracao) : 10,
       honorarios_aplicavel: !!dados.honorarios_aplicavel,
       valor_honorarios: dados.honorarios_aplicavel && dados.valor_honorarios ? parseFloat(dados.valor_honorarios) : 0,
@@ -1844,7 +2037,12 @@ export default function ContratosPage() {
     const caucaoVal = parseFloat(dados.valor_caucao) || 0
     const parcelasNum = parseInt(dados.parcelas_caucao) || 1
 
-    if (!dados.id && caucaoVal > 0 && contratoId) {
+    // Lançamento de caução só é gerado quando a garantia ativa É
+    // caução — nunca por causa de um valor residual deixado no campo
+    // valor_caucao de quando o contrato usava caução antes de trocar
+    // pra seguro-fiança (esse valor continua salvo, só não é mais
+    // usado enquanto a garantia ativa for outra).
+    if (!dados.id && dados.tipo_garantia === 'caucao' && caucaoVal > 0 && contratoId) {
       const valorParcela = caucaoVal / parcelasNum
       const lancamentos = []
       for (let i = 0; i < parcelasNum; i++) {
@@ -1876,9 +2074,22 @@ export default function ContratosPage() {
       const valorCondominio = parseFloat(dados.valor_condominio) || 0
       const valorIptu = parseFloat(dados.valor_iptu) || 0
       const valorSeguroIncendio = parseFloat(dados.valor_seguro_incendio) || 0
-      const valorSeguroFianca = dados.tipo_garantia === 'seguro_fianca' ? (parseFloat(dados.valor_seguro_fianca) || 0) : 0
+      const ehSeguroFiancaSalvo = dados.tipo_garantia === 'seguro_fianca'
+      const ehCaucaoSalvo = dados.tipo_garantia === 'caucao'
+      const valorSeguroFianca = ehSeguroFiancaSalvo ? (parseFloat(dados.valor_seguro_fianca) || 0) : 0
+      // Prêmio só entra no total do boleto do locatário — e só é
+      // gravado em cada cobrança — quando ele é quem paga (default
+      // 'locatario', igual ao comportamento vigente antes deste campo
+      // existir). Quando é o locador, cobrancas.valor_seguro_fianca
+      // fica 0 (nunca aparece como cobrança do locatário); o valor
+      // continua em contratos.valor_seguro_fianca, só pra referência
+      // administrativa.
+      const premioPagoPeloLocatarioSalvo = ehSeguroFiancaSalvo && (dados.responsavel_pagamento_premio || 'locatario') !== 'locador'
       const numMeses = mesesContrato(dados.data_inicio, dados.data_fim)
-      const valorCaucaoParcela = parcelasNum > 1 ? caucaoVal / parcelasNum : 0
+      // Caução só gera parcela em cobrança quando a garantia ativa é
+      // caução — nunca por um valor_caucao residual de uma troca de
+      // modalidade anterior.
+      const valorCaucaoParcela = ehCaucaoSalvo && parcelasNum > 1 ? caucaoVal / parcelasNum : 0
       const taxaAdmPct = dados.taxa_administracao ? parseFloat(dados.taxa_administracao) : 10
       const temHonorario = !!dados.honorarios_aplicavel
 
@@ -1891,8 +2102,8 @@ export default function ContratosPage() {
       for (let i = 0; i < numMeses; i++) {
         const vencimento = new Date(primeiroVencimento)
         vencimento.setMonth(vencimento.getMonth() + i)
-        const caucaoDoMes = i < parcelasNum ? valorCaucaoParcela : 0
-        const total = valorMensal + valorCondominio + valorIptu + valorSeguroIncendio + valorSeguroFianca + caucaoDoMes
+        const caucaoDoMes = ehCaucaoSalvo && i < parcelasNum ? valorCaucaoParcela : 0
+        const total = valorMensal + valorCondominio + valorIptu + valorSeguroIncendio + (premioPagoPeloLocatarioSalvo ? valorSeguroFianca : 0) + caucaoDoMes
 
         // Regra de honorários: a 1ª cobrança do contrato fica 100% com a
         // imobiliária (repasse zero); da 2ª em diante, repasse normal.
@@ -1912,7 +2123,12 @@ export default function ContratosPage() {
           valor_condominio: valorCondominio,
           valor_iptu: valorIptu,
           valor_seguro_incendio: valorSeguroIncendio,
-          valor_seguro_fianca: valorSeguroFianca,
+          // 0 quando o locador paga — nunca aparece na cobrança do
+          // locatário (boleto/recibo/portal/histórico leem daqui, não
+          // de contratos.valor_seguro_fianca). O valor continua
+          // guardado em contratos.valor_seguro_fianca pra referência
+          // administrativa, só não é replicado pra cada cobrança.
+          valor_seguro_fianca: premioPagoPeloLocatarioSalvo ? valorSeguroFianca : 0,
           valor_caucao_parcela: caucaoDoMes,
           caucao_parcela_num: caucaoDoMes > 0 ? i + 1 : null,
           caucao_parcelas_total: caucaoDoMes > 0 ? parcelasNum : null,
