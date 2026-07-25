@@ -8,7 +8,7 @@ import { FileText, Plus, X, AlertTriangle, Edit2, FileDown, UserPlus, Upload, Tr
 import { registrarLog } from '@/lib/logs'
 import { resolverUrlExibicao } from '@/lib/documentosSignedUrl'
 import { uploadDocumentoAdministrativo, excluirDocumentoAdministrativo } from '@/lib/documentosAdmin'
-import { gerarClausulaSeguroFianca, temDadosCompletosSeguroFianca, SEGURADORA_FIANCA_PADRAO } from '@/lib/contratos/clausulaSeguroFianca'
+import { SEGURADORA_FIANCA_PADRAO, gerarPreviaSeguroFianca } from '@/lib/contratos/clausulaSeguroFianca'
 
 type Contrato = {
   id: string
@@ -779,15 +779,40 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
     return ''
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault(); setSalvando(true); setErro('')
+  // Salva o formulário e devolve o id final (novo ou existente) — usado
+  // tanto pelo submit normal quanto por "Emitir Contrato", pra nunca
+  // gerar o PDF a partir de um registro desatualizado no banco (bug
+  // corrigido nesta revisão: gerarContratoPdf sempre rebusca o contrato
+  // por id, então qualquer edição em tela — ex.: trocar pra seguro-
+  // fiança e preencher os campos novos — precisa estar salva antes).
+  async function salvarESincronizarId(): Promise<string | null> {
     const erroValidacao = validarSeguroFianca()
-    if (erroValidacao) { setErro(erroValidacao); setSalvando(false); return }
+    if (erroValidacao) { setErro(erroValidacao); return null }
     try {
       const novoId = await onSalvar(form)
       if (novoId) setForm(f => ({ ...f, id: novoId }))
-    } catch(err: any) { setErro(err.message) }
+      return novoId || form.id || null
+    } catch (err: any) {
+      setErro(err.message)
+      return null
+    }
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault(); setSalvando(true); setErro('')
+    await salvarESincronizarId()
     setSalvando(false)
+  }
+
+  // "Emitir Contrato" salva primeiro (mesma validação e mesmo caminho
+  // de gravação do botão "Salvar") e só then gera o PDF com o id
+  // confirmado — garante que o PDF sempre reflete o que está em tela,
+  // nunca uma versão anterior salva no banco.
+  async function salvarEEmitir() {
+    setSalvando(true); setErro('')
+    const id = await salvarESincronizarId()
+    setSalvando(false)
+    if (id) onGerarPdf(id)
   }
 
   function idsExtras(campo: 'locatarios_adicionais' | 'locadores_adicionais'): string[] {
@@ -1135,6 +1160,38 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
                     <span className="text-sm">Cobertura de pintura interna</span>
                   </label>
                 </div>
+                <div className="sm:col-span-2">
+                  <label className="label mb-1">Prévia da Cláusula 7ª</label>
+                  {(() => {
+                    const previaSeguro = gerarPreviaSeguroFianca({
+                      apoliceFianca: form.apolice_fianca,
+                      responsavelPagamentoPremio: form.responsavel_pagamento_premio === 'locador' ? 'locador' : 'locatario',
+                      premioMensal: parseFloat(form.valor_seguro_fianca) || 0,
+                      inicioVigencia: form.inicio_vigencia_seguro,
+                      fimVigencia: form.fim_vigencia_seguro,
+                      coberturaDanosImovel: !!form.cobertura_danos_imovel,
+                      coberturaPinturaInterna: !!form.cobertura_pintura_interna,
+                      formatVal, valorExtenso, dataExtenso,
+                    })
+                    if (!previaSeguro.pronto) {
+                      return (
+                        <div style={{ background: '#2e2417', border: '0.5px solid #4a3a24', color: '#f5c26b' }} className="rounded-lg p-3 text-xs">
+                          {previaSeguro.aviso}
+                        </div>
+                      )
+                    }
+                    return (
+                      <div style={{ background: '#0d1117', border: '0.5px solid #2a2f3a', color: '#c3c2b7' }} className="rounded-lg p-3 text-xs space-y-2 max-h-64 overflow-y-auto">
+                        <p style={{ color: '#f4f4f3', whiteSpace: 'pre-line' }} className="font-semibold">{previaSeguro.clausula.cabecalho}</p>
+                        <p>{previaSeguro.clausula.paragrafoAbertura}</p>
+                        {previaSeguro.clausula.paragrafos.map((p, i) => <p key={i}>{p}</p>)}
+                      </div>
+                    )
+                  })()}
+                  <p style={{ color: '#5b5e6b' }} className="text-[10px] mt-1">
+                    Atualiza automaticamente conforme você preenche os campos acima — o PDF final usa exatamente este mesmo texto.
+                  </p>
+                </div>
               </div>
             </div>
           )}
@@ -1373,8 +1430,8 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
             <button type="button"
               style={{ background: '#22c55e', color: '#fff', border: 'none' }}
               className="btn font-medium"
-              disabled={!!popupPdf} onClick={() => onGerarPdf(form.id)}>
-              <FileDown size={13} />Emitir Contrato
+              disabled={!!popupPdf || salvando} onClick={salvarEEmitir}>
+              <FileDown size={13} />{salvando ? 'Salvando...' : 'Emitir Contrato'}
             </button>
           )}
         </div>
@@ -1684,34 +1741,32 @@ async function gerarContratoPdf(contratoId: string, organizationId: string, onEs
     }
   } else if (form.tipo_garantia === 'titulo_capitalizacao') {
     clausula('7ª', `O presente contrato será garantido por título de capitalização, vinculado em favor do LOCADOR pelo valor correspondente a, no mínimo, ${caucaoValPdf > 0 ? formatVal(caucaoValPdf) : '3 (três) aluguéis'}, permanecendo caução até a efetiva entrega das chaves e quitação de todas as obrigações do presente contrato.`)
-  } else if (form.tipo_garantia === 'seguro_fianca' && numApoliceSeguroFianca) {
-    // Contrato legado (criado antes destes campos existirem, ou ainda
-    // não reeditado): mantém a redação genérica de sempre até o
-    // contrato ser salvo de novo com os dados completos — nunca quebra
-    // por falta de vigência/responsável/cobertura.
-    if (!temDadosCompletosSeguroFianca({
-      apoliceFianca: form.apolice_fianca,
-      responsavelPagamentoPremio: form.responsavel_pagamento_premio,
+  } else if (form.tipo_garantia === 'seguro_fianca') {
+    // Mesma função de decisão usada na prévia em tempo real do
+    // formulário (gerarPreviaSeguroFianca) — nunca duas lógicas
+    // divergentes pro mesmo cenário completo/incompleto.
+    const previaSeguro = gerarPreviaSeguroFianca({
+      apoliceFianca: numApoliceSeguroFianca,
+      responsavelPagamentoPremio: form.responsavel_pagamento_premio === 'locador' ? 'locador' : 'locatario',
+      premioMensal: parseFloat(form.valor_seguro_fianca) || 0,
       inicioVigencia: form.inicio_vigencia_seguro,
       fimVigencia: form.fim_vigencia_seguro,
-    })) {
-      clausula('7ª', `O presente contrato será garantido por seguro fiança, Apólice nº ${numApoliceSeguroFianca}, no valor de ${form.valor_seguro_fianca ? formatVal(parseFloat(form.valor_seguro_fianca)) : 'conforme apólice'}.`)
+      coberturaDanosImovel: !!form.cobertura_danos_imovel,
+      coberturaPinturaInterna: !!form.cobertura_pintura_interna,
+      formatVal,
+      valorExtenso,
+      dataExtenso,
+    })
+    if (!previaSeguro.pronto) {
+      // Contrato legado ou ainda incompleto (falta apólice, responsável
+      // ou vigência): mantém uma redação genérica mínima — nunca quebra,
+      // e nunca deixa a CLÁUSULA 7ª inteiramente vazia, mesmo sem
+      // apólice preenchida (achado corrigido nesta revisão).
+      clausula('7ª', `O presente contrato será garantido por seguro fiança${numApoliceSeguroFianca ? `, Apólice nº ${numApoliceSeguroFianca}` : ''}, no valor de ${form.valor_seguro_fianca ? formatVal(parseFloat(form.valor_seguro_fianca)) : 'conforme apólice'}.`)
     } else {
-      const clausulaSeguro = gerarClausulaSeguroFianca({
-        apoliceFianca: numApoliceSeguroFianca,
-        responsavelPagamentoPremio: form.responsavel_pagamento_premio === 'locador' ? 'locador' : 'locatario',
-        premioMensal: parseFloat(form.valor_seguro_fianca) || 0,
-        inicioVigencia: form.inicio_vigencia_seguro,
-        fimVigencia: form.fim_vigencia_seguro,
-        coberturaDanosImovel: !!form.cobertura_danos_imovel,
-        coberturaPinturaInterna: !!form.cobertura_pintura_interna,
-        formatVal,
-        valorExtenso,
-        dataExtenso,
-      })
-      clausulaSeguro.cabecalho.split('\n').forEach(linha => paragrafo(linha, true))
-      paragrafo(clausulaSeguro.paragrafoAbertura)
-      clausulaSeguro.paragrafos.forEach(p => paragrafoRotulo(p))
+      previaSeguro.clausula.cabecalho.split('\n').forEach(linha => paragrafo(linha, true))
+      paragrafo(previaSeguro.clausula.paragrafoAbertura)
+      previaSeguro.clausula.paragrafos.forEach(p => paragrafoRotulo(p))
     }
   } else if (form.tipo_garantia === 'caucao' || !form.tipo_garantia) {
     if (caucaoValPdf > 0) {

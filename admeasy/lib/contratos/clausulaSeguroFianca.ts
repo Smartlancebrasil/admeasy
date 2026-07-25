@@ -144,3 +144,27 @@ export function temDadosCompletosSeguroFianca(dados: {
     dados.fimVigencia
   )
 }
+
+export const AVISO_DADOS_INCOMPLETOS_SEGURO_FIANCA =
+  'Preencha apólice, responsável pelo prêmio e vigência para gerar a cláusula completa da Porto Seguro.'
+
+export type ResultadoPreviaSeguroFianca =
+  | { pronto: true; clausula: ClausulaSeguroFianca }
+  | { pronto: false; aviso: string }
+
+// Única função de decisão usada tanto pela prévia em tempo real no
+// formulário quanto pela geração do PDF — nunca duas lógicas
+// divergentes pro mesmo cenário. Não depende de nada além dos campos
+// escalares já recebidos (nenhuma chamada ao banco aqui), por isso
+// pode ser chamada diretamente a partir do estado do formulário em
+// tela, sem precisar salvar antes.
+export function gerarPreviaSeguroFianca(dados: DadosClausulaSeguroFianca): ResultadoPreviaSeguroFianca {
+  const completo = temDadosCompletosSeguroFianca({
+    apoliceFianca: dados.apoliceFianca,
+    responsavelPagamentoPremio: dados.responsavelPagamentoPremio,
+    inicioVigencia: dados.inicioVigencia,
+    fimVigencia: dados.fimVigencia,
+  })
+  if (!completo) return { pronto: false, aviso: AVISO_DADOS_INCOMPLETOS_SEGURO_FIANCA }
+  return { pronto: true, clausula: gerarClausulaSeguroFianca(dados) }
+}

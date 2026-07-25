@@ -13,6 +13,8 @@ import assert from 'node:assert/strict'
 import {
   gerarClausulaSeguroFianca,
   temDadosCompletosSeguroFianca,
+  gerarPreviaSeguroFianca,
+  AVISO_DADOS_INCOMPLETOS_SEGURO_FIANCA,
   SEGURADORA_FIANCA_PADRAO,
 } from './clausulaSeguroFianca.ts'
 
@@ -179,4 +181,59 @@ test('temDadosCompletosSeguroFianca: vigência ausente -> false', () => {
     fimVigencia: null,
   })
   assert.equal(ok, false)
+})
+
+// ── gerarPreviaSeguroFianca — usada tanto pela prévia em tempo real ──
+// no formulário quanto pela geração do PDF (mesma função, os dois
+// lugares — ver app/(interno)/contratos/page.tsx).
+
+test('gerarPreviaSeguroFianca: dados completos -> pronto=true com a cláusula completa da Porto Seguro', () => {
+  const resultado = gerarPreviaSeguroFianca({ ...BASE, responsavelPagamentoPremio: 'locatario' })
+  assert.equal(resultado.pronto, true)
+  if (resultado.pronto) {
+    assert.ok(resultado.clausula.cabecalho.includes('PORTO SEGURO'))
+    assert.ok(resultado.clausula.paragrafos.length > 0)
+  }
+})
+
+test('gerarPreviaSeguroFianca: apólice ausente -> pronto=false com o aviso exato, nunca a cláusula genérica silenciosa', () => {
+  const resultado = gerarPreviaSeguroFianca({ ...BASE, apoliceFianca: '', responsavelPagamentoPremio: 'locatario' })
+  assert.equal(resultado.pronto, false)
+  if (!resultado.pronto) {
+    assert.equal(resultado.aviso, 'Preencha apólice, responsável pelo prêmio e vigência para gerar a cláusula completa da Porto Seguro.')
+    assert.equal(resultado.aviso, AVISO_DADOS_INCOMPLETOS_SEGURO_FIANCA)
+  }
+})
+
+test('gerarPreviaSeguroFianca: responsável ausente -> pronto=false com aviso', () => {
+  const resultado = gerarPreviaSeguroFianca({ ...BASE, responsavelPagamentoPremio: null })
+  assert.equal(resultado.pronto, false)
+})
+
+test('gerarPreviaSeguroFianca: vigência incompleta (só início, sem fim) -> pronto=false com aviso', () => {
+  const resultado = gerarPreviaSeguroFianca({ ...BASE, responsavelPagamentoPremio: 'locatario', fimVigencia: '' })
+  assert.equal(resultado.pronto, false)
+})
+
+test('gerarPreviaSeguroFianca: mesmo módulo/função da prévia e do PDF — mesmos dados de entrada produzem exatamente o mesmo resultado nas duas chamadas', () => {
+  const dados = { ...BASE, responsavelPagamentoPremio: 'locatario' as const, coberturaDanosImovel: true }
+  const resultadoPrevia = gerarPreviaSeguroFianca(dados)
+  const resultadoPdf = gerarPreviaSeguroFianca(dados)
+  assert.deepEqual(resultadoPrevia, resultadoPdf)
+})
+
+test('gerarPreviaSeguroFianca: atualização em tempo real — mudar um campo (ex.: cobertura marcada) muda o resultado imediatamente, sem cache entre chamadas', () => {
+  const antes = gerarPreviaSeguroFianca({ ...BASE, responsavelPagamentoPremio: 'locatario', coberturaDanosImovel: false })
+  const depois = gerarPreviaSeguroFianca({ ...BASE, responsavelPagamentoPremio: 'locatario', coberturaDanosImovel: true })
+  assert.ok(antes.pronto && depois.pronto)
+  if (antes.pronto && depois.pronto) {
+    assert.notDeepEqual(antes.clausula.paragrafos, depois.clausula.paragrafos)
+  }
+})
+
+test('gerarPreviaSeguroFianca: preencher o último campo obrigatório muda pronto de false pra true na mesma sessão de preenchimento', () => {
+  const incompleto = gerarPreviaSeguroFianca({ ...BASE, responsavelPagamentoPremio: 'locatario', fimVigencia: '' })
+  const completo = gerarPreviaSeguroFianca({ ...BASE, responsavelPagamentoPremio: 'locatario', fimVigencia: '2027-01-01' })
+  assert.equal(incompleto.pronto, false)
+  assert.equal(completo.pronto, true)
 })
