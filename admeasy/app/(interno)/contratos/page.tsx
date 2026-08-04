@@ -1603,6 +1603,16 @@ async function gerarContratoPdf(contratoId: string, organizationId: string, onEs
   clausula('31ª', `Não será facultativa a nenhuma das partes o direito de arrependimento, devendo ambas as partes cumprir fielmente o disposto nas cláusulas aqui avençadas.`)
   paragrafoRotulo(`PARÁGRAFO ÚNICO – FORO. Elegem a Comarca de ${foro} como foro para dirimir quaisquer questões, desistindo de qualquer outro, por mais privilegiado que seja.`)
 
+  // Texto livre digitado pelo analista (não uma cláusula jurídica
+  // padronizada) — por isso título de seção simples, não numerado como
+  // "Cláusula Nª". Só aparece se o campo estiver preenchido. Preserva
+  // quebras de linha como parágrafos separados (o analista usa isso
+  // pra separar regras distintas, ex.: animais, pintura, ventilação).
+  if (form.observacoes && form.observacoes.trim()) {
+    titulo('DAS OBSERVAÇÕES')
+    form.observacoes.split('\n').map((l: string) => l.trim()).filter(Boolean).forEach((linha: string) => paragrafo(linha))
+  }
+
   checkY(80)
   y += 5
   doc.setDrawColor(200).line(ML, y, MR, y); y += 8
