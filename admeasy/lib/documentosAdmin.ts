@@ -16,7 +16,23 @@ import { supabase } from '@/lib/supabase'
 // policy documentos_upload_locatario_chamado.
 // ============================================================
 
-async function tokenAtual(): Promise<string | null> {
+// Mensagens exatas devolvidas pelas rotas quando o token enviado não
+// se autentica como staff — usadas só pra decidir se vale a pena tentar
+// renovar a sessão e reenviar uma vez. Uma aba de Vistoria fica aberta
+// por muito tempo (analista preenchendo vários ambientes) e o access
+// token pode expirar entre o carregamento da página e o envio da foto;
+// sem isso, o usuário via esse erro sem nenhuma forma de recuperar sem
+// recarregar (e perder o formulário preenchido).
+const MENSAGENS_SESSAO_INVALIDA = new Set([
+  'Apenas usuários internos podem enviar documentos administrativos.',
+  'Apenas usuários internos podem excluir documentos administrativos.',
+])
+
+async function tokenAtual(forcarRefresh = false): Promise<string | null> {
+  if (forcarRefresh) {
+    const { data } = await supabase.auth.refreshSession()
+    if (data.session?.access_token) return data.session.access_token
+  }
   const { data: { session } } = await supabase.auth.getSession()
   return session?.access_token || null
 }
@@ -38,13 +54,22 @@ export async function uploadDocumentoAdministrativo(params: {
   if (params.categoria) formData.append('categoria', params.categoria)
   if (params.analiseId) formData.append('analiseId', params.analiseId)
 
+  const enviar = (tokenParaEnvio: string) => fetch('/api/documentos/upload', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${tokenParaEnvio}` },
+    body: formData,
+  })
+
   try {
-    const res = await fetch('/api/documentos/upload', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-      body: formData,
-    })
-    const json = await res.json()
+    let res = await enviar(token)
+    let json = await res.json()
+    if (!res.ok && res.status === 403 && MENSAGENS_SESSAO_INVALIDA.has(json.erro)) {
+      const tokenRenovado = await tokenAtual(true)
+      if (tokenRenovado && tokenRenovado !== token) {
+        res = await enviar(tokenRenovado)
+        json = await res.json()
+      }
+    }
     if (!res.ok) return { erro: json.erro || 'Erro ao enviar arquivo.' }
     return { path: json.path }
   } catch {
@@ -56,13 +81,22 @@ export async function excluirDocumentoAdministrativo(path: string): Promise<{ ok
   const token = await tokenAtual()
   if (!token) return { erro: 'Sessão expirada. Faça login novamente.' }
 
+  const enviar = (tokenParaEnvio: string) => fetch('/api/documentos/excluir', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tokenParaEnvio}` },
+    body: JSON.stringify({ path }),
+  })
+
   try {
-    const res = await fetch('/api/documentos/excluir', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ path }),
-    })
-    const json = await res.json()
+    let res = await enviar(token)
+    let json = await res.json()
+    if (!res.ok && res.status === 403 && MENSAGENS_SESSAO_INVALIDA.has(json.erro)) {
+      const tokenRenovado = await tokenAtual(true)
+      if (tokenRenovado && tokenRenovado !== token) {
+        res = await enviar(tokenRenovado)
+        json = await res.json()
+      }
+    }
     if (!res.ok) return { erro: json.erro || 'Erro ao excluir arquivo.' }
     return { ok: true }
   } catch {
