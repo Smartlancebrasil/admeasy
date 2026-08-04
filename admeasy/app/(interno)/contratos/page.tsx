@@ -8,6 +8,7 @@ import { FileText, Plus, X, AlertTriangle, Edit2, FileDown, UserPlus, Upload, Tr
 import { registrarLog } from '@/lib/logs'
 import { resolverUrlExibicao } from '@/lib/documentosSignedUrl'
 import { uploadDocumentoAdministrativo, excluirDocumentoAdministrativo } from '@/lib/documentosAdmin'
+import { prepararClausulasExtras, numeroParaIndice, lerClausulasExtras } from '@/lib/contratos/clausulasExtras'
 
 type Contrato = {
   id: string
@@ -35,6 +36,7 @@ type Contrato = {
   tipo_garantia?: string
   status: string
   observacoes?: string
+  clausulas_extras?: string[]
   imovel_id?: string
   locatario_id?: string
   locador_id?: string
@@ -393,6 +395,7 @@ const formVazio = {
   multa_rescisao_locatario:'3', multa_rescisao_locador:'',
   aviso_previo_dias:'30', tipo_garantia:'',
   status:'ativo', observacoes:'',
+  clausulas_extras: '[]',
   // Campos usados só no texto do PDF do contrato (opcionais, ficam na própria tela principal)
   foro: 'Santana, São Paulo, SP',
   apolice_incendio_numero: '',
@@ -689,6 +692,16 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
     (parseFloat(form.valor_seguro_incendio) || 0) +
     (form.tipo_garantia === 'seguro_fianca' ? (parseFloat(form.valor_seguro_fianca) || 0) : 0) +
     (parcelasNum > 1 ? valorParcela : 0)
+
+  // Cláusulas adicionais digitadas pelo analista — cada contrato pode
+  // ter as suas. Sempre anexadas ao final da sequência fixa (a partir
+  // da 32ª), nunca inseridas no meio (ver lib/contratos/clausulasExtras.ts
+  // pro motivo: evitar invalidar referências cruzadas já existentes no
+  // texto fixo, ex.: a cláusula 2ª cita literalmente "a CLÁUSULA 1ª").
+  const clausulasExtrasBrutas = lerClausulasExtras(form.clausulas_extras)
+  function atualizarClausulasExtras(novas: string[]) {
+    setForm(f => ({ ...f, clausulas_extras: JSON.stringify(novas) }))
+  }
 
   useEffect(() => { if (form.id) carregarKit() }, [form.id])
 
@@ -1096,6 +1109,42 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
             </select></div>
           <div className="sm:col-span-2"><label className="label">Observações</label>
             <textarea className="input" rows={2} value={form.observacoes} onChange={set('observacoes')} /></div>
+
+          <div className="sm:col-span-2">
+            <label className="label">Cláusulas adicionais deste contrato</label>
+            <p style={{ color: '#5b5e6b' }} className="text-[10px] mb-2">
+              Cada contrato é um contrato — o que você digitar aqui vira uma cláusula numerada de verdade no PDF, sempre no final do documento (a partir da 32ª).
+            </p>
+            {clausulasExtrasBrutas.map((texto, i) => {
+              const numero = numeroParaIndice(clausulasExtrasBrutas, i)
+              return (
+                <div key={i} className="mb-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <span style={{ color: numero ? '#5b9bf5' : '#5b5e6b' }} className="text-xs font-medium">
+                      {numero ? `CLÁUSULA ${numero}` : 'Vazia — não vai gerar cláusula'}
+                    </span>
+                    <button type="button"
+                      onClick={() => atualizarClausulasExtras(clausulasExtrasBrutas.filter((_, idx) => idx !== i))}
+                      style={{ color: '#8b9ab4' }}>
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                  <textarea className="input" rows={2} value={texto}
+                    onChange={e => {
+                      const novas = [...clausulasExtrasBrutas]
+                      novas[i] = e.target.value
+                      atualizarClausulasExtras(novas)
+                    }} />
+                </div>
+              )
+            })}
+            <button type="button"
+              onClick={() => atualizarClausulasExtras([...clausulasExtrasBrutas, ''])}
+              style={{ color: '#5b9bf5' }}
+              className="text-xs font-medium hover:underline">
+              <Plus size={11} className="inline" /> Adicionar cláusula
+            </button>
+          </div>
 
           <div className="sm:col-span-2 mt-2" style={{ borderTop: '0.5px solid #1e3a5f', paddingTop: '1rem' }}>
             <p style={{ color: '#8b9ab4' }} className="text-xs font-medium mb-3">Dados para o contrato (PDF) — opcional</p>
@@ -1603,6 +1652,15 @@ async function gerarContratoPdf(contratoId: string, organizationId: string, onEs
   clausula('31ª', `Não será facultativa a nenhuma das partes o direito de arrependimento, devendo ambas as partes cumprir fielmente o disposto nas cláusulas aqui avençadas.`)
   paragrafoRotulo(`PARÁGRAFO ÚNICO – FORO. Elegem a Comarca de ${foro} como foro para dirimir quaisquer questões, desistindo de qualquer outro, por mais privilegiado que seja.`)
 
+  // Cláusulas adicionais digitadas pelo analista pra este contrato
+  // específico — sempre anexadas ao final da sequência fixa (nunca no
+  // meio, pra não invalidar referências cruzadas já existentes no
+  // texto, ex.: a cláusula 2ª cita literalmente "a CLÁUSULA 1ª").
+  // Mesma função usada na prévia em tela — nunca duas numerações
+  // divergentes pro mesmo contrato.
+  prepararClausulasExtras(Array.isArray(c.clausulas_extras) ? c.clausulas_extras : [])
+    .forEach(ce => clausula(ce.numero, ce.texto))
+
   // Texto livre digitado pelo analista (não uma cláusula jurídica
   // padronizada) — por isso título de seção simples, não numerado como
   // "Cláusula Nª". Só aparece se o campo estiver preenchido. Preserva
@@ -1760,6 +1818,7 @@ export default function ContratosPage() {
       aviso_previo_dias: c.aviso_previo_dias?.toString()||'30',
       tipo_garantia: c.tipo_garantia||'caucao', status: c.status||'ativo',
       observacoes: c.observacoes||'',
+      clausulas_extras: JSON.stringify(Array.isArray(c.clausulas_extras) ? c.clausulas_extras : []),
       foro: c.foro || 'Santana, São Paulo, SP',
       apolice_incendio_numero: c.apolice_incendio_numero || '',
       forma_recebimento_caucao: c.forma_recebimento_caucao || 'pix',
@@ -1818,6 +1877,12 @@ export default function ContratosPage() {
       aviso_previo_dias: parseInt(dados.aviso_previo_dias),
       tipo_garantia: dados.tipo_garantia, status: dados.status,
       observacoes: dados.observacoes||null,
+      // Cláusulas extras vêm do formulário como string JSON (form é
+      // Record<string,string> em todo o projeto) — precisam virar um
+      // array de verdade antes de ir pra coluna jsonb, senão o
+      // Supabase grava a string inteira como um único valor em vez de
+      // um array. Filtra em branco aqui também, não só na exibição.
+      clausulas_extras: lerClausulasExtras(dados.clausulas_extras).map(t => t.trim()).filter(Boolean),
       foro: dados.foro || 'Santana, São Paulo, SP',
       apolice_incendio_numero: dados.apolice_incendio_numero || null,
       forma_recebimento_caucao: dados.forma_recebimento_caucao || 'pix',
