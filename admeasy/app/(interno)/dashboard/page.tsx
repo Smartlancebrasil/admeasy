@@ -586,9 +586,17 @@ export default function DashboardPage() {
               dataRecebimento: dataRef, dataPrevista: '',
             })
           } else {
-            somaHonorariosPrevisto += valor
-            if (dataPrevista && (!proximaDataHonorario || dataPrevista < proximaDataHonorario)) {
-              proximaDataHonorario = dataPrevista
+            // O card diz "(mês)" — só soma no total pendente do mês os
+            // contratos cuja previsão cai no mês selecionado. Sem isso,
+            // honorários que só vencem em meses futuros (ex.: contrato
+            // fechado ontem, 1ª cobrança só daqui 30 dias) entravam no
+            // total do mês atual só porque nada tinha sido recebido
+            // ainda neste mês.
+            if (dataPrevista && dataPrevista >= inicioMesHon && dataPrevista <= fimMesHon) {
+              somaHonorariosPrevisto += valor
+              if (!proximaDataHonorario || dataPrevista < proximaDataHonorario) {
+                proximaDataHonorario = dataPrevista
+              }
             }
             detalheHonorarios.push({
               contratoId: c.id, imovel: getNome(im), locatario: getNome(c.locatario),
