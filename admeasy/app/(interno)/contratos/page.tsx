@@ -980,7 +980,7 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
             <div className="sm:col-span-2">
               <label className="label">Quantos meses de aluguel</label>
               <div className="flex gap-2 flex-wrap">
-                {[1,2,3,4,5,6].map(m => (
+                {[1,2,3].map(m => (
                   <button key={m} type="button"
                     onClick={() => setForm(f => ({
                       ...f,
@@ -993,7 +993,7 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
                   </button>
                 ))}
               </div>
-              <p style={{ color: '#5b5e6b' }} className="text-[10px] mt-1 mb-3">Selecionar aqui já calcula o campo abaixo (aluguel × meses).</p>
+              <p style={{ color: '#5b5e6b' }} className="text-[10px] mt-1 mb-3">Selecionar aqui já calcula o campo abaixo (aluguel × meses). Máximo permitido por lei: 3x o valor do aluguel (Lei do Inquilinato).</p>
 
               <label className="label">Caução (R$)</label>
               <InputMoeda value={form.valor_caucao} onChange={v => setForm(f => ({...f, valor_caucao: v}))} />
@@ -1835,15 +1835,16 @@ export default function ContratosPage() {
       duracao_meses: c.data_inicio && c.data_fim ? String(mesesContrato(c.data_inicio, c.data_fim)) : '',
       valor_mensal: c.valor_mensal?.toString()||'', valor_caucao: c.valor_caucao?.toString()||'',
       // Só reconhece a "quantidade de meses" se o valor salvo bater
-      // exatamente com aluguel x um número inteiro de 1 a 6 — senão
-      // fica sem nenhum botão marcado (o valor salvo não é alterado
-      // só por isso, é puramente um atalho de preenchimento).
+      // exatamente com aluguel x um número inteiro de 1 a 3 (máximo
+      // permitido por lei) — senão fica sem nenhum botão marcado (o
+      // valor salvo não é alterado só por isso, é puramente um atalho
+      // de preenchimento).
       caucao_meses: (() => {
         const aluguel = c.valor_mensal || 0
         const caucao = c.valor_caucao || 0
         if (aluguel > 0 && caucao > 0) {
           const razao = caucao / aluguel
-          if (Number.isInteger(razao) && razao >= 1 && razao <= 6) return String(razao)
+          if (Number.isInteger(razao) && razao >= 1 && razao <= 3) return String(razao)
         }
         return ''
       })(),
