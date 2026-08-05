@@ -137,13 +137,6 @@ export default function DashboardPage() {
   const [totalAdministrado, setTotalAdministrado] = useState(0)
   const [faturamentoAdmMes, setFaturamentoAdmMes] = useState(0)
   const [repassesMes, setRepassesMes] = useState(0)
-  const [honorariosMes, setHonorariosMes] = useState(0)
-  const [honorariosPrevisto, setHonorariosPrevisto] = useState(0)
-  const [honorariosProximaData, setHonorariosProximaData] = useState('')
-  const [honorariosDetalhe, setHonorariosDetalhe] = useState<{
-    contratoId: string; imovel: string; locatario: string; dataInicio: string
-    valor: number; recebido: boolean; dataRecebimento: string; dataPrevista: string
-  }[]>([])
 
   const [contratosVencidos, setContratosVencidos] = useState<any[]>([])
   const [contratosAVencer, setContratosAVencer] = useState<any[]>([])
@@ -248,6 +241,67 @@ export default function DashboardPage() {
     return c?.taxa_administracao || 10
   }
   const comissaoMesBI = useMemo(() => pagasNoMesSel.reduce((acc, c) => acc + valorCobrancaBI(c) * (taxaContratoBI(c.contrato_id) / 100), 0), [pagasNoMesSel, contratosFiltrados])
+
+  // Honorários de locação: só conta como "recebido" quando a 1ª cobrança do
+  // contrato (a mais antiga) já foi paga — antes disso, fica como "previsto".
+  // Reativo ao mês selecionado (inicioMesSel/fimMesSel), igual aos outros
+  // cards — antes era calculado uma única vez em carregarTudo() usando o mês
+  // real do relógio, então trocar o filtro de mês não atualizava esse card.
+  const honorariosBI = useMemo(() => {
+    const contratosComHonorario = contratosFiltrados.filter(c => c.honorarios_aplicavel)
+    const cobrancasPorContrato: Record<string, any[]> = {}
+    cobrancasFiltradas.forEach(c => {
+      (cobrancasPorContrato[c.contrato_id] ||= []).push(c)
+    })
+
+    let mes = 0
+    let previsto = 0
+    let proximaData = ''
+    const detalhe: {
+      contratoId: string; imovel: string; locatario: string; dataInicio: string
+      valor: number; recebido: boolean; dataRecebimento: string; dataPrevista: string
+    }[] = []
+
+    contratosComHonorario.forEach(c => {
+      const doContrato = (cobrancasPorContrato[c.id] || [])
+        .slice()
+        .sort((a, b) => a.data_vencimento.localeCompare(b.data_vencimento))
+      const primeira = doContrato[0]
+      const valor = c.valor_honorarios || 0
+      const im = Array.isArray(c.imovel) ? c.imovel[0] : c.imovel
+      const recebido = primeira?.status_cobranca === 'pago'
+      const dataPrevista = primeira?.data_vencimento || (c.data_inicio ? adicionarDias(c.data_inicio, 30) : '')
+
+      if (recebido) {
+        const dataRef = primeira.data_pagamento || primeira.data_vencimento
+        // A lista segue o mesmo recorte de mês do número principal do
+        // card — senão ela mostra contratos de outros meses junto com
+        // um total que já é só do mês selecionado.
+        if (dataRef >= inicioMesSel && dataRef <= fimMesSel) {
+          mes += valor
+          detalhe.push({
+            contratoId: c.id, imovel: getNome(im), locatario: getNome(c.locatario),
+            dataInicio: c.data_inicio, valor, recebido: true,
+            dataRecebimento: dataRef, dataPrevista: '',
+          })
+        }
+      } else if (dataPrevista && dataPrevista >= inicioMesSel && dataPrevista <= fimMesSel) {
+        // Só soma no total pendente do mês os contratos cuja previsão cai
+        // no mês selecionado — senão honorários que só vencem em meses
+        // futuros (ex.: contrato fechado ontem, 1ª cobrança só daqui 30
+        // dias) entravam no total do mês atual.
+        previsto += valor
+        if (!proximaData || dataPrevista < proximaData) proximaData = dataPrevista
+        detalhe.push({
+          contratoId: c.id, imovel: getNome(im), locatario: getNome(c.locatario),
+          dataInicio: c.data_inicio, valor, recebido: false,
+          dataRecebimento: '', dataPrevista,
+        })
+      }
+    })
+
+    return { mes, previsto, proximaData, detalhe }
+  }, [contratosFiltrados, cobrancasFiltradas, inicioMesSel, fimMesSel])
   // Repasses pendentes (mês): repasses ainda não feitos referentes a cobranças do
   // mês que estão em aberto (atrasadas ou ainda não vencidas).
   const repassesPendentesMesBI = useMemo(() => pendentesNoMesSel.reduce((acc, c) => acc + (c.valor_repasse || 0), 0), [pendentesNoMesSel])
@@ -298,7 +352,7 @@ export default function DashboardPage() {
     }
   }), [pendentesNoMesSel])
 
-  const linhasHonorariosBI = useMemo<LinhaPopup[]>(() => honorariosDetalhe.map(h => ({
+  const linhasHonorariosBI = useMemo<LinhaPopup[]>(() => honorariosBI.detalhe.map(h => ({
     imovel: h.imovel,
     locatario: h.locatario,
     valor: h.valor,
@@ -307,7 +361,7 @@ export default function DashboardPage() {
     extraLabel: h.recebido ? 'Honorário recebido em' : 'Previsão de recebimento',
     extra: formatDataBR(h.recebido ? h.dataRecebimento : h.dataPrevista),
     corExtra: h.recebido ? '#3fb950' : '#f59e0b',
-  })), [honorariosDetalhe])
+  })), [honorariosBI])
 
   const linhasTotalAdministradoBI = useMemo<LinhaPopup[]>(() => contratosAtivosFiltrados.map(c => ({
     imovel: getNome(c.imovel),
@@ -403,9 +457,9 @@ export default function DashboardPage() {
     comissaoAdm: comissaoMesBI,
     seguroFianca: comissaoSeguroFiancaMesBI,
     seguroIncendio: comissaoSeguroIncendioMesBI,
-    honorarios: honorariosMes,
-    total: comissaoMesBI + comissaoSeguroFiancaMesBI + comissaoSeguroIncendioMesBI + honorariosMes,
-  }), [comissaoMesBI, honorariosMes])
+    honorarios: honorariosBI.mes,
+    total: comissaoMesBI + comissaoSeguroFiancaMesBI + comissaoSeguroIncendioMesBI + honorariosBI.mes,
+  }), [comissaoMesBI, comissaoSeguroFiancaMesBI, comissaoSeguroIncendioMesBI, honorariosBI])
 
   // --- Fase 2: status dos imóveis (filtrado) + evolução financeira ---
   const statusImoveisBI = useMemo(() => {
@@ -559,73 +613,12 @@ export default function DashboardPage() {
       const ativos = contratos.filter(c => c.status === 'ativo')
       setContratosAtivos(ativos.length)
 
-      // Honorários de locação: só conta como "recebido" quando a 1ª cobrança do contrato
-      // (a mais antiga) já foi paga — antes disso, fica como "previsto"
-      const inicioMesHon = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().split('T')[0]
-      const fimMesHon = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).toISOString().split('T')[0]
-      const contratosComHonorario = contratos.filter(c => c.honorarios_aplicavel)
-      const idsHonorario = contratosComHonorario.map(c => c.id)
-      let somaHonorariosMes = 0
-      let somaHonorariosPrevisto = 0
-      let proximaDataHonorario = ''
-      const detalheHonorarios: typeof honorariosDetalhe = []
-      if (idsHonorario.length > 0) {
-        const { data: cobrancasHonorario } = await supabase
-          .from('cobrancas')
-          .select('contrato_id, data_vencimento, status_cobranca, data_pagamento')
-          .in('contrato_id', idsHonorario)
-          .order('data_vencimento', { ascending: true })
-
-        const primeiraPorContrato: Record<string, any> = {}
-        cobrancasHonorario?.forEach(c => {
-          if (!primeiraPorContrato[c.contrato_id]) primeiraPorContrato[c.contrato_id] = c
-        })
-
-        contratosComHonorario.forEach(c => {
-          const primeira = primeiraPorContrato[c.id]
-          const valor = c.valor_honorarios || 0
-          const im = Array.isArray(c.imovel) ? c.imovel[0] : c.imovel
-          const recebido = primeira?.status_cobranca === 'pago'
-          const dataPrevista = primeira?.data_vencimento || (c.data_inicio ? adicionarDias(c.data_inicio, 30) : '')
-          if (recebido) {
-            const dataRef = primeira.data_pagamento || primeira.data_vencimento
-            // A lista do popup segue o mesmo recorte de mês do número
-            // principal do card — senão ela mostra contratos de outros
-            // meses junto com um total que já é só do mês selecionado,
-            // o que parece (e é) inconsistente.
-            if (dataRef >= inicioMesHon && dataRef <= fimMesHon) {
-              somaHonorariosMes += valor
-              detalheHonorarios.push({
-                contratoId: c.id, imovel: getNome(im), locatario: getNome(c.locatario),
-                dataInicio: c.data_inicio, valor, recebido: true,
-                dataRecebimento: dataRef, dataPrevista: '',
-              })
-            }
-          } else {
-            // O card diz "(mês)" — só soma no total pendente do mês os
-            // contratos cuja previsão cai no mês selecionado. Sem isso,
-            // honorários que só vencem em meses futuros (ex.: contrato
-            // fechado ontem, 1ª cobrança só daqui 30 dias) entravam no
-            // total do mês atual só porque nada tinha sido recebido
-            // ainda neste mês.
-            if (dataPrevista && dataPrevista >= inicioMesHon && dataPrevista <= fimMesHon) {
-              somaHonorariosPrevisto += valor
-              if (!proximaDataHonorario || dataPrevista < proximaDataHonorario) {
-                proximaDataHonorario = dataPrevista
-              }
-              detalheHonorarios.push({
-                contratoId: c.id, imovel: getNome(im), locatario: getNome(c.locatario),
-                dataInicio: c.data_inicio, valor, recebido: false,
-                dataRecebimento: '', dataPrevista,
-              })
-            }
-          }
-        })
-      }
-      setHonorariosMes(somaHonorariosMes)
-      setHonorariosPrevisto(somaHonorariosPrevisto)
-      setHonorariosProximaData(proximaDataHonorario)
-      setHonorariosDetalhe(detalheHonorarios)
+      // Honorários de locação foi movido pra um useMemo reativo
+      // (honorariosBI, abaixo), derivado de contratosFiltrados +
+      // rawCobrancas + inicioMesSel/fimMesSel — antes era calculado só
+      // aqui, uma vez por carregamento, usando sempre o mês real do
+      // relógio em vez do mês escolhido no filtro do dashboard, então
+      // trocar o filtro de mês não atualizava esse card.
 
       const somaTaxas = ativos.reduce((acc, c) => {
         const valor = c.valor_atual || c.valor_mensal || 0
@@ -892,15 +885,15 @@ export default function DashboardPage() {
               className="rounded-xl p-3.5 cursor-pointer hover:opacity-80 transition-opacity"
             >
               <div style={{ color: '#8b8d98' }} className="flex items-center gap-1.5 text-[11px] mb-1.5"><Wallet size={12} />Honorários de locação (mês)</div>
-              {honorariosMes > 0 ? (
+              {honorariosBI.mes > 0 ? (
                 <>
-                  <div style={{ color: '#f4f4f3' }} className="text-xl font-medium">{formatVal(honorariosMes)}</div>
+                  <div style={{ color: '#f4f4f3' }} className="text-xl font-medium">{formatVal(honorariosBI.mes)}</div>
                   <div style={{ color: '#8b8d98' }} className="text-[10px] mt-1.5">Recebido este mês</div>
                 </>
-              ) : honorariosPrevisto > 0 ? (
+              ) : honorariosBI.previsto > 0 ? (
                 <>
-                 <div style={{ color: '#f59e0b' }} className="text-xl font-medium">{formatVal(honorariosPrevisto)}</div>
-                  <div style={{ color: '#8b8d98' }} className="text-[10px] mt-1.5">Previsto{honorariosProximaData ? ` para ${formatDataBR(honorariosProximaData)}` : ''}, aguardando 1º pagamento</div>
+                 <div style={{ color: '#f59e0b' }} className="text-xl font-medium">{formatVal(honorariosBI.previsto)}</div>
+                  <div style={{ color: '#8b8d98' }} className="text-[10px] mt-1.5">Previsto{honorariosBI.proximaData ? ` para ${formatDataBR(honorariosBI.proximaData)}` : ''}, aguardando 1º pagamento</div>
 
                 </>
               ) : (
