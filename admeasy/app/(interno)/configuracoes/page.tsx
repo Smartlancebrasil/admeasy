@@ -4,9 +4,8 @@ import { useEffect, useState } from 'react'
 import AppLayout from '@/components/layout/AppLayout'
 import { supabase } from '@/lib/supabase'
 import { useOrganization } from '@/lib/OrganizationContext'
-import { Save, Plus, X, Edit2, Building2, Users, Shield, UserPlus, Mail, Trash2, ExternalLink, CheckCircle2, Clock } from 'lucide-react'
-
-const SUPABASE_AUTH_URL = 'https://supabase.com/dashboard/project/ckhcbiuwcfnbmlloduwj/auth/users'
+import { convidarUsuario } from '@/lib/usuariosAdmin'
+import { Save, Plus, X, Edit2, Building2, Users, Shield, UserPlus, Mail, Trash2, CheckCircle2, Clock } from 'lucide-react'
 
 const UFs = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
 
@@ -119,6 +118,7 @@ export default function ConfiguracoesPage() {
   const [conviteForm, setConviteForm] = useState({ nome: '', email: '', perfil: 'corretor' })
   const [enviandoConvite, setEnviandoConvite] = useState(false)
   const [sucessoConvite, setSucessoConvite] = useState('')
+  const [erroConvite, setErroConvite] = useState('')
   const [editandoUsuario, setEditandoUsuario] = useState<string|null>(null)
   const [editandoConvite, setEditandoConvite] = useState<string|null>(null)
 
@@ -180,13 +180,19 @@ export default function ConfiguracoesPage() {
     e.preventDefault()
     if (!organizacao?.id) return
     setEnviandoConvite(true)
-    const { data: userData } = await supabase.auth.getUser()
-    await supabase.from('convites').insert([{
-      organization_id: organizacao.id, email: conviteForm.email,
-      perfil: conviteForm.perfil, nome: conviteForm.nome,
-      criado_por: userData.user?.id,
-    }])
-    setSucessoConvite(`Cadastro de ${conviteForm.nome || conviteForm.email} registrado! Agora crie o login no Supabase com o mesmo e-mail.`)
+    setErroConvite('')
+
+    const resultado = await convidarUsuario({
+      nome: conviteForm.nome, email: conviteForm.email, perfil: conviteForm.perfil,
+    })
+
+    if ('erro' in resultado) {
+      setErroConvite(resultado.erro)
+      setEnviandoConvite(false)
+      return
+    }
+
+    setSucessoConvite(`Convite enviado! ${conviteForm.nome || conviteForm.email} vai receber um e-mail em ${conviteForm.email} pra criar a própria senha.`)
     setConviteForm({ nome: '', email: '', perfil: 'corretor' })
     setShowConvite(false); setEnviandoConvite(false)
     carregarUsuarios(organizacao.id)
@@ -427,22 +433,18 @@ export default function ConfiguracoesPage() {
           {aba === 'usuarios' && (
             <div>
               {sucessoConvite && <div style={{ background: '#1a2e1f', border: '0.5px solid #2d4a35', color: '#3fb950' }} className="px-4 py-3 rounded-lg mb-4 text-sm">{sucessoConvite}</div>}
+              {erroConvite && <div style={{ background: '#2e1717', border: '0.5px solid #4a2424', color: '#ef4444' }} className="px-4 py-3 rounded-lg mb-4 text-sm">{erroConvite}</div>}
 
-              {/* Passo a passo de como ativar o acesso */}
+              {/* Como funciona o acesso */}
               <div style={{ background: '#16243a', border: '0.5px solid #1e3a5f' }} className="rounded-xl p-4 mb-5">
                 <h3 style={{ color: '#5b9bf5' }} className="text-sm font-semibold mb-2 flex items-center gap-2">
                   <Shield size={14} />Como dar acesso a um colaborador
                 </h3>
                 <ol style={{ color: '#c3c2b7' }} className="text-xs space-y-1.5 list-decimal list-inside">
                   <li>Cadastre o nome, e-mail e perfil dele aqui em "Adicionar usuário"</li>
-                  <li>Acesse o Supabase e crie o login (e-mail + senha) com o <strong>mesmo e-mail</strong> cadastrado aqui</li>
-                  <li>Informe o e-mail e a senha criada ao colaborador</li>
-                  <li>O colaborador poderá depois trocar a própria senha pela tela "Esqueci minha senha" — ele não pode alterar o e-mail/usuário</li>
+                  <li>O colaborador recebe um e-mail automático com um link pra definir a própria senha</li>
+                  <li>Depois de definir a senha, ele já pode entrar direto pelo login do Admeasy</li>
                 </ol>
-                <a href={SUPABASE_AUTH_URL} target="_blank" rel="noopener noreferrer"
-                  style={{ color: '#5b9bf5' }} className="text-xs font-medium flex items-center gap-1.5 mt-3 hover:underline">
-                  <ExternalLink size={12} />Abrir Supabase → Authentication → Add User
-                </a>
               </div>
 
               <div className="card mb-5">
@@ -548,8 +550,8 @@ export default function ConfiguracoesPage() {
 
               {convites.filter(c => !c.usado).length > 0 && (
                 <div className="card">
-                  <h3 style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-1">Cadastrados aqui, aguardando login no Supabase ({convites.filter(c => !c.usado).length})</h3>
-                  <p style={{ color: '#8b8d98' }} className="text-xs mb-3">Esses usuários já têm perfil definido, mas ainda não têm e-mail/senha criados no Supabase Auth.</p>
+                  <h3 style={{ color: '#f4f4f3' }} className="text-sm font-semibold mb-1">Cadastros antigos pendentes ({convites.filter(c => !c.usado).length})</h3>
+                  <p style={{ color: '#8b8d98' }} className="text-xs mb-3">Registros de antes do cadastro automático, feitos sem o login correspondente ter sido criado. Recadastre pelo botão "Adicionar usuário" acima e depois exclua o registro antigo aqui embaixo.</p>
                   <div className="space-y-1">
                     {convites.filter(c => !c.usado).map(c => (
                       <div key={c.id} style={{ borderBottom: '0.5px solid #1c2128' }} className="py-2 last:border-0">
