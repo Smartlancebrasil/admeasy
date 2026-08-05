@@ -384,12 +384,15 @@ function InputMoeda({ value, onChange, placeholder }: { value: string; onChange:
 const formVazio = {
   id:'', numero:'', tipo:'locacao_residencial',
   imovel_id:'', locatario_id:'', locador_id:'', fiador_id:'', locatarios_adicionais:'', locadores_adicionais:'', taxa_administracao: '10',
-  honorarios_aplicavel: '', valor_honorarios: '',
+  honorarios_aplicavel: '1', valor_honorarios: '',
   data_inicio:'', data_fim:'', duracao_meses:'',
   valor_mensal:'', valor_condominio:'', valor_iptu:'', valor_seguro_incendio:'', valor_seguro_fianca:'',
   comissao_seguro_incendio:'', comissao_seguro_fianca:'',
   seguradora_fianca:'', apolice_fianca:'',
   valor_caucao:'',
+  // caucao_meses é só um atalho do formulário pra calcular valor_caucao
+  // (aluguel x meses) — não é salvo no banco, só o valor final em R$.
+  caucao_meses: '3',
   parcelas_caucao: '1',
   indice_reajuste:'igpm', mes_reajuste:'1',
   multa_rescisao_locatario:'3', multa_rescisao_locador:'',
@@ -862,8 +865,9 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
             <InputMoeda value={form.valor_mensal} onChange={v => setForm(f => ({
               ...f,
               valor_mensal: v,
+              valor_honorarios: (f.honorarios_aplicavel && !f.valor_honorarios) ? v : f.valor_honorarios,
               valor_caucao: (f.tipo_garantia === 'caucao' && (f.valor_caucao === '' || f.valor_caucao === '0'))
-                ? String((parseFloat(v) || 0) * 3)
+                ? String((parseFloat(v) || 0) * (parseInt(f.caucao_meses) || 3))
                 : f.valor_caucao,
             }))} /></div>
           <div><label className="label">Taxa de administração (%)</label>
@@ -919,7 +923,7 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
                         ...f,
                         tipo_garantia: marcado ? '' : valor,
                         valor_caucao: (!marcado && valor === 'caucao' && !f.valor_caucao && f.valor_mensal)
-                          ? String((parseFloat(f.valor_mensal) || 0) * 3)
+                          ? String((parseFloat(f.valor_mensal) || 0) * (parseInt(f.caucao_meses) || 3))
                           : f.valor_caucao,
                       }))}
                       className="accent-blue-600"
@@ -974,9 +978,26 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
 
           {form.tipo_garantia === 'caucao' && (
             <div className="sm:col-span-2">
+              <label className="label">Quantos meses de aluguel</label>
+              <div className="flex gap-2 flex-wrap">
+                {[1,2,3,4,5,6].map(m => (
+                  <button key={m} type="button"
+                    onClick={() => setForm(f => ({
+                      ...f,
+                      caucao_meses: String(m),
+                      valor_caucao: String((parseFloat(f.valor_mensal) || 0) * m),
+                    }))}
+                    style={parseInt(form.caucao_meses) === m ? { background: '#2563eb', color: '#fff', border: '0.5px solid #2563eb' } : { border: '0.5px solid #2a2f3a', color: '#a8aab5' }}
+                    className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all">
+                    {m}x
+                  </button>
+                ))}
+              </div>
+              <p style={{ color: '#5b5e6b' }} className="text-[10px] mt-1 mb-3">Selecionar aqui já calcula o campo abaixo (aluguel × meses).</p>
+
               <label className="label">Caução (R$)</label>
               <InputMoeda value={form.valor_caucao} onChange={v => setForm(f => ({...f, valor_caucao: v}))} />
-              <p style={{ color: '#5b5e6b' }} className="text-[10px] mt-1">Sugestão automática: 3x o valor do aluguel. Pode ajustar livremente.</p>
+              <p style={{ color: '#5b5e6b' }} className="text-[10px] mt-1">Pode ajustar livremente depois de escolher os meses acima.</p>
 
               {caucaoVal > 0 && (
                 <div className="mt-3">
@@ -1813,6 +1834,19 @@ export default function ContratosPage() {
       data_inicio: c.data_inicio||'', data_fim: c.data_fim||'',
       duracao_meses: c.data_inicio && c.data_fim ? String(mesesContrato(c.data_inicio, c.data_fim)) : '',
       valor_mensal: c.valor_mensal?.toString()||'', valor_caucao: c.valor_caucao?.toString()||'',
+      // Só reconhece a "quantidade de meses" se o valor salvo bater
+      // exatamente com aluguel x um número inteiro de 1 a 6 — senão
+      // fica sem nenhum botão marcado (o valor salvo não é alterado
+      // só por isso, é puramente um atalho de preenchimento).
+      caucao_meses: (() => {
+        const aluguel = c.valor_mensal || 0
+        const caucao = c.valor_caucao || 0
+        if (aluguel > 0 && caucao > 0) {
+          const razao = caucao / aluguel
+          if (Number.isInteger(razao) && razao >= 1 && razao <= 6) return String(razao)
+        }
+        return ''
+      })(),
       valor_condominio: c.valor_condominio?.toString()||'', valor_iptu: c.valor_iptu?.toString()||'',
       valor_seguro_incendio: c.valor_seguro_incendio?.toString()||'', valor_seguro_fianca: c.valor_seguro_fianca?.toString()||'',
       comissao_seguro_incendio: c.comissao_seguro_incendio?.toString()||'', comissao_seguro_fianca: c.comissao_seguro_fianca?.toString()||'',
