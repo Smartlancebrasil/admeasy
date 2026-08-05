@@ -58,6 +58,7 @@ type LinhaPopup = {
 }
 
 type PopupKey = 'previstos' | 'recebidos' | 'atraso' | 'repasses' | 'honorarios' | 'totalAdministrado'
+  | 'receitaAdm' | 'receitaSeguroFianca' | 'receitaSeguroIncendio'
 
 function ModalListaFinanceira({ titulo, subtitulo, linhas, vazio, onFechar }: {
   titulo: string; subtitulo?: string; linhas: LinhaPopup[]; vazio: string; onFechar: () => void
@@ -223,6 +224,19 @@ export default function DashboardPage() {
   // selecionado — usado só no card "Total administrado" e no ticket médio.
   const totalAdministradoBI = useMemo(() => contratosAtivosFiltrados.reduce((acc, c) => acc + (c.valor_atual || c.valor_mensal || 0), 0), [contratosAtivosFiltrados])
 
+  // Receita recorrente atual (independente do mês selecionado, mesmo critério
+  // de totalAdministradoBI) — mesma fórmula já usada na tela Meta da
+  // imobiliária pra "Receita de administração atual": comissão sobre o
+  // aluguel dos contratos ativos, sem entrar honorários (pontuais) nem
+  // seguros (contados à parte abaixo).
+  const receitaAdmAtualBI = useMemo(() => contratosAtivosFiltrados.reduce((acc, c) => {
+    const valorAluguel = c.valor_atual || c.valor_mensal || 0
+    const taxaPct = c.taxa_administracao || 10
+    return acc + (valorAluguel * taxaPct / 100)
+  }, 0), [contratosAtivosFiltrados])
+  const receitaSeguroFiancaAtualBI = useMemo(() => contratosAtivosFiltrados.reduce((acc, c) => acc + (c.comissao_seguro_fianca || 0), 0), [contratosAtivosFiltrados])
+  const receitaSeguroIncendioAtualBI = useMemo(() => contratosAtivosFiltrados.reduce((acc, c) => acc + (c.comissao_seguro_incendio || 0), 0), [contratosAtivosFiltrados])
+
   const pagasNoMesSel = useMemo(() => cobrancasDoMesSel.filter(c => c.status_cobranca === 'pago'), [cobrancasDoMesSel])
   const pendentesNoMesSel = useMemo(() => cobrancasDoMesSel.filter(c => c.status_cobranca === 'pendente'), [cobrancasDoMesSel])
   const atrasadasNoMesSel = useMemo(() => pendentesNoMesSel.filter(c => diasEntre(c.data_vencimento) < 0), [pendentesNoMesSel])
@@ -372,6 +386,40 @@ export default function DashboardPage() {
     extraLabel: 'Taxa adm.',
     extra: `${c.taxa_administracao || 10}%`,
   })), [contratosAtivosFiltrados])
+
+  const linhasReceitaAdmBI = useMemo<LinhaPopup[]>(() => contratosAtivosFiltrados.map(c => {
+    const valorAluguel = c.valor_atual || c.valor_mensal || 0
+    const taxaPct = c.taxa_administracao || 10
+    return {
+      imovel: getNome(c.imovel),
+      locatario: getNome(c.locatario),
+      valor: valorAluguel * taxaPct / 100,
+      dataLabel: 'Vigência até',
+      data: c.data_fim,
+      extraLabel: 'Taxa adm.',
+      extra: `${taxaPct}%`,
+    }
+  }), [contratosAtivosFiltrados])
+
+  const linhasReceitaSeguroFiancaBI = useMemo<LinhaPopup[]>(() => contratosAtivosFiltrados
+    .filter(c => (c.comissao_seguro_fianca || 0) > 0)
+    .map(c => ({
+      imovel: getNome(c.imovel),
+      locatario: getNome(c.locatario),
+      valor: c.comissao_seguro_fianca || 0,
+      dataLabel: 'Vigência até',
+      data: c.data_fim,
+    })), [contratosAtivosFiltrados])
+
+  const linhasReceitaSeguroIncendioBI = useMemo<LinhaPopup[]>(() => contratosAtivosFiltrados
+    .filter(c => (c.comissao_seguro_incendio || 0) > 0)
+    .map(c => ({
+      imovel: getNome(c.imovel),
+      locatario: getNome(c.locatario),
+      valor: c.comissao_seguro_incendio || 0,
+      dataLabel: 'Vigência até',
+      data: c.data_fim,
+    })), [contratosAtivosFiltrados])
 
   const alertasBI = useMemo(() => {
     const hoje = new Date().toISOString().slice(0, 10)
@@ -937,6 +985,38 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          {/* Receita recorrente atual — independente do mês selecionado, mesmo
+              critério de "Total administrado" (contratos ativos filtrados) */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+            <div
+              onClick={() => setPopupAberto('receitaAdm')}
+              style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }}
+              className="rounded-xl p-3.5 cursor-pointer hover:opacity-80 transition-opacity"
+            >
+              <div style={{ color: '#8b8d98' }} className="flex items-center gap-1.5 text-[11px] mb-1.5"><TrendingUp size={12} />Receita de administração atual</div>
+              <div style={{ color: '#3fb950' }} className="text-xl font-medium">{formatVal(receitaAdmAtualBI)}</div>
+              <div style={{ color: '#8b8d98' }} className="text-[10px] mt-1.5">por mês, recorrente</div>
+            </div>
+            <div
+              onClick={() => setPopupAberto('receitaSeguroFianca')}
+              style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }}
+              className="rounded-xl p-3.5 cursor-pointer hover:opacity-80 transition-opacity"
+            >
+              <div style={{ color: '#8b8d98' }} className="flex items-center gap-1.5 text-[11px] mb-1.5"><TrendingUp size={12} />Receita de Seguro Fiança atual</div>
+              <div style={{ color: '#3fb950' }} className="text-xl font-medium">{formatVal(receitaSeguroFiancaAtualBI)}</div>
+              <div style={{ color: '#8b8d98' }} className="text-[10px] mt-1.5">por mês, recorrente</div>
+            </div>
+            <div
+              onClick={() => setPopupAberto('receitaSeguroIncendio')}
+              style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }}
+              className="rounded-xl p-3.5 cursor-pointer hover:opacity-80 transition-opacity"
+            >
+              <div style={{ color: '#8b8d98' }} className="flex items-center gap-1.5 text-[11px] mb-1.5"><TrendingUp size={12} />Receita Seguro Incêndio atual</div>
+              <div style={{ color: '#3fb950' }} className="text-xl font-medium">{formatVal(receitaSeguroIncendioAtualBI)}</div>
+              <div style={{ color: '#8b8d98' }} className="text-[10px] mt-1.5">por mês, recorrente</div>
+            </div>
+          </div>
+
           {/* Gráficos */}
           <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.85fr_0.85fr] gap-3 mb-3">
             <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-xl p-4">
@@ -1262,6 +1342,33 @@ export default function DashboardPage() {
           subtitulo="Contratos ativos considerados nos filtros selecionados"
           linhas={linhasTotalAdministradoBI}
           vazio="Nenhum contrato ativo com os filtros selecionados."
+          onFechar={() => setPopupAberto(null)}
+        />
+      )}
+      {popupAberto === 'receitaAdm' && (
+        <ModalListaFinanceira
+          titulo="Receita de administração atual"
+          subtitulo="Comissão de administração dos contratos ativos, por mês"
+          linhas={linhasReceitaAdmBI}
+          vazio="Nenhum contrato ativo com os filtros selecionados."
+          onFechar={() => setPopupAberto(null)}
+        />
+      )}
+      {popupAberto === 'receitaSeguroFianca' && (
+        <ModalListaFinanceira
+          titulo="Receita de Seguro Fiança atual"
+          subtitulo="Comissão de seguro fiança dos contratos ativos, por mês"
+          linhas={linhasReceitaSeguroFiancaBI}
+          vazio="Nenhum contrato ativo com comissão de seguro fiança."
+          onFechar={() => setPopupAberto(null)}
+        />
+      )}
+      {popupAberto === 'receitaSeguroIncendio' && (
+        <ModalListaFinanceira
+          titulo="Receita Seguro Incêndio atual"
+          subtitulo="Comissão de seguro incêndio dos contratos ativos, por mês"
+          linhas={linhasReceitaSeguroIncendioBI}
+          vazio="Nenhum contrato ativo com comissão de seguro incêndio."
           onFechar={() => setPopupAberto(null)}
         />
       )}
