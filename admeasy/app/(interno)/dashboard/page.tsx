@@ -57,7 +57,7 @@ type LinhaPopup = {
   corExtra?: string
 }
 
-type PopupKey = 'previstos' | 'recebidos' | 'atraso' | 'repasses' | 'honorarios'
+type PopupKey = 'previstos' | 'recebidos' | 'atraso' | 'repasses' | 'honorarios' | 'totalAdministrado'
 
 function ModalListaFinanceira({ titulo, subtitulo, linhas, vazio, onFechar }: {
   titulo: string; subtitulo?: string; linhas: LinhaPopup[]; vazio: string; onFechar: () => void
@@ -308,6 +308,16 @@ export default function DashboardPage() {
     extra: formatDataBR(h.recebido ? h.dataRecebimento : h.dataPrevista),
     corExtra: h.recebido ? '#3fb950' : '#f59e0b',
   })), [honorariosDetalhe])
+
+  const linhasTotalAdministradoBI = useMemo<LinhaPopup[]>(() => contratosAtivosFiltrados.map(c => ({
+    imovel: getNome(c.imovel),
+    locatario: getNome(c.locatario),
+    valor: c.valor_atual || c.valor_mensal || 0,
+    dataLabel: 'Vigência até',
+    data: c.data_fim,
+    extraLabel: 'Taxa adm.',
+    extra: `${c.taxa_administracao || 10}%`,
+  })), [contratosAtivosFiltrados])
 
   const alertasBI = useMemo(() => {
     const hoje = new Date().toISOString().slice(0, 10)
@@ -905,7 +915,11 @@ export default function DashboardPage() {
               <div style={{ color: '#f4f4f3' }} className="text-xl font-medium">{formatVal(ticketMedioBI)}</div>
               <div style={{ color: '#8b8d98' }} className="text-[10px] mt-1.5">{contratosAtivosFiltrados.length} contrato(s) ativo(s)</div>
             </div>
-            <div style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }} className="rounded-xl p-3.5">
+            <div
+              onClick={() => setPopupAberto('totalAdministrado')}
+              style={{ background: '#161b22', border: '0.5px solid #2a2f3a' }}
+              className="rounded-xl p-3.5 cursor-pointer hover:opacity-80 transition-opacity"
+            >
               <div style={{ color: '#8b8d98' }} className="flex items-center gap-1.5 text-[11px] mb-1.5"><Building2 size={12} />Total administrado</div>
               <div style={{ color: '#f4f4f3' }} className="text-xl font-medium">{formatVal(totalAdministradoBI)}</div>
               <div style={{ color: '#8b8d98' }} className="text-[10px] mt-1.5">{contratosAtivosFiltrados.length} contratos ativos</div>
@@ -1242,6 +1256,15 @@ export default function DashboardPage() {
           subtitulo="Contratos com honorários de locação recebidos ou previstos neste mês"
           linhas={linhasHonorariosBI}
           vazio="Nenhum honorário recebido ou previsto para este mês."
+          onFechar={() => setPopupAberto(null)}
+        />
+      )}
+      {popupAberto === 'totalAdministrado' && (
+        <ModalListaFinanceira
+          titulo="Total administrado"
+          subtitulo="Contratos ativos considerados nos filtros selecionados"
+          linhas={linhasTotalAdministradoBI}
+          vazio="Nenhum contrato ativo com os filtros selecionados."
           onFechar={() => setPopupAberto(null)}
         />
       )}
