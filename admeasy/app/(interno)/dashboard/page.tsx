@@ -579,12 +579,18 @@ export default function DashboardPage() {
           const dataPrevista = primeira?.data_vencimento || (c.data_inicio ? adicionarDias(c.data_inicio, 30) : '')
           if (recebido) {
             const dataRef = primeira.data_pagamento || primeira.data_vencimento
-            if (dataRef >= inicioMesHon && dataRef <= fimMesHon) somaHonorariosMes += valor
-            detalheHonorarios.push({
-              contratoId: c.id, imovel: getNome(im), locatario: getNome(c.locatario),
-              dataInicio: c.data_inicio, valor, recebido: true,
-              dataRecebimento: dataRef, dataPrevista: '',
-            })
+            // A lista do popup segue o mesmo recorte de mês do número
+            // principal do card — senão ela mostra contratos de outros
+            // meses junto com um total que já é só do mês selecionado,
+            // o que parece (e é) inconsistente.
+            if (dataRef >= inicioMesHon && dataRef <= fimMesHon) {
+              somaHonorariosMes += valor
+              detalheHonorarios.push({
+                contratoId: c.id, imovel: getNome(im), locatario: getNome(c.locatario),
+                dataInicio: c.data_inicio, valor, recebido: true,
+                dataRecebimento: dataRef, dataPrevista: '',
+              })
+            }
           } else {
             // O card diz "(mês)" — só soma no total pendente do mês os
             // contratos cuja previsão cai no mês selecionado. Sem isso,
@@ -597,12 +603,12 @@ export default function DashboardPage() {
               if (!proximaDataHonorario || dataPrevista < proximaDataHonorario) {
                 proximaDataHonorario = dataPrevista
               }
+              detalheHonorarios.push({
+                contratoId: c.id, imovel: getNome(im), locatario: getNome(c.locatario),
+                dataInicio: c.data_inicio, valor, recebido: false,
+                dataRecebimento: '', dataPrevista,
+              })
             }
-            detalheHonorarios.push({
-              contratoId: c.id, imovel: getNome(im), locatario: getNome(c.locatario),
-              dataInicio: c.data_inicio, valor, recebido: false,
-              dataRecebimento: '', dataPrevista,
-            })
           }
         })
       }
@@ -1233,9 +1239,9 @@ export default function DashboardPage() {
       {popupAberto === 'honorarios' && (
         <ModalListaFinanceira
           titulo="Honorários de locação (mês)"
-          subtitulo="Contratos com honorários de locação recebidos ou previstos"
+          subtitulo="Contratos com honorários de locação recebidos ou previstos neste mês"
           linhas={linhasHonorariosBI}
-          vazio="Nenhum contrato com honorários pendente."
+          vazio="Nenhum honorário recebido ou previsto para este mês."
           onFechar={() => setPopupAberto(null)}
         />
       )}
