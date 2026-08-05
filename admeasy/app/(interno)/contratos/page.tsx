@@ -1054,7 +1054,8 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
           <div><label className="label">Data início *</label>
             <input className="input" type="date" required value={form.data_inicio}
               min="2020-01-01"
-              style={{ colorScheme: 'dark' }}
+              disabled={!!form.id}
+              style={form.id ? { colorScheme: 'dark', opacity: 0.6, cursor: 'not-allowed' } : { colorScheme: 'dark' }}
               onChange={e => {
                 const novaData = e.target.value
                 const mesInicio = novaData ? String(new Date(novaData + 'T00:00:00').getMonth() + 1) : form.mes_reajuste
@@ -1064,7 +1065,12 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
                   data_fim: f.duracao_meses ? calcularDataFim(novaData, parseInt(f.duracao_meses)) || f.data_fim : f.data_fim,
                   mes_reajuste: novaData ? mesInicio : f.mes_reajuste,
                 }))
-              }} /></div>
+              }} />
+            {form.id && (
+              <p style={{ color: '#5b5e6b' }} className="text-[10px] mt-1">
+                Não pode ser alterada depois que o contrato é criado — as cobranças já geradas usam essa data como base e não são recalculadas automaticamente.
+              </p>
+            )}</div>
           <div><label className="label">Duração (meses)</label>
             <input className="input" type="number" min="1" value={form.duracao_meses} placeholder="Ex: 30"
               onChange={e => {
