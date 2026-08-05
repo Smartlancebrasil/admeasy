@@ -876,10 +876,11 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
           </div>
 
           <div className="sm:col-span-2">
-            <label className="flex items-center gap-2 cursor-pointer" style={{ color: '#a8aab5' }}>
+            <label className="flex items-center gap-2" style={form.id ? { color: '#5b5e6b', cursor: 'not-allowed' } : { color: '#a8aab5', cursor: 'pointer' }}>
               <input
                 type="checkbox"
                 checked={!!form.honorarios_aplicavel}
+                disabled={!!form.id}
                 onChange={() => setForm(f => ({
                   ...f,
                   honorarios_aplicavel: f.honorarios_aplicavel ? '' : '1',
@@ -891,6 +892,7 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
             </label>
             <p style={{ color: '#5b5e6b' }} className="text-[10px] mt-1 ml-6">
               Taxa cobrada uma única vez, junto com a 1ª cobrança do contrato (comum em locações novas).
+              {form.id && ' Não pode ser alterada depois que o contrato é criado — a 1ª cobrança já gerada usa essa definição pra calcular repasse e taxa de administração, e não é recalculada automaticamente.'}
             </p>
           </div>
           {form.honorarios_aplicavel && (
