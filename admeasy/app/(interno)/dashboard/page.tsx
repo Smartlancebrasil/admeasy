@@ -1238,8 +1238,12 @@ export default function DashboardPage() {
         <ModalListaFinanceira
           titulo="Repasses pendentes (mês)"
           subtitulo="Cobranças do mês ainda não pagas — repasse aguardando"
-          linhas={linhasRepassesBI}
-          vazio="Nenhum repasse pendente neste mês."
+          // Se o total do card é zero, não faz sentido abrir a lista com
+          // cobranças de repasse R$ 0,00 cada (comum quando a 1ª cobrança
+          // do contrato tem honorário, cujo repasse é sempre zero) — só
+          // mostra a mensagem de vazio direto.
+          linhas={repassesPendentesMesBI > 0 ? linhasRepassesBI : []}
+          vazio="Não há repasses previstos para este mês."
           onFechar={() => setPopupAberto(null)}
         />
       )}
