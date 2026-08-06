@@ -876,11 +876,10 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
           </div>
 
           <div className="sm:col-span-2">
-            <label className="flex items-center gap-2" style={form.id ? { color: '#5b5e6b', cursor: 'not-allowed' } : { color: '#a8aab5', cursor: 'pointer' }}>
+            <label className="flex items-center gap-2 cursor-pointer" style={{ color: '#a8aab5' }}>
               <input
                 type="checkbox"
                 checked={!!form.honorarios_aplicavel}
-                disabled={!!form.id}
                 onChange={() => setForm(f => ({
                   ...f,
                   honorarios_aplicavel: f.honorarios_aplicavel ? '' : '1',
@@ -892,7 +891,7 @@ function FormContrato({ inicial, imoveis, clientes, onSalvar, onCancelar, onClie
             </label>
             <p style={{ color: '#5b5e6b' }} className="text-[10px] mt-1 ml-6">
               Taxa cobrada uma única vez, junto com a 1ª cobrança do contrato (comum em locações novas).
-              {form.id && ' Não pode ser alterada depois que o contrato é criado — a 1ª cobrança já gerada usa essa definição pra calcular repasse e taxa de administração, e não é recalculada automaticamente.'}
+              {form.id && ' Se a 1ª cobrança deste contrato ainda não foi paga nem repassada, ela é recalculada automaticamente ao salvar pra bater com o que estiver marcado aqui.'}
             </p>
           </div>
           {form.honorarios_aplicavel && (
@@ -1958,6 +1957,39 @@ export default function ContratosPage() {
     }
 
     if (error) throw new Error(error.message)
+
+    // Ao editar um contrato existente, a 1ª cobrança (a que carrega a
+    // exceção "honorário = 100% pra imobiliária, repasse zero") não é
+    // regenerada automaticamente — pode ter sido criada com um valor de
+    // "Cobrar honorários" diferente do que está marcado agora (comum em
+    // contratos migrados de fora da plataforma). Se ela ainda não foi
+    // paga nem repassada (nada de dinheiro real já andou), recalcula pra
+    // bater com o que está marcado agora. Se já foi, não mexe — é
+    // histórico e alterar retroativamente seria arriscado.
+    if (dados.id) {
+      const { data: primeiraCobranca } = await supabase
+        .from('cobrancas')
+        .select('id, valor_aluguel, valor_taxa_adm, valor_repasse, status_cobranca, status_repasse')
+        .eq('contrato_id', dados.id)
+        .order('data_vencimento', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+
+      if (primeiraCobranca && primeiraCobranca.status_cobranca !== 'pago' && primeiraCobranca.status_repasse !== 'feito') {
+        const temHonorario = !!dados.honorarios_aplicavel
+        const taxaAdmPct = dados.taxa_administracao ? parseFloat(dados.taxa_administracao) : 10
+        const valorAluguelCobranca = primeiraCobranca.valor_aluguel || 0
+        const novoValorTaxaAdm = temHonorario ? valorAluguelCobranca : valorAluguelCobranca * (taxaAdmPct / 100)
+        const novoValorRepasse = temHonorario ? 0 : valorAluguelCobranca - novoValorTaxaAdm
+
+        if (novoValorTaxaAdm !== primeiraCobranca.valor_taxa_adm || novoValorRepasse !== primeiraCobranca.valor_repasse) {
+          await supabase.from('cobrancas').update({
+            valor_taxa_adm: novoValorTaxaAdm,
+            valor_repasse: novoValorRepasse,
+          }).eq('id', primeiraCobranca.id)
+        }
+      }
+    }
 
     const caucaoVal = parseFloat(dados.valor_caucao) || 0
     const parcelasNum = parseInt(dados.parcelas_caucao) || 1
